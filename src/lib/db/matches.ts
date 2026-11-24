@@ -832,21 +832,81 @@ export async function getMatchDetail(
   };
 }
 
-/** Nombre y región de un jugador sincronizado (para el link de vuelta). */
+export type PlayerLabel = { gameName: string; tagLine: string; platform: string };
+
+/**
+ * Nombre y región de un jugador, para el link de vuelta al perfil.
+ *
+ * El puuid que viene en la URL de una partida es el del participante, que puede
+ * ser un alias (Riot reasigna puuids) sin Riot ID propio en `puuid_sync`. Por eso
+ * se resuelve en tres pasos, del más fiel al más aproximado.
+ */
 export async function getPlayerLabel(
   puuid: string,
-): Promise<{ gameName: string; tagLine: string; platform: string } | null> {
+): Promise<PlayerLabel | null> {
   await ensureSchema();
+
+  // 1) Caso normal: el puuid es el perfil que ya sincronizamos.
   const result = await db().execute({
     sql: "SELECT game_name, tag_line, platform_id FROM puuid_sync WHERE puuid = ?",
     args: [puuid],
   });
   const row = result.rows[0];
-  if (!row?.game_name) return null;
+  if (row?.game_name) {
+    return {
+      gameName: str(row.game_name),
+      tagLine: str(row.tag_line),
+      platform: str(row.platform_id),
+    };
+  }
+
+  // 2) Alias: buscamos el perfil guardado con el mismo Riot ID que Riot reportó
+  //    en alguna partida de este puuid (así se descubren los alias).
+  const aliased = await db().execute({
+    sql: `SELECT ps.game_name, ps.tag_line, ps.platform_id
+            FROM match_participants mp
+            JOIN matches m ON m.match_id = mp.match_id
+            JOIN puuid_sync ps
+              ON ps.game_name = substr(mp.riot_id, 1, instr(mp.riot_id, '#') - 1)
+             COLLATE NOCASE
+             AND ps.tag_line = substr(mp.riot_id, instr(mp.riot_id, '#') + 1)
+             COLLATE NOCASE
+           WHERE mp.puuid = ?
+             AND instr(mp.riot_id, '#') > 1
+             AND ps.game_name IS NOT NULL
+           ORDER BY m.game_start_ts DESC
+           LIMIT 1`,
+    args: [puuid],
+  });
+  const aliasRow = aliased.rows[0];
+  if (aliasRow?.game_name) {
+    return {
+      gameName: str(aliasRow.game_name),
+      tagLine: str(aliasRow.tag_line),
+      platform: str(aliasRow.platform_id),
+    };
+  }
+
+  // 3) Último recurso: el Riot ID que Riot guardó en sus partidas y la región
+  //    de esa partida. El perfil se puede abrir igual (lo resuelve la API).
+  const own = await db().execute({
+    sql: `SELECT mp.riot_id, m.platform_id
+            FROM match_participants mp
+            JOIN matches m ON m.match_id = mp.match_id
+           WHERE mp.puuid = ? AND instr(mp.riot_id, '#') > 1
+           ORDER BY m.game_start_ts DESC
+           LIMIT 1`,
+    args: [puuid],
+  });
+  const ownRow = own.rows[0];
+  if (!ownRow) return null;
+  const riotId = str(ownRow.riot_id);
+  const cut = riotId.lastIndexOf("#");
+  if (cut <= 0) return null;
   return {
-    gameName: str(row.game_name),
-    tagLine: str(row.tag_line),
-    platform: str(row.platform_id),
+    gameName: riotId.slice(0, cut),
+    tagLine: riotId.slice(cut + 1),
+    platform: str(ownRow.platform_id),
   };
 }
 

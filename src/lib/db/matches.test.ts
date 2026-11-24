@@ -9,6 +9,7 @@ import { closeDb, ensureSchema } from "./client";
 import {
   filterKnownMatchIds,
   getAliasPuuids,
+  getPlayerLabel,
   getPlayerMatchesWithProgress,
   touchSyncState,
   findSyncForPuuid,
@@ -272,6 +273,77 @@ describe("búsqueda de datos guardados", () => {
   it("no devuelve nada si no hay partidas guardadas", async () => {
     expect(await findSyncForPuuid(PUUID)).toBeNull();
     expect(await findSyncedPuuid("Nadie", "XXXX")).toBeNull();
+  });
+});
+
+describe("link de vuelta al perfil", () => {
+  const ALIAS = "a".repeat(78);
+
+  function conParticipante(
+    matchId: string,
+    puuid: string,
+    riotIdGameName: string,
+    riotIdTagline: string,
+  ): Match {
+    const match = makeMatch({ matchId });
+    match.metadata.participants = [puuid];
+    match.info.participants = [
+      {
+        ...match.info.participants[0]!,
+        puuid,
+        riotIdGameName,
+        riotIdTagline,
+      },
+    ];
+    return match;
+  }
+
+  it("usa el Riot ID del perfil guardado", async () => {
+    await touchSyncState(PUUID, "la2", {
+      gameName: "Carlos",
+      tagLine: "RHLMC",
+    });
+
+    expect(await getPlayerLabel(PUUID)).toEqual({
+      gameName: "Carlos",
+      tagLine: "RHLMC",
+      platform: "la2",
+    });
+  });
+
+  it("resuelve un alias por el Riot ID que Riot guardó en sus partidas", async () => {
+    await touchSyncState(PUUID, "la2", {
+      gameName: "Carlos",
+      tagLine: "RHLMC",
+    });
+    await saveMatch(
+      conParticipante("LA2_alias", ALIAS, "Carlos", "RHLMC"),
+      "la2",
+    );
+
+    // El alias no tiene perfil guardado, pero sí un Riot ID que lo delata.
+    expect(await getPlayerLabel(ALIAS)).toEqual({
+      gameName: "Carlos",
+      tagLine: "RHLMC",
+      platform: "la2",
+    });
+  });
+
+  it("cae al Riot ID de la partida si el perfil no está guardado", async () => {
+    await saveMatch(
+      conParticipante("LA1_suelto", ALIAS, "Otro", "LAS"),
+      "la1",
+    );
+
+    expect(await getPlayerLabel(ALIAS)).toEqual({
+      gameName: "Otro",
+      tagLine: "LAS",
+      platform: "la1",
+    });
+  });
+
+  it("devuelve null si no hay perfil ni partidas", async () => {
+    expect(await getPlayerLabel(ALIAS)).toBeNull();
   });
 });
 

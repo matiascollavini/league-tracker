@@ -36,6 +36,9 @@ export default async function MatchPage({ params, searchParams }: Props) {
   const { matchId } = await params;
   const sp = await searchParams;
   const player = Array.isArray(sp.player) ? sp.player[0] : sp.player;
+  // Perfil desde el que se abrió la partida: puede no ser el puuid de la fila
+  // (alias), pero siempre es el que tiene el Riot ID guardado.
+  const viewer = Array.isArray(sp.viewer) ? sp.viewer[0] : sp.viewer;
 
   const [detail, catalog] = await Promise.all([
     getMatchDetail(decodeURIComponent(matchId)),
@@ -66,7 +69,7 @@ export default async function MatchPage({ params, searchParams }: Props) {
     catalog.all.map((c) => [c.id, c.name]),
   );
 
-  const label = player ? await getPlayerLabel(player) : null;
+  const label = await getPlayerLabel(viewer ?? player ?? "");
   const backHref = label
     ? `/perfil/${label.platform}/${encodeURIComponent(label.gameName)}/${encodeURIComponent(label.tagLine)}`
     : "/";
@@ -80,7 +83,12 @@ export default async function MatchPage({ params, searchParams }: Props) {
     }))
     .filter((team) => team.participants.length > 0);
 
-  const winner = detail.participants.find((p) => p.win);
+  // El resultado del encabezado es el del jugador cuyo perfil estamos viendo,
+  // no el de cualquier participante de la partida (siempre hay uno que ganó).
+  const me = player
+    ? detail.participants.find((p) => p.puuid === player)
+    : undefined;
+  const resultWin = me ? me.win : null;
 
   return (
     <div className="space-y-5">
@@ -90,7 +98,7 @@ export default async function MatchPage({ params, searchParams }: Props) {
           className="inline-flex items-center gap-1 text-xs text-muted hover:text-gold-300"
         >
           <ArrowLeft className="size-3" aria-hidden />
-          Volver al perfil
+          {label ? "Volver al perfil" : "Volver al buscador"}
         </Link>
         <span className="font-mono text-[11px] text-muted/60">{detail.matchId}</span>
       </div>
@@ -98,19 +106,25 @@ export default async function MatchPage({ params, searchParams }: Props) {
       <header
         className={cn(
           "rounded-xl border p-4",
-          winner?.win
-            ? "border-win/40 bg-win/[0.06]"
-            : "border-loss/40 bg-loss/[0.06]",
+          resultWin === null
+            ? "border-line bg-ink-900/60"
+            : resultWin
+              ? "border-win/40 bg-win/[0.06]"
+              : "border-loss/40 bg-loss/[0.06]",
         )}
       >
         <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
           <h1
             className={cn(
               "text-xl font-semibold",
-              winner?.win ? "text-win" : "text-loss",
+              resultWin === null
+                ? "text-gold-200"
+                : resultWin
+                  ? "text-win"
+                  : "text-loss",
             )}
           >
-            {winner?.win ? "Victoria" : "Derrota"}
+            {resultWin === null ? "Partida" : resultWin ? "Victoria" : "Derrota"}
           </h1>
           <span className="text-sm text-gold-300">
             {queueLabel(detail.queueId)}
@@ -165,7 +179,7 @@ export default async function MatchPage({ params, searchParams }: Props) {
               </thead>
               <tbody>
                 {team.participants.map((p) => {
-                  const isMe = p.puuid === player;
+                  const isMe = p.puuid === me?.puuid;
                   return (
                     <tr
                       key={p.puuid}

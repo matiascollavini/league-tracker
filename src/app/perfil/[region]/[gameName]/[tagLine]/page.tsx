@@ -182,7 +182,7 @@ export default async function ProfilePage({
             {recent.map((row) => (
               <Link
                 key={row.matchId}
-                href={`/partida/${encodeURIComponent(row.matchId)}?player=${encodeURIComponent(row.puuid)}`}
+                href={`/partida/${encodeURIComponent(row.matchId)}?player=${encodeURIComponent(row.puuid)}${row.puuid === puuid ? "" : `&viewer=${encodeURIComponent(puuid)}`}`}
                 title={`${names[row.championName] ?? row.championName} · ${row.win ? "Victoria" : "Derrota"}`}
                 className={cn(
                   "size-5 rounded-sm transition-transform hover:scale-110",

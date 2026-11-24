@@ -28,20 +28,26 @@ export function MatchList({ matches, version, names, puuid }: Props) {
 
   return (
     <ul className="divide-y divide-line/70">
-      {matches.map((match) => (
-        <li key={match.matchId}>
-          <Link
-            // El puuid de la fila: sus partidas viejas y nuevas pueden estar
-            // guardadas con puuids distintos.
-            href={`/partida/${encodeURIComponent(match.matchId)}?player=${encodeURIComponent(match.puuid || puuid)}`}
-            className={cn(
-              "flex items-center gap-3 border-l-2 px-3 py-2.5 transition-colors hover:bg-ink-800/60 sm:px-4",
-              match.win
-                ? "border-win/70 bg-win/[0.04]"
-                : "border-loss/70 bg-loss/[0.04]",
-            )}
-          >
-          <span
+      {matches.map((match) => {
+        // El puuid de la fila: sus partidas viejas y nuevas pueden estar
+        // guardadas con puuids distintos.
+        const rowPuuid = match.puuid || puuid;
+        // Si la fila es de un alias, el perfil desde el que se vino viaja aparte
+        // (`viewer`) para que "volver al perfil" no dependa de resolver el alias.
+        const viewer =
+          rowPuuid === puuid ? "" : `&viewer=${encodeURIComponent(puuid)}`;
+        return (
+          <li key={match.matchId}>
+            <Link
+              href={`/partida/${encodeURIComponent(match.matchId)}?player=${encodeURIComponent(rowPuuid)}${viewer}`}
+              className={cn(
+                "flex items-center gap-3 border-l-2 px-3 py-2.5 transition-colors hover:bg-ink-800/60 sm:px-4",
+                match.win
+                  ? "border-win/70 bg-win/[0.04]"
+                  : "border-loss/70 bg-loss/[0.04]",
+              )}
+            >
+              <span
             className={cn(
               "hidden w-14 shrink-0 text-[11px] font-semibold uppercase tracking-wide sm:block",
               match.win ? "text-win" : "text-loss",
@@ -96,8 +102,9 @@ export function MatchList({ matches, version, names, puuid }: Props) {
             </p>
           </div>
           </Link>
-        </li>
-      ))}
+          </li>
+        );
+      })}
     </ul>
   );
 }
