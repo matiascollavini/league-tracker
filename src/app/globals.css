@@ -1,0 +1,66 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ink-950: #060a12;
+  --color-ink-900: #090f1b;
+  --color-ink-850: #0c1422;
+  --color-ink-800: #101a2b;
+  --color-ink-700: #16233a;
+  --color-line: #1c2941;
+
+  --color-gold-200: #f6eeda;
+  --color-gold-300: #ece0c6;
+  --color-gold-400: #d9c39a;
+  --color-gold-500: #c8aa6e;
+  --color-gold-600: #9c8149;
+
+  --color-hextech: #0ac8b9;
+  --color-win: #4cc38a;
+  --color-loss: #e35d5d;
+  --color-muted: #8b98ad;
+
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+@layer base {
+  html {
+    color-scheme: dark;
+  }
+
+  body {
+    background-color: var(--color-ink-950);
+    color: var(--color-gold-300);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    background-image:
+      radial-gradient(
+        60rem 32rem at 50% -12rem,
+        color-mix(in oklab, var(--color-gold-600) 18%, transparent),
+        transparent
+      ),
+      radial-gradient(
+        40rem 24rem at 90% 8rem,
+        color-mix(in oklab, var(--color-hextech) 7%, transparent),
+        transparent
+      );
+    background-repeat: no-repeat;
+    background-attachment: fixed;
+  }
+
+  ::selection {
+    background-color: color-mix(in oklab, var(--color-gold-500) 35%, transparent);
+  }
+
+  a {
+    text-underline-offset: 3px;
+  }
+}
+
+@layer utilities {
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}

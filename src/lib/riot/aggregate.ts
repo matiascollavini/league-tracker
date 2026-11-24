@@ -1,0 +1,246 @@
+import type { Match, MatchInfo, Participant } from "./types";
+import { CUSTOM_QUEUE_ID, queueLabel } from "./config";
+
+/**
+ * Agregación por campeón. Funciones puras: fáciles de testear y de reusar
+ * cuando el ingest escriba en Postgres.
+ *
+ * Regla del proyecto (docs/API-LOL.txt §8.1): agrupar SIEMPRE por championName.
+ * championId no es confiable en partidas anteriores al patch 11.4.
+ */
+
+export type ChampionStat = {
+  championId: number;
+  championName: string;
+  games: number;
+  wins: number;
+  losses: number;
+  /** 0..1 */
+  winrate: number;
+  kda: number;
+};
+
+export type PlayerSummary = {
+  matches: number;
+  wins: number;
+  losses: number;
+  winrate: number;
+  kda: number;
+  champions: ChampionStat[];
+  /** Rango de fechas analizado (epoch ms), null si no hay partidas. */
+  from: number | null;
+  to: number | null;
+  customExcluded: number;
+};
+
+export type MatchSummary = {
+  matchId: string;
+  playedAt: number;
+  championId: number;
+  championName: string;
+  win: boolean;
+  kills: number;
+  deaths: number;
+  assists: number;
+  kda: number;
+  queueId: number;
+  queueLabel: string;
+  durationSeconds: number;
+  position: string;
+};
+
+const ZERO = 0;
+
+export function participantOf(
+  match: Match,
+  puuid: string,
+): Participant | undefined {
+  return match.info.participants.find((p) => p.puuid === puuid);
+}
+
+/**
+ * gameDuration cambió de milisegundos a segundos en el patch 11.20.
+ * Regla oficial: si existe gameEndTimestamp, ya está en segundos.
+ */
+export function durationSeconds(info: MatchInfo): number {
+  const raw = info.gameDuration ?? ZERO;
+  if (info.gameEndTimestamp != null) return raw;
+  return Math.round(raw / 1_000);
+}
+
+/** "16.23.541.1234" -> "16.23" */
+export function patchOf(gameVersion: string): string {
+  return gameVersion.split(".").slice(0, 2).join(".");
+}
+
+export function isCustomQueue(queueId: number): boolean {
+  return queueId === CUSTOM_QUEUE_ID;
+}
+
+export function kdaOf(kills: number, deaths: number, assists: number): number {
+  return deaths === 0 ? kills + assists : (kills + assists) / deaths;
+}
+
+export function summarize(
+  matches: readonly Match[],
+  puuid: string,
+  options: { excludeCustoms?: boolean } = {},
+): PlayerSummary {
+  const { excludeCustoms = true } = options;
+
+  const byChampion = new Map<string, ChampionStat>();
+  let played = 0;
+  let wins = 0;
+  let customExcluded = 0;
+  let kills = 0;
+  let deaths = 0;
+  let assists = 0;
+  let from: number | null = null;
+  let to: number | null = null;
+
+  for (const match of matches) {
+    if (excludeCustoms && isCustomQueue(match.info.queueId)) {
+      customExcluded += 1;
+      continue;
+    }
+
+    const participant = participantOf(match, puuid);
+    if (!participant) continue;
+
+    played += 1;
+    if (participant.win) wins += 1;
+    kills += participant.kills ?? ZERO;
+    deaths += participant.deaths ?? ZERO;
+    assists += participant.assists ?? ZERO;
+
+    const startedAt = match.info.gameStartTimestamp ?? match.info.gameCreation;
+    from = from === null ? startedAt : Math.min(from, startedAt);
+    to = to === null ? startedAt : Math.max(to, startedAt);
+
+    const key = participant.championName;
+    const current = byChampion.get(key) ?? {
+      championId: participant.championId,
+      championName: key,
+      games: 0,
+      wins: 0,
+      losses: 0,
+      winrate: 0,
+      kda: 0,
+    };
+
+    current.games += 1;
+    if (participant.win) current.wins += 1;
+    current.losses = current.games - current.wins;
+    current.winrate = current.wins / current.games;
+    current.kda = kdaOf(
+      participant.kills ?? ZERO,
+      participant.deaths ?? ZERO,
+      participant.assists ?? ZERO,
+    );
+    byChampion.set(key, current);
+  }
+
+  const champions = [...byChampion.values()].sort(
+    (a, b) =>
+      b.games - a.games ||
+      b.winrate - a.winrate ||
+      a.championName.localeCompare(b.championName),
+  );
+
+  return {
+    matches: played,
+    wins,
+    losses: played - wins,
+    winrate: played > 0 ? wins / played : 0,
+    kda: kdaOf(kills, deaths, assists),
+    champions,
+    from,
+    to,
+    customExcluded,
+  };
+}
+
+export function toMatchSummaries(
+  matches: readonly Match[],
+  puuid: string,
+): MatchSummary[] {
+  const out: MatchSummary[] = [];
+
+  for (const match of matches) {
+    const participant = participantOf(match, puuid);
+    if (!participant) continue;
+
+    const kills = participant.kills ?? ZERO;
+    const deaths = participant.deaths ?? ZERO;
+    const assists = participant.assists ?? ZERO;
+
+    out.push({
+      matchId: match.metadata.matchId,
+      playedAt: match.info.gameStartTimestamp ?? match.info.gameCreation,
+      championId: participant.championId,
+      championName: participant.championName,
+      win: participant.win,
+      kills,
+      deaths,
+      assists,
+      kda: kdaOf(kills, deaths, assists),
+      queueId: match.info.queueId,
+      queueLabel: queueLabel(match.info.queueId),
+      durationSeconds: durationSeconds(match.info),
+      position: normalizePosition(participant),
+    });
+  }
+
+  return out.sort((a, b) => b.playedAt - a.playedAt);
+}
+
+export function normalizePosition(participant: Participant): string {
+  const raw = participant.teamPosition || participant.individualPosition || "";
+  switch (raw) {
+    case "TOP":
+      return "Top";
+    case "JUNGLE":
+      return "Jungla";
+    case "MIDDLE":
+      return "Mid";
+    case "BOTTOM":
+      return "ADC";
+    case "UTILITY":
+      return "Support";
+    default:
+      return "—";
+  }
+}
+
+/** "hace 3 h", "hace 2 d" */
+export function timeAgo(timestamp: number, now = Date.now()): string {
+  const diff = Math.max(0, now - timestamp);
+  const minutes = Math.floor(diff / 60_000);
+  if (minutes < 1) return "recién";
+  if (minutes < 60) return `hace ${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `hace ${hours} h`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `hace ${days} d`;
+  const months = Math.floor(days / 30);
+  return `hace ${months} mes${months === 1 ? "" : "es"}`;
+}
+
+export function formatDuration(seconds: number): string {
+  const safe = Math.max(0, Math.round(seconds));
+  const m = Math.floor(safe / 60);
+  const s = safe % 60;
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+export function percent(value: number): string {
+  return `${Math.round(value * 100)}%`;
+}
+
+export function formatDate(timestamp: number): string {
+  return new Intl.DateTimeFormat("es-AR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(new Date(timestamp));
+}

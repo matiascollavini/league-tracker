@@ -94,8 +94,8 @@ _(Detalle y justificación en `docs/DECISIONES.md`.)_
 | Hosting | Vercel Hobby (escape hatch: Fly.io) | decidido |
 | Caché caliente | Upstash Redis free (puuid/matches/locks) | decidido |
 | Persistencia | Neon Postgres free (`matches`, `puuid_matches`, `champion_stats`, `puuid_sync`) | decidido |
-| Ingest | Worker separado (GitHub Actions cron ~10 min o Node en Fly) | decidido |
-| Estado del código | sin scaffold todavía | pendiente |
+| Ingest | Worker separado (GitHub Actions cron ~10 min o Node en Fly) | pendiente (fase 2) |
+| Estado del código | v1 funcionando en modo demo; datos reales al cargar la key | implementado |
 
 ### Regla de producto derivada del ADR-002
 El historial de Riot está topado en **~1.000 partidas por jugador** (2 años de
@@ -109,9 +109,13 @@ retención), y no existe endpoint de "partidas totales". Por eso:
 ## 4. Mapa del repositorio
 
 ```
-docs/          API-LOL.txt (referencia de la API), DECISIONES.md (ADRs)
-research/      briefs crudos de investigación (fuentes, comparativas)
-workflows/     scripts de orquestación de subagentes
+src/app/        páginas (landing, perfil, legales)
+src/components/ UI server-first + buscador (client)
+src/lib/riot/   capa de datos: config, http, account, matches, aggregate, types
+docs/           API-LOL.txt (referencia de la API), DECISIONES.md (ADRs)
+research/       briefs crudos de investigación + crawled/ (fuentes)
+workflows/      scripts de orquestación de subagentes
+scripts/        verify-riot.mjs (verificación contra la API real)
 ```
 
 ---
@@ -119,11 +123,13 @@ workflows/     scripts de orquestación de subagentes
 ## 6. Estado actual y próximo paso
 
 - Investigación: **cerrada** (APIs, límites, framework, arquitectura).
-- Código: **no hay scaffold todavía**. Próximo paso acordado: crear la app
-  Next.js 16.4 + capa de datos (`riotFetch` con token bucket, Riot ID→puuid,
-  agregador por campeón).
+- Código: **v1 implementada** — landing + buscador, perfil con últimas partidas,
+  agregado por campeón, filtros por campeón y por cola, páginas legales.
+  Corre en modo demo sin key (`npm run dev`).
 - Bloqueante: falta la **dev key** de Riot en `.env.local` para probar contra la
-  API real y correr los `curl` de §18 de `docs/API-LOL.txt`.
+  API real y correr `npm run verify:riot` (cierra los `[UNVERIFIED]` de
+  `docs/API-LOL.txt` §18).
+- Siguiente: Postgres + Redis + worker de backfill (fase 2).
 
 ---
 

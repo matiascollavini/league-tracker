@@ -156,6 +156,38 @@ en inglés. Nombres de campeones localizados con `es_ES` desde Data Dragon
 
 ---
 
+## ADR-006 — Implementación de la v1 (sin DB todavía)
+
+**Estado:** aceptada · **Fecha:** 2026-11-24
+
+### Decisiones de implementación
+
+1. **Caché con `fetch` + `revalidate`, no con `'use cache'`.** La caché por tag
+   de Cache Components incluye el deployment ID en la clave (se vacía en cada
+   deploy) y en serverless no persiste entre requests. Para v1, `fetch(url,
+   { next: { revalidate } })` es lo que realmente guarda datos entre requests y
+   deploys. Migrar cuando exista Redis (`cacheHandlers`).
+2. **`revalidate: 120` por página de perfil.** ISR sobre el render completo;
+   partidas individuales se cachean 30 días (son inmutables).
+3. **24 partidas analizadas por defecto** (`RIOT_ANALYZE_COUNT`, máx. 100). Con
+   dev key el costo de un perfil frío es 1 + 1 + 24 = 26 requests (~2 s). Un
+   backfill de 1.000 partidas queda para el worker (fase 2).
+4. **Modo demo** cuando no hay `RIOT_API_KEY`, pero **solo en desarrollo** o con
+   `RIOT_DEMO=1`. En producción sin key se muestra un error: nunca datos falsos.
+5. **Filtros por URL** (`?champion=Ahri&queue=solo`), sin estado de cliente: las
+   páginas siguen siendo server components y las URLs se comparten.
+6. **`championName` como clave** en todo el agregado, con test que lo cubre.
+7. **TypeScript 6.0.3**, no 7: `typescript-eslint` (vía `eslint-config-next`) no
+   soporta TS 7 todavía.
+
+### Consecuencias
+- Cero infraestructura: no hay DB ni Redis, el proyecto corre con `npm run dev`.
+- El agregado por campeón cubre solo las últimas 24 partidas hasta la fase 2; la
+  UI lo dice explícitamente.
+- `npm run verify:riot` queda listo para cerrar los `[UNVERIFIED]` del doc.
+
+---
+
 ## Registro de auditoría
 
 **2026-11-24 — auditoría de `docs/API-LOL.txt` v1.0.** Un `evidence-auditor` sin
@@ -170,8 +202,10 @@ verificar con una key real. La conclusión de arquitectura no cambió.
 
 ## Pendientes (no decididos todavía)
 
-- [ ] Correr los `curl` de §18 de `docs/API-LOL.txt` con una dev key y anotar los
-      resultados en el changelog (cierra los `[UNVERIFIED]`).
+- [ ] Postgres + Redis + worker de backfill (fase 2): pasar de 24 a ~1.000
+      partidas analizadas y acumular historia propia.
+- [ ] Correr `npm run verify:riot -- "Nombre#TAG"` con una dev key y anotar los
+      resultados en el changelog de `docs/API-LOL.txt`.
 
 - [ ] Autenticación de usuarios (¿"login con Riot" RSO? Requiere production key).
 - [ ] Buscador con autocompletado (requiere un endpoint propio de sugerencias por
