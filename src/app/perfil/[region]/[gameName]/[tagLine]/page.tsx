@@ -289,11 +289,13 @@ function DataError({ error }: { error: unknown }) {
 
   const missingKey = error instanceof MissingApiKeyError;
 
+  const keyRejected = status === 401 || status === 403;
+
   const title = missingKey
     ? "Falta configurar la API key"
     : status === 429
       ? "Riot nos está limitando"
-      : status === 403
+      : keyRejected
         ? "La key de Riot no es válida"
         : "No pudimos traer los datos";
 
@@ -301,8 +303,8 @@ function DataError({ error }: { error: unknown }) {
     ? "Definí RIOT_API_KEY en .env.local (o en las variables de entorno del deploy) y reiniciá el server. Mientras tanto podés correr en modo demo con RIOT_DEMO=1."
     : status === 429
       ? "Se superó el rate limit de la API. Esperá un minuto y volvé a intentar."
-      : status === 403
-        ? "La dev key se vence cada 24 horas: regenerala en developer.riotgames.com y actualizá .env.local."
+      : keyRejected
+        ? "Riot rechazó la key (401/403). Las dev keys se vencen cada 24 horas y también se invalidan si se regeneran: entrá a developer.riotgames.com, generá una nueva y actualizá .env.local."
         : "Puede ser un problema temporal de Riot. Probá de nuevo en un rato.";
 
   return (
