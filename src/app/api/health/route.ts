@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { databaseHost, db, dbConfig, ensureSchema } from "@/lib/db/client";
-import { isMockMode } from "@/lib/riot/http";
+import { hasApiKey, isMockMode } from "@/lib/riot/http";
 
 export const dynamic = "force-dynamic";
 
@@ -42,7 +42,15 @@ export async function GET() {
         players: Number(row?.players ?? 0),
         pendingPlayers: Number(row?.pending_players ?? 0),
       },
-      riot: { mode: isMockMode() ? "demo (sin key)" : "api key cargada" },
+      riot: {
+        hasKey: hasApiKey(),
+        mode: isMockMode() ? "demo" : hasApiKey() ? "real" : "sin key",
+        onDemandBudget: Number(process.env.RIOT_ONDEMAND_BUDGET ?? 25),
+      },
+      env: {
+        nodeEnv: process.env.NODE_ENV,
+        vercel: process.env.VERCEL === "1",
+      },
     });
   } catch (error) {
     return NextResponse.json(
