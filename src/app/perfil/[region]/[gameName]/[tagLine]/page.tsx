@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AlertTriangle, ArrowLeftRight, Info } from "lucide-react";
+import { AlertTriangle, ArrowLeftRight, CheckCircle2, Info } from "lucide-react";
 import { ChampionPool } from "@/components/champion-pool";
 import { ChampionTable } from "@/components/champion-table";
 import { MatchList } from "@/components/match-list";
@@ -102,6 +102,7 @@ export default async function ProfilePage({
     progress,
     source,
     partial,
+    complete,
   } = profile;
 
   const catalog = await getChampionCatalog();
@@ -251,31 +252,52 @@ export default async function ProfilePage({
           </p>
         ) : null}
 
-        <section
-          className="rounded-xl border border-line bg-ink-900/60 p-4"
-          aria-label="Progreso del análisis"
-        >
-          <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
-            <p className="text-xs text-muted">
-              Historial analizado:{" "}
+        {/* Con el historial completo no hay nada que cargar: el bloque de
+            sincronización desaparece y queda solo la confirmación. */}
+        {complete ? (
+          <p className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-line bg-ink-900/60 px-4 py-3 text-xs text-muted">
+            <CheckCircle2 className="size-4 shrink-0 text-win" aria-hidden />
+            <span>
+              Historial completo:{" "}
               <strong className="text-gold-300">
-                {progress.detailed} de {progress.known}
-              </strong>{" "}
-              partidas
-            </p>
-            <span className="text-[11px] text-muted">
-              Riot permite hasta ~1.000 por jugador
+                {progress.detailed} partidas analizadas
+              </strong>
+              {summary.from && summary.to
+                ? ` (${formatDate(summary.from)} — ${formatDate(summary.to)})`
+                : ""}
+              .
             </span>
-          </div>
+            <span className="text-[11px]">
+              Riot permite hasta ~1.000 por jugador.
+            </span>
+          </p>
+        ) : (
+          <section
+            className="rounded-xl border border-line bg-ink-900/60 p-4"
+            aria-label="Progreso del análisis"
+          >
+            <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
+              <p className="text-xs text-muted">
+                Historial analizado:{" "}
+                <strong className="text-gold-300">
+                  {progress.detailed} de {progress.known}
+                </strong>{" "}
+                partidas
+              </p>
+              <span className="text-[11px] text-muted">
+                Riot permite hasta ~1.000 por jugador
+              </span>
+            </div>
 
-          <SyncButton
-            platform={effectivePlatform}
-            gameName={account.gameName ?? gameName}
-            tagLine={account.tagLine ?? tagLine}
-            known={progress.known}
-            detailed={progress.detailed}
-          />
-        </section>
+            <SyncButton
+              platform={effectivePlatform}
+              gameName={account.gameName ?? gameName}
+              tagLine={account.tagLine ?? tagLine}
+              known={progress.known}
+              detailed={progress.detailed}
+            />
+          </section>
+        )}
 
         {source === "live" ? (
           <p className="rounded-lg border border-gold-600/40 bg-gold-600/10 px-4 py-3 text-xs leading-relaxed text-gold-300">

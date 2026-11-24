@@ -65,6 +65,16 @@ type State = {
   phase: "ids" | "details" | "done" | "locked" | "throttled" | null;
   /** Partidas que Riot ya no tiene y se sacaron de la cola. */
   unavailable: number;
+  /**
+   * Analizadas que había cuando empezó la tanda.
+   *
+   * El contador se mide contra esto y no contra el total de la cuenta: si el
+   * jugador ya tenía 1.000 partidas y Riot trajo 5 nuevas, el progreso arranca
+   * en "0 de 5" en vez del inútil "1.000 de 1.005".
+   */
+  baselineDetailed: number;
+  /** Pendientes al empezar la tanda (el denominador crece si aparecen más). */
+  batchTotal: number;
   startedAt: number | null;
   /** Último momento en que el contador de partidas se movió. */
   lastProgressAt: number | null;
@@ -133,6 +143,10 @@ export function SyncButton({
     requests: 0,
     phase: null,
     unavailable: 0,
+    // Lo que ya está analizado es la base de cero: al abrir la página el
+    // contador dice "0 de N pendientes", no "1.000 de 1.005".
+    baselineDetailed: detailed,
+    batchTotal: Math.max(0, known - detailed),
     startedAt: null,
     lastProgressAt: null,
     now: 0,
@@ -159,6 +173,10 @@ export function SyncButton({
     // Copias locales: el loop no depende de `state` (que quedaría viejo).
     let currentDetailed = state.detailed;
     let currentKnown = state.known;
+    // La tanda se mide desde acá: estos son los pendientes que el usuario ve
+    // como "0 de N" al apretar el botón.
+    const baseline = state.detailed;
+    let batchTotal = Math.max(0, state.known - state.detailed);
     let requests = 0;
     let lastProgressAt = startedAt;
     let notice: string | null = null;
@@ -178,6 +196,8 @@ export function SyncButton({
         requests,
         phase,
         unavailable,
+        baselineDetailed: baseline,
+        batchTotal,
         startedAt,
         lastProgressAt,
         now: Date.now(),
@@ -197,6 +217,8 @@ export function SyncButton({
         requests,
         phase,
         unavailable,
+        baselineDetailed: baseline,
+        batchTotal,
         startedAt,
         lastProgressAt,
         now: Date.now(),
@@ -308,9 +330,19 @@ export function SyncButton({
   }
 
   const { running, done, error, notice, round, requests, startedAt } = state;
+  // Progreso de la tanda: lo analizado desde que arrancó, sobre lo que faltaba.
+  const analyzedInBatch = Math.max(0, state.detailed - state.baselineDetailed);
+  const pending = Math.max(0, state.known - state.detailed);
+  // Si Riot trae más IDs en el camino, el denominador crece para que el
+  // porcentaje nunca mienta ni pase de 100.
+  const batchTotal = Math.max(state.batchTotal, analyzedInBatch + pending);
+  // Si todavía no se analizó nada, el denominador ya ES lo que falta: mostrarlo
+  // dos veces ("0 de 361 … faltan 361") solo hace ruido.
+  const pendingNote =
+    pending !== batchTotal ? ` · faltan ${pending}` : "";
   const pct =
-    state.known > 0
-      ? Math.min(100, Math.round((state.detailed / state.known) * 100))
+    batchTotal > 0
+      ? Math.min(100, Math.round((analyzedInBatch / batchTotal) * 100))
       : 0;
   const elapsedMs = startedAt === null ? 0 : state.now - startedAt;
   const sinceProgressMs =
@@ -353,24 +385,32 @@ export function SyncButton({
         ) : null}
 
         <span className="tabular text-[11px] text-muted" aria-live="polite">
-          {state.detailed} de {state.known} partidas
-          {state.known > 0 ? ` · ${pct}%` : ""}
-          {running
-            ? ` · ${formatElapsed(elapsedMs)} · vuelta ${round}${phaseLabel ? ` · ${phaseLabel}` : ""}${requests > 0 ? ` · ${requests} req` : ""}`
-            : ""}
+          {batchTotal > 0 ? (
+            <>
+              {analyzedInBatch} de {batchTotal} partidas
+              {analyzedInBatch === 0 ? " por analizar" : " analizadas"}
+              {running
+                ? ` · ${pct}% · ${formatElapsed(elapsedMs)} · vuelta ${round}${phaseLabel ? ` · ${phaseLabel}` : ""}${requests > 0 ? ` · ${requests} req` : ""}${pendingNote}`
+                : pendingNote}
+            </>
+          ) : (
+            "Sin partidas pendientes: se sigue recorriendo el historial de Riot"
+          )}
         </span>
       </div>
 
-      <div className="h-1.5 overflow-hidden rounded-full bg-ink-800">
-        <div
-          className="h-full rounded-full bg-gold-500 transition-all"
-          style={{ width: `${Math.max(2, pct)}%` }}
-          role="progressbar"
-          aria-valuenow={pct}
-          aria-valuemin={0}
-          aria-valuemax={100}
-        />
-      </div>
+      {batchTotal > 0 ? (
+        <div className="h-1.5 overflow-hidden rounded-full bg-ink-800">
+          <div
+            className="h-full rounded-full bg-gold-500 transition-all"
+            style={{ width: `${Math.max(pct, analyzedInBatch > 0 ? 2 : 0)}%` }}
+            role="progressbar"
+            aria-valuenow={pct}
+            aria-valuemin={0}
+            aria-valuemax={100}
+          />
+        </div>
+      ) : null}
 
       <div className="space-y-1 text-[11px] leading-relaxed">
         {error ? <p className="text-loss">{error}</p> : null}
