@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { championIconUrl } from "@/lib/ddragon/champions";
 import {
+  formatClock,
   formatDuration,
   timeAgo,
   type MatchSummary,
@@ -17,17 +18,22 @@ type Props = {
   puuid: string;
 };
 
+/**
+ * Filas de partida con la estética de dpm.lol: barra de 62px, tinte azul en
+ * victoria y rojo en derrota, brillo diagonal, y las métricas alineadas en
+ * columnas fijas (meta · campeón · KDA · stats).
+ */
 export function MatchList({ matches, version, names, puuid }: Props) {
   if (matches.length === 0) {
     return (
-      <p className="p-4 text-sm text-muted">
+      <p className="px-3 py-6 text-center text-[13px] text-muted">
         No hay partidas para mostrar con este filtro.
       </p>
     );
   }
 
   return (
-    <ul className="divide-y divide-line/70">
+    <ul className="space-y-0.5">
       {matches.map((match) => {
         // El puuid de la fila: sus partidas viejas y nuevas pueden estar
         // guardadas con puuids distintos.
@@ -36,72 +42,102 @@ export function MatchList({ matches, version, names, puuid }: Props) {
         // (`viewer`) para que "volver al perfil" no dependa de resolver el alias.
         const viewer =
           rowPuuid === puuid ? "" : `&viewer=${encodeURIComponent(puuid)}`;
+
         return (
           <li key={match.matchId}>
             <Link
               href={`/partida/${encodeURIComponent(match.matchId)}?player=${encodeURIComponent(rowPuuid)}${viewer}`}
               className={cn(
-                "flex items-center gap-3 border-l-2 px-3 py-2.5 transition-colors hover:bg-ink-800/60 sm:px-4",
-                match.win
-                  ? "border-win/70 bg-win/[0.04]"
-                  : "border-loss/70 bg-loss/[0.04]",
+                "match-row group grid h-[62px] grid-cols-[74px_minmax(0,1fr)_96px_20px] items-center gap-3 pl-3 pr-2 transition-colors hover:brightness-110",
+                "sm:grid-cols-[92px_200px_minmax(0,1fr)_72px_20px] lg:grid-cols-[92px_240px_minmax(0,1fr)_72px_20px]",
+                match.win ? "match-row--win" : "match-row--loss",
               )}
             >
+              {/* meta: hora, hace cuánto y cola */}
+              <div className="leading-tight">
+                <div className="flex items-baseline gap-1.5">
+                  <span className="tabular text-[12px] font-semibold text-fg">
+                    {formatClock(match.playedAt)}
+                  </span>
+                  <span className="hidden text-[10px] font-medium text-muted lg:inline">
+                    {timeAgo(match.playedAt)}
+                  </span>
+                </div>
+                <div className="truncate text-[12px] font-bold text-fg">
+                  {match.queueLabel}
+                </div>
+              </div>
+
+              {/* campeón */}
+              <div className="flex min-w-0 items-center gap-2.5">
+                <span className="relative shrink-0">
+                  <Image
+                    src={championIconUrl(version, match.championName)}
+                    alt=""
+                    width={44}
+                    height={44}
+                    className="size-11 rounded-sm bg-soft object-cover brightness-105"
+                  />
+                  <span
+                    className={cn(
+                      "absolute -bottom-1 -left-1.5 grid size-[18px] place-items-center rounded-[3px] p-[3px] text-[9px] font-bold ring-1 ring-white/15",
+                      match.win
+                        ? "bg-primary/20 text-primary"
+                        : "bg-loss/20 text-loss",
+                    )}
+                    aria-hidden="true"
+                  >
+                    {match.win ? "V" : "D"}
+                  </span>
+                </span>
+                <span className="hidden min-w-0 leading-tight sm:block">
+                  <span className="block truncate text-[13px] font-semibold text-fg">
+                    {names[match.championName] ?? match.championName}
+                  </span>
+                  <span className="block text-[10px] font-medium text-muted">
+                    {match.position}
+                  </span>
+                </span>
+              </div>
+
+              {/* KDA + resultado */}
+              <div className="flex flex-col items-center justify-self-center text-center">
+                <div className="tabular text-[15px] font-bold leading-none text-fg">
+                  {match.kills}
+                  <span className="text-[12px] font-light text-muted"> / </span>
+                  <span className="text-loss">{match.deaths}</span>
+                  <span className="text-[12px] font-light text-muted"> / </span>
+                  {match.assists}
+                </div>
+                <div className="mt-1 text-[11px] font-bold text-blue sm:text-[12px]">
+                  {match.kda.toFixed(2)} KDA
+                </div>
+                <span
+                  className={cn(
+                    "mt-1 inline-block max-w-full truncate rounded px-1.5 py-px text-[9px] font-semibold",
+                    match.win
+                      ? "bg-primary/12 text-primary"
+                      : "bg-orange/12 text-orange",
+                  )}
+                >
+                  {match.win ? "Victoria" : "Derrota"}
+                </span>
+              </div>
+
+              {/* stats */}
+              <div className="hidden text-[10px] font-medium leading-tight text-muted sm:block">
+                <div className="text-[12px] font-bold text-fg">{match.cs} CS</div>
+                <div>{match.vision} visión</div>
+                <div className="tabular">{formatDuration(match.durationSeconds)}</div>
+              </div>
+
               <span
-            className={cn(
-              "hidden w-14 shrink-0 text-[11px] font-semibold uppercase tracking-wide sm:block",
-              match.win ? "text-win" : "text-loss",
-            )}
-          >
-            {match.win ? "Victoria" : "Derrota"}
-          </span>
-
-          <Image
-            src={championIconUrl(version, match.championName)}
-            alt=""
-            width={36}
-            height={36}
-            className="size-9 shrink-0 rounded border border-line/80"
-          />
-
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium text-gold-200">
-              {names[match.championName] ?? match.championName}
-              <span className="ml-2 text-[11px] font-normal text-muted">
-                {match.position}
+                className="grid place-items-center text-[14px] text-muted transition-colors group-hover:text-fg"
+                aria-hidden="true"
+              >
+                ›
               </span>
-            </p>
-            <p className="truncate text-[11px] text-muted">
-              <span className="sm:hidden">
-                {match.win ? "Victoria · " : "Derrota · "}
-              </span>
-              {match.queueLabel} · {timeAgo(match.playedAt)}
-            </p>
-          </div>
-
-          <div className="hidden w-14 text-right sm:block">
-            <p className="tabular text-sm text-muted">{match.cs}</p>
-            <p className="text-[10px] uppercase tracking-wide text-muted/60">
-              CS
-            </p>
-          </div>
-
-          <div className="hidden w-14 text-right sm:block">
-            <p className="tabular text-sm text-muted">{match.vision}</p>
-            <p className="text-[10px] uppercase tracking-wide text-muted/60">
-              Visión
-            </p>
-          </div>
-
-          <div className="w-20 text-right">
-            <p className="tabular text-sm text-gold-300">
-              {match.kills}/{match.deaths}/{match.assists}
-            </p>
-            <p className="tabular text-[11px] text-muted">
-              {match.kda.toFixed(2)} · {formatDuration(match.durationSeconds)}
-            </p>
-          </div>
-          </Link>
+            </Link>
           </li>
         );
       })}

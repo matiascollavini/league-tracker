@@ -12,7 +12,7 @@ type Props = {
 };
 
 const ITEM =
-  "inline-flex h-8 min-w-8 items-center justify-center rounded-md border px-2 text-xs tabular transition-colors";
+  "inline-flex h-7 min-w-7 items-center justify-center rounded-md border px-2 text-[12px] font-semibold tabular transition-colors";
 
 export function Pagination({ page, totalPages, hrefFor, className }: Props) {
   if (totalPages <= 1) return null;
@@ -28,8 +28,8 @@ export function Pagination({ page, totalPages, hrefFor, className }: Props) {
         className,
       )}
     >
-      <span className="text-[11px] text-muted">
-        Página <strong className="text-gold-300">{page}</strong> de{" "}
+      <span className="text-[11px] font-medium text-muted">
+        Página <strong className="font-bold text-fg">{page}</strong> de{" "}
         {totalPages}
       </span>
 
@@ -39,7 +39,7 @@ export function Pagination({ page, totalPages, hrefFor, className }: Props) {
             href={hrefFor(previous)}
             rel="prev"
             aria-label="Página anterior"
-            className={cn(ITEM, "border-line text-muted hover:text-gold-300")}
+            className={cn(ITEM, "border-white/10 bg-soft/40 text-muted hover:border-white/20 hover:text-fg")}
           >
             <ChevronLeft className="size-3.5" aria-hidden />
             <span className="hidden sm:inline">Anterior</span>
@@ -47,7 +47,7 @@ export function Pagination({ page, totalPages, hrefFor, className }: Props) {
         ) : (
           <span
             aria-hidden
-            className={cn(ITEM, "border-line/50 text-muted/40")}
+            className={cn(ITEM, "border-white/5 text-dim/50")}
           >
             <ChevronLeft className="size-3.5" />
             <span className="hidden sm:inline">Anterior</span>
@@ -59,7 +59,7 @@ export function Pagination({ page, totalPages, hrefFor, className }: Props) {
             <span
               key={`gap-${index}`}
               aria-hidden
-              className="px-1 text-xs text-muted/60"
+              className="px-1 text-[12px] text-dim"
             >
               …
             </span>
@@ -72,8 +72,8 @@ export function Pagination({ page, totalPages, hrefFor, className }: Props) {
               className={cn(
                 ITEM,
                 item === page
-                  ? "border-gold-600/70 bg-gold-600/10 text-gold-200"
-                  : "border-line text-muted hover:border-gold-600/40 hover:text-gold-300",
+                  ? "border-primary/30 bg-primary/12 text-primary"
+                  : "border-white/10 bg-soft/40 text-muted hover:border-white/20 hover:text-fg",
               )}
             >
               {item}
@@ -86,7 +86,7 @@ export function Pagination({ page, totalPages, hrefFor, className }: Props) {
             href={hrefFor(next)}
             rel="next"
             aria-label="Página siguiente"
-            className={cn(ITEM, "border-line text-muted hover:text-gold-300")}
+            className={cn(ITEM, "border-white/10 bg-soft/40 text-muted hover:border-white/20 hover:text-fg")}
           >
             <span className="hidden sm:inline">Siguiente</span>
             <ChevronRight className="size-3.5" aria-hidden />
@@ -94,7 +94,7 @@ export function Pagination({ page, totalPages, hrefFor, className }: Props) {
         ) : (
           <span
             aria-hidden
-            className={cn(ITEM, "border-line/50 text-muted/40")}
+            className={cn(ITEM, "border-white/5 text-dim/50")}
           >
             <span className="hidden sm:inline">Siguiente</span>
             <ChevronRight className="size-3.5" />

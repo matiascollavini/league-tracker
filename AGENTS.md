@@ -90,7 +90,7 @@ _(Detalle y justificación en `docs/DECISIONES.md`.)_
 | --- | --- | --- |
 | Fuente de datos | **Riot Games API oficial** + **Data Dragon** (`docs/API-LOL.txt`) | decidido |
 | Framework | **Next.js 16.4 App Router** (`cacheComponents: true`) | decidido |
-| UI | Tailwind 4 + shadcn/ui (gráficos: Recharts v3) | decidido |
+| UI | Tailwind 4 + shadcn/ui (gráficos: Recharts v3) · estética **dpm.lol** (ADR-011) | decidido |
 | Hosting | Vercel Hobby (escape hatch: Fly.io) | decidido |
 | Caché caliente | `fetch` de Next (sin Redis: la DB hace de caché y de lock) | decidido |
 | Persistencia | **SQLite** local / **Turso** free en prod (ADR-007) | implementado |
@@ -133,6 +133,9 @@ scripts/        verify-riot.mjs (verificación contra la API real)
   imposible de confundir.
 - Los nombres visibles de campeones salen de **Data Dragon** (`catalog.all`),
   no de Riot: Riot manda el id interno (`Kaisa`, `Nunu`, `MonkeyKing`).
+- Los tokens del tema (colores, radios, tipografía Plus Jakarta Sans) viven en
+  `src/app/globals.css` y son **semánticos** (`bg`, `card`, `soft`, `line`, `fg`,
+  `muted`, `primary`, `gold`, `win`, `loss`). No usar colores sueltos en componentes.
 - Siguiente (pendientes acordados, no perder de vista):
   1. **Deploy**: crear cuenta gratis en Turso + Vercel (paso a paso en
      `docs/DEPLOY.md`) y pedir la production key de Riot.

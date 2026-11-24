@@ -1,27 +1,47 @@
 @import "tailwindcss";
 
+/*
+ * Sistema visual calcado de dpm.lol (scope "theme-rft" de su tema oscuro).
+ * Los valores salen de su CSS compilado:
+ *   background #131619 · card rgb(222 204 251 / .04) · muted #242832
+ *   foreground #f9fafd · muted-foreground #9b9c9e · primary #a6b0f2
+ *   success #4ac97e · destructive #f7665e · gold #ffd147
+ * Los nombres son semánticos (no "ink/gold") para que la capa de UI no
+ * dependa de la paleta.
+ */
 @theme {
-  --color-ink-950: #060a12;
-  --color-ink-900: #090f1b;
-  --color-ink-850: #0c1422;
-  --color-ink-800: #101a2b;
-  --color-ink-700: #16233a;
-  --color-line: #1c2941;
+  /* superficies */
+  --color-bg: #131619;
+  --color-deep: #0e1013;
+  --color-card: #1b1d22;
+  --color-card-hi: #21232a;
+  --color-soft: #242832;
+  --color-shade: #0d0f10;
+  --color-line: #262830;
+  --color-line-soft: #202228;
 
-  --color-gold-200: #f6eeda;
-  --color-gold-300: #ece0c6;
-  --color-gold-400: #d9c39a;
-  --color-gold-500: #c8aa6e;
-  --color-gold-600: #9c8149;
+  /* texto */
+  --color-fg: #f9fafd;
+  --color-muted: #9b9c9e;
+  --color-dim: #6f7176;
 
-  --color-hextech: #0ac8b9;
-  --color-win: #4cc38a;
-  --color-loss: #e35d5d;
-  --color-muted: #8b98ad;
+  /* acentos */
+  --color-primary: #a6b0f2;
+  --color-primary-deep: #4d62e5;
+  --color-blue: #92c5ff;
+  --color-gold: #ffd147;
+  --color-gold-soft: #ffe8a3;
+  --color-orange: #e26f20;
+  --color-win: #4ac97e;
+  --color-loss: #f7665e;
+
+  /* tintes de fila (dpm: dpm-blue-600/25 y destructive/20) */
+  --color-win-tint: #1f264a;
+  --color-loss-tint: #452b2c;
 
   --font-sans:
-    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
-    "Helvetica Neue", Arial, sans-serif;
+    var(--font-jakarta), ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
@@ -31,19 +51,20 @@
   }
 
   body {
-    background-color: var(--color-ink-950);
-    color: var(--color-gold-300);
+    background-color: var(--color-bg);
+    color: var(--color-fg);
     font-family: var(--font-sans);
+    font-size: 14px;
     -webkit-font-smoothing: antialiased;
     background-image:
       radial-gradient(
-        60rem 32rem at 50% -12rem,
-        color-mix(in oklab, var(--color-gold-600) 18%, transparent),
+        70rem 30rem at 50% -14rem,
+        color-mix(in oklab, var(--color-primary-deep) 12%, transparent),
         transparent
       ),
       radial-gradient(
-        40rem 24rem at 90% 8rem,
-        color-mix(in oklab, var(--color-hextech) 7%, transparent),
+        44rem 26rem at 92% 4rem,
+        color-mix(in oklab, var(--color-primary) 4%, transparent),
         transparent
       );
     background-repeat: no-repeat;
@@ -51,16 +72,85 @@
   }
 
   ::selection {
-    background-color: color-mix(in oklab, var(--color-gold-500) 35%, transparent);
+    background-color: color-mix(in oklab, var(--color-primary) 32%, transparent);
   }
 
   a {
     text-underline-offset: 3px;
+  }
+
+  /* dpm: sin foco azul del sistema, anillo del tema */
+  :focus-visible {
+    outline: 2px solid color-mix(in oklab, var(--color-primary) 55%, transparent);
+    outline-offset: 2px;
   }
 }
 
 @layer utilities {
   .tabular {
     font-variant-numeric: tabular-nums;
+  }
+
+  /* Tarjeta dpm: radius 6px, borde blanco 5%, sombra interna superior. */
+  .panel {
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-line);
+    background-color: var(--color-card);
+    box-shadow: inset 0 1px 0 0 rgb(255 255 255 / 0.03);
+  }
+
+  /* Título de sección dpm: 12px, bold, uppercase, primary. */
+  .section-title {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: var(--color-primary);
+  }
+
+  /* Etiqueta chica (labels de KPI, meta de filas). */
+  .label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--color-muted);
+  }
+
+  /* Fila de partida: tinte de victoria/derrota + brillo diagonal. */
+  .match-row {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    border-radius: var(--radius-md);
+    background-color: color-mix(in oklab, var(--color-fg) 3%, transparent);
+    box-shadow:
+      inset 0 1px 0 0 rgb(255 255 255 / 0.08),
+      inset 0 0 0 1px color-mix(in oklab, var(--color-fg) 8%, transparent);
+  }
+
+  .match-row::before,
+  .match-row::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: -1;
+  }
+
+  .match-row::before {
+    background: linear-gradient(
+      160deg,
+      rgb(255 255 255 / 0.04),
+      transparent 55%
+    );
+  }
+
+  .match-row--win {
+    background-color: var(--color-win-tint);
+  }
+
+  .match-row--loss {
+    background-color: var(--color-loss-tint);
   }
 }

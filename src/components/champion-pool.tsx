@@ -2,7 +2,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { championIconUrl } from "@/lib/ddragon/champions";
 import { percent, type ChampionStat } from "@/lib/riot/aggregate";
-import { WinrateBar } from "@/components/winrate-bar";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -13,7 +12,10 @@ type Props = {
   hrefFor: (championName?: string) => string;
 };
 
-/** Los 3 campeones más jugados, en tarjetas (estilo "Most Played"). */
+/**
+ * Los 3 campeones más jugados, como la lista "Champion performance" de
+ * dpm.lol: filas de 36px con el WR a la derecha.
+ */
 export function ChampionPool({
   champions,
   names,
@@ -25,55 +27,55 @@ export function ChampionPool({
   if (top.length === 0) return null;
 
   return (
-    <div className="grid gap-3 sm:grid-cols-3">
-      {top.map((champion, index) => {
+    <ul className="panel overflow-hidden">
+      {top.map((champion) => {
         const active = champion.championName === selected;
+        const good = champion.winrate >= 0.5;
         return (
-          <Link
-            key={champion.championName}
-            href={hrefFor(active ? undefined : champion.championName)}
-            aria-current={active ? "true" : undefined}
-            className={cn(
-              "rounded-xl border p-3 transition-colors",
-              active
-                ? "border-gold-600/70 bg-gold-600/10"
-                : "border-line bg-ink-900/70 hover:border-gold-600/40 hover:bg-ink-800/60",
-            )}
-          >
-            <div className="flex items-center gap-2.5">
-              <span className="relative">
-                <Image
-                  src={championIconUrl(version, champion.championName)}
-                  alt=""
-                  width={44}
-                  height={44}
-                  className="size-11 rounded-lg border border-line/80"
-                />
-                <span className="absolute -left-1 -top-1 grid size-4 place-items-center rounded bg-ink-950/90 text-[9px] font-semibold text-gold-400 ring-1 ring-line">
-                  {index + 1}
-                </span>
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-gold-200">
+          <li key={champion.championName}>
+            <Link
+              href={hrefFor(active ? undefined : champion.championName)}
+              aria-current={active ? "true" : undefined}
+              className={cn(
+                "flex items-center gap-3 px-3 py-1.5 transition-colors hover:bg-soft/40",
+                active && "bg-primary/8",
+              )}
+            >
+              <Image
+                src={championIconUrl(version, champion.championName)}
+                alt=""
+                width={36}
+                height={36}
+                className="size-9 shrink-0 rounded-sm bg-soft object-cover"
+              />
+              <div className="flex min-w-0 flex-1 flex-col gap-0.5 leading-tight">
+                <div className="truncate text-[13px] font-semibold text-fg">
                   {names[champion.championName] ?? champion.championName}
-                </p>
-                <p className="text-[11px] text-muted">
-                  {champion.games} partidas · {percent(champion.winrate)}
-                </p>
+                </div>
+                <div className="text-[10px] font-medium text-muted">
+                  {champion.kda.toFixed(1)} KDA · {champion.games} partidas
+                </div>
               </div>
-            </div>
-
-            <WinrateBar value={champion.winrate} className="mt-2.5" />
-
-            <div className="mt-1.5 flex items-center justify-between text-[11px] text-muted">
-              <span className="tabular">
-                {champion.wins}V {champion.losses}D
-              </span>
-              <span className="tabular">KDA {champion.kda.toFixed(2)}</span>
-            </div>
-          </Link>
+              <div className="flex shrink-0 flex-col items-end gap-0.5 whitespace-nowrap leading-tight">
+                <div
+                  className={cn(
+                    "text-[13px] font-semibold",
+                    good ? "text-gold-soft" : "text-orange/80",
+                  )}
+                >
+                  {percent(champion.winrate)}{" "}
+                  <span className="text-[11px] font-semibold opacity-70">
+                    WR
+                  </span>
+                </div>
+                <div className="tabular text-[10px] font-medium text-muted">
+                  {champion.wins}V - {champion.losses}D
+                </div>
+              </div>
+            </Link>
+          </li>
         );
       })}
-    </div>
+    </ul>
   );
 }

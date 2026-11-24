@@ -20,6 +20,10 @@ type Props = {
   lessHref?: string;
 };
 
+/**
+ * Tabla por campeón al estilo dpm: filas compactas con arte de 32px, partidas
+ * jugadas y el winrate a la derecha.
+ */
 export function ChampionTable({
   champions,
   version,
@@ -33,7 +37,7 @@ export function ChampionTable({
 }: Props) {
   if (champions.length === 0) {
     return (
-      <p className="p-4 text-sm text-muted">
+      <p className="px-3 py-6 text-center text-[13px] text-muted">
         No hay partidas para agregar en esta selección.
       </p>
     );
@@ -51,40 +55,39 @@ export function ChampionTable({
 
   return (
     <div>
-      <div className="grid grid-cols-[minmax(0,1fr)_2.5rem_4.5rem] items-center gap-2 px-3 pb-2 text-[11px] font-medium uppercase tracking-wider text-muted">
-        <span>Campeón</span>
-        <span className="text-right">PJ</span>
-        <span className="text-right">WR</span>
+      <div className="grid grid-cols-[minmax(0,1fr)_2.5rem_4.25rem] items-center gap-2 px-3 pb-1.5">
+        <span className="label">Campeón</span>
+        <span className="label text-right">PJ</span>
+        <span className="label text-right">WR</span>
       </div>
 
-      <ul className="space-y-1">
+      <ul>
         {list.map((champion) => {
           const isSelected = champion.championName === selected;
+          const good = champion.winrate >= 0.5;
           return (
             <li key={champion.championName}>
               <Link
                 href={hrefFor(isSelected ? undefined : champion.championName)}
                 aria-current={isSelected ? "true" : undefined}
                 className={cn(
-                  "grid grid-cols-[minmax(0,1fr)_2.5rem_4.5rem] items-center gap-2 rounded-lg border px-3 py-2 transition-colors",
-                  isSelected
-                    ? "border-gold-600/70 bg-gold-600/10"
-                    : "border-transparent hover:border-line hover:bg-ink-800/60",
+                  "grid grid-cols-[minmax(0,1fr)_2.5rem_4.25rem] items-center gap-2 px-3 py-1.5 transition-colors hover:bg-soft/40",
+                  isSelected && "bg-primary/8",
                 )}
               >
-                <span className="flex min-w-0 items-center gap-2">
+                <span className="flex min-w-0 items-center gap-2.5">
                   <Image
                     src={championIconUrl(version, champion.championName)}
                     alt=""
-                    width={28}
-                    height={28}
-                    className="size-7 shrink-0 rounded border border-line/80"
+                    width={32}
+                    height={32}
+                    className="size-8 shrink-0 rounded-sm bg-soft object-cover"
                   />
-                  <span className="min-w-0">
-                    <span className="block truncate text-sm text-gold-200">
+                  <span className="min-w-0 leading-tight">
+                    <span className="block truncate text-[13px] font-semibold text-fg">
                       {names[champion.championName] ?? champion.championName}
                     </span>
-                    <span className="block text-[11px] text-muted">
+                    <span className="tabular block text-[10px] font-medium text-muted">
                       {champion.wins}V {champion.losses}D
                       {totalMatches > 0
                         ? ` · ${Math.round((champion.games / totalMatches) * 100)}% de lo jugado`
@@ -93,21 +96,32 @@ export function ChampionTable({
                   </span>
                 </span>
 
-                <span className="tabular text-right text-sm text-gold-300">
+                <span className="tabular text-right text-[12px] font-bold text-fg">
                   {champion.games}
                 </span>
 
-                <span className="relative h-6 overflow-hidden rounded bg-ink-800">
+                <span className="text-right leading-tight">
                   <span
                     className={cn(
-                      "absolute inset-y-0 left-0",
-                      champion.winrate >= 0.5 ? "bg-win/25" : "bg-loss/25",
+                      "tabular block text-[13px] font-semibold",
+                      good ? "text-gold-soft" : "text-orange/80",
                     )}
-                    style={{ width: `${Math.round(champion.winrate * 100)}%` }}
-                    aria-hidden
-                  />
-                  <span className="relative grid h-full place-items-center text-xs tabular text-gold-200">
+                  >
                     {percent(champion.winrate)}
+                  </span>
+                  <span
+                    className="mt-0.5 block h-1 overflow-hidden rounded-full bg-soft"
+                    aria-hidden="true"
+                  >
+                    <span
+                      className={cn(
+                        "block h-full rounded-full",
+                        good ? "bg-gold-soft" : "bg-orange/80",
+                      )}
+                      style={{
+                        width: `${Math.max(3, Math.round(champion.winrate * 100))}%`,
+                      }}
+                    />
                   </span>
                 </span>
               </Link>
@@ -117,30 +131,28 @@ export function ChampionTable({
       </ul>
 
       {champions.length > LIMIT && allHref && lessHref ? (
-        <div className="mt-3 px-1">
+        <div className="mt-2 px-3">
           <Link
             href={showAll ? lessHref : allHref}
-            className="text-xs text-gold-400 underline decoration-line hover:text-gold-300"
+            className="text-[11px] font-semibold text-primary hover:underline"
           >
-            {showAll
-              ? "Ver menos"
-              : `Ver los ${champions.length} campeones`}
+            {showAll ? "Ver menos" : `Ver los ${champions.length} campeones`}
           </Link>
         </div>
       ) : null}
 
       {selected ? (
-        <div className="mt-3 px-1">
+        <div className="mt-2 px-3 pb-1">
           <Link
             href={hrefFor(undefined)}
-            className="inline-flex items-center gap-1 text-xs text-muted hover:text-gold-300"
+            className="inline-flex items-center gap-1 text-[11px] font-semibold text-muted hover:text-fg"
           >
             <ArrowLeft className="size-3" aria-hidden />
             Quitar filtro de campeón
           </Link>
         </div>
       ) : (
-        <p className="mt-3 flex items-center gap-1 px-1 text-xs text-muted">
+        <p className="mt-2 flex items-center gap-1 px-3 pb-1 text-[11px] text-muted">
           Tocá un campeón para filtrar tus partidas
           <ChevronRight className="size-3" aria-hidden />
         </p>

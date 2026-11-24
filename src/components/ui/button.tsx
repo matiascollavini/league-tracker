@@ -2,24 +2,33 @@ import { cva, type VariantProps } from "class-variance-authority";
 import type { ComponentProps } from "react";
 import { cn } from "@/lib/utils";
 
+/**
+ * Botones dpm: radius 6px, 8px de alto base (h-8), semibold, borde blanco 10%,
+ * tinte de primary al 4–12%. El "primary" sólido es el CTA (color de marca).
+ */
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 rounded-lg text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500/60 disabled:pointer-events-none disabled:opacity-50",
+  "inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-md text-[13px] font-semibold transition-colors outline-none disabled:pointer-events-none disabled:opacity-50",
   {
     variants: {
       variant: {
         primary:
-          "bg-gold-500 text-ink-950 hover:bg-gold-400 shadow-[0_1px_0_0_rgba(255,255,255,0.15)_inset]",
+          "border border-primary/20 bg-primary/12 text-primary hover:border-primary/40 hover:bg-primary/20",
+        solid:
+          "bg-primary text-bg shadow-[inset_0_1px_0_0_rgba(255,255,255,0.35)] hover:bg-primary/90",
         secondary:
-          "bg-ink-800 text-gold-300 border border-line hover:border-gold-600/60 hover:text-gold-200",
-        ghost: "text-muted hover:text-gold-300 hover:bg-ink-800",
+          "border border-white/10 bg-soft/60 text-fg hover:border-white/20 hover:bg-soft",
+        ghost: "text-muted hover:bg-soft/70 hover:text-fg",
+        destructive:
+          "border border-loss/25 bg-loss/12 text-loss hover:border-loss/45 hover:bg-loss/20",
       },
       size: {
+        xs: "h-7 px-2 text-[11px]",
         sm: "h-8 px-3",
-        md: "h-10 px-4",
-        lg: "h-12 px-6 text-base",
+        md: "h-9 px-3.5",
+        lg: "h-11 px-5 text-sm",
       },
     },
-    defaultVariants: { variant: "primary", size: "md" },
+    defaultVariants: { variant: "solid", size: "md" },
   },
 );
 

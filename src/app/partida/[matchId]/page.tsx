@@ -48,16 +48,16 @@ export default async function MatchPage({ params, searchParams }: Props) {
   if (!detail) {
     return (
       <div className="mx-auto max-w-lg py-16 text-center">
-        <h1 className="text-2xl font-semibold text-gold-200">
+        <h1 className="text-[22px] font-extrabold tracking-tight text-fg">
           Esa partida no está en la base
         </h1>
-        <p className="mt-2 text-sm leading-relaxed text-muted">
+        <p className="mt-2 text-[13px] leading-relaxed text-muted">
           Solo podemos mostrar partidas que ya hayamos descargado. Corré la
           ingesta del jugador y volvé a intentar.
         </p>
         <Link
           href="/"
-          className="mt-6 inline-block rounded-lg bg-gold-500 px-4 py-2 text-sm font-medium text-ink-950 hover:bg-gold-400"
+          className="mt-6 inline-block rounded-md border border-primary/20 bg-primary/12 px-3 py-2 text-[13px] font-semibold text-primary transition-colors hover:bg-primary/20"
         >
           Volver al buscador
         </Link>
@@ -95,45 +95,45 @@ export default async function MatchPage({ params, searchParams }: Props) {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Link
           href={backHref}
-          className="inline-flex items-center gap-1 text-xs text-muted hover:text-gold-300"
+          className="inline-flex items-center gap-1 text-[11px] font-semibold text-muted transition-colors hover:text-primary"
         >
           <ArrowLeft className="size-3" aria-hidden />
           {label ? "Volver al perfil" : "Volver al buscador"}
         </Link>
-        <span className="font-mono text-[11px] text-muted/60">{detail.matchId}</span>
+        <span className="font-mono text-[10px] text-dim">{detail.matchId}</span>
       </div>
 
       <header
         className={cn(
-          "rounded-xl border p-4",
+          "rounded-md border px-4 py-3",
           resultWin === null
-            ? "border-line bg-ink-900/60"
+            ? "border-white/5 bg-card"
             : resultWin
-              ? "border-win/40 bg-win/[0.06]"
-              : "border-loss/40 bg-loss/[0.06]",
+              ? "border-primary/20 bg-win-tint"
+              : "border-loss/20 bg-loss-tint",
         )}
       >
         <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
           <h1
             className={cn(
-              "text-xl font-semibold",
+              "text-[18px] font-extrabold tracking-tight",
               resultWin === null
-                ? "text-gold-200"
+                ? "text-fg"
                 : resultWin
-                  ? "text-win"
+                  ? "text-primary"
                   : "text-loss",
             )}
           >
             {resultWin === null ? "Partida" : resultWin ? "Victoria" : "Derrota"}
           </h1>
-          <span className="text-sm text-gold-300">
+          <span className="text-[13px] font-semibold text-fg">
             {queueLabel(detail.queueId)}
           </span>
-          <span className="text-sm text-muted">
+          <span className="text-[13px] text-muted">
             {formatDuration(detail.durationSeconds)}
           </span>
-          <span className="text-sm text-muted">{timeAgo(detail.startedAt)}</span>
-          <span className="ml-auto text-[11px] text-muted">
+          <span className="text-[13px] text-muted">{timeAgo(detail.startedAt)}</span>
+          <span className="ml-auto text-[10px] font-medium text-dim">
             parche {detail.gameVersion.split(".").slice(0, 2).join(".")}
           </span>
         </div>
@@ -144,16 +144,16 @@ export default async function MatchPage({ params, searchParams }: Props) {
         return (
           <section
             key={team.teamId}
-            className="overflow-hidden rounded-xl border border-line bg-ink-900/80"
+            className="panel overflow-hidden"
           >
-            <div className="flex items-center justify-between border-b border-line px-4 py-2">
-              <h2 className="text-xs font-semibold uppercase tracking-wider text-gold-400">
+            <div className="flex items-center justify-between border-b border-line/70 px-3 py-2">
+              <h2 className="section-title">
                 {team.teamId === 100 ? "Equipo azul" : "Equipo rojo"}
               </h2>
               <span
                 className={cn(
-                  "text-[11px] font-medium uppercase tracking-wide",
-                  teamWin ? "text-win" : "text-loss",
+                  "text-[10px] font-bold uppercase tracking-wide",
+                  teamWin ? "text-primary" : "text-loss",
                 )}
               >
                 {teamWin ? "Victoria" : "Derrota"}
@@ -162,7 +162,7 @@ export default async function MatchPage({ params, searchParams }: Props) {
 
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-[10px] uppercase tracking-wider text-muted">
+                <tr className="text-[10px] font-bold uppercase tracking-wider text-dim">
                   <th className="px-3 py-1.5 text-left font-medium">Jugador</th>
                   <th className="px-2 py-1.5 text-right font-medium">KDA</th>
                   <th className="hidden px-2 py-1.5 text-right font-medium sm:table-cell">
@@ -185,7 +185,7 @@ export default async function MatchPage({ params, searchParams }: Props) {
                       key={p.puuid}
                       className={cn(
                         "border-t border-line/60",
-                        isMe && "bg-gold-600/10",
+                        isMe && "bg-primary/8",
                       )}
                     >
                       <td className="px-3 py-1.5">
@@ -196,18 +196,18 @@ export default async function MatchPage({ params, searchParams }: Props) {
                             alt=""
                             width={28}
                             height={28}
-                            className="size-7 shrink-0 rounded border border-line/80"
+                            className="size-7 shrink-0 rounded-sm bg-soft"
                           />
                           <div className="min-w-0">
                             <p
                               className={cn(
-                                "truncate text-sm",
-                                isMe ? "text-gold-200" : "text-gold-300",
+                                "truncate text-[12px] font-semibold",
+                                isMe ? "text-primary" : "text-fg",
                               )}
                             >
                               {p.riotId ?? "Jugador"}
                               {isMe ? (
-                                <span className="ml-1 text-[10px] text-gold-500">
+                                <span className="ml-1 text-[9px] font-bold uppercase text-primary">
                                   vos
                                 </span>
                               ) : null}
@@ -221,7 +221,7 @@ export default async function MatchPage({ params, searchParams }: Props) {
                           </div>
                         </div>
                       </td>
-                      <td className="whitespace-nowrap px-2 py-1.5 text-right tabular text-gold-300">
+                      <td className="whitespace-nowrap px-2 py-1.5 text-right tabular text-[12px] font-bold text-fg">
                         {p.kills}/{p.deaths}/{p.assists}
                         <span className="ml-1 hidden text-[11px] text-muted sm:inline">
                           {kdaOf(p.kills, p.deaths, p.assists).toFixed(1)}
@@ -248,7 +248,7 @@ export default async function MatchPage({ params, searchParams }: Props) {
         );
       })}
 
-      <p className="flex items-center gap-1.5 text-[11px] text-muted">
+      <p className="flex items-center gap-1.5 text-[10px] font-medium text-dim">
         <Swords className="size-3" aria-hidden />
         Datos de la API oficial de Riot, guardados en la base. Las partidas son
         inmutables: lo que ves no cambia.

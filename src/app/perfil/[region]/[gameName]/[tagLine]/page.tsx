@@ -6,7 +6,7 @@ import { ChampionPool } from "@/components/champion-pool";
 import { ChampionTable } from "@/components/champion-table";
 import { MatchList } from "@/components/match-list";
 import { Pagination } from "@/components/pagination";
-import { ProfileCard } from "@/components/profile-header";
+import { ProfileHero, RankSummary } from "@/components/profile-header";
 import { RoleStrip } from "@/components/role-strip";
 import { StatCard } from "@/components/stat-card";
 import { SyncButton } from "@/components/sync-button";
@@ -173,229 +173,245 @@ export default async function ProfilePage({
     });
 
   return (
-    <div className="grid gap-5 lg:grid-cols-[290px_minmax(0,1fr)]">
-      {/* ---------------- barra lateral ---------------- */}
-      <aside className="space-y-3 lg:sticky lg:top-20 lg:self-start">
-        <ProfileCard
-          gameName={account.gameName ?? gameName}
-          tagLine={account.tagLine ?? tagLine}
-          platform={effectivePlatform}
-          level={summoner?.summonerLevel ?? null}
-          iconId={summoner?.profileIconId ?? null}
-          version={catalog.version}
-          league={league}
-          demo={demo}
-          rankStale={rankStale}
-        />
-
-        <div className="rounded-xl border border-line bg-ink-900/60 p-4">
-          <div className="flex items-baseline justify-between">
-            <p className="text-[11px] font-medium uppercase tracking-wider text-muted">
-              Forma reciente
-            </p>
-            <span className="tabular text-[11px] text-muted">
-              {recentWins}V · {recent.length - recentWins}D
-            </span>
-          </div>
-
-          <div className="mt-2 flex flex-wrap gap-1">
-            {recent.map((row) => (
-              <Link
-                key={row.matchId}
-                href={`/partida/${encodeURIComponent(row.matchId)}?player=${encodeURIComponent(row.puuid)}${row.puuid === puuid ? "" : `&viewer=${encodeURIComponent(puuid)}`}`}
-                title={`${names[row.championName] ?? row.championName} · ${row.win ? "Victoria" : "Derrota"}`}
-                className={cn(
-                  "size-5 rounded-sm transition-transform hover:scale-110",
-                  row.win ? "bg-win/70" : "bg-loss/70",
-                )}
-              />
-            ))}
-          </div>
-
-          <WinrateBar value={summary.winrate} className="mt-3" />
-
-          <Link
-            href={`/comparar?a=${effectivePlatform}/${encodeURIComponent(account.gameName ?? gameName)}/${encodeURIComponent(account.tagLine ?? tagLine)}`}
-            className="mt-3 inline-flex items-center gap-1.5 text-[11px] text-muted hover:text-gold-300"
+    <div className="space-y-4">
+      {/* ---------------- hero del perfil + tabs de cola ---------------- */}
+      <ProfileHero
+        gameName={account.gameName ?? gameName}
+        tagLine={account.tagLine ?? tagLine}
+        platform={effectivePlatform}
+        level={summoner?.summonerLevel ?? null}
+        iconId={summoner?.profileIconId ?? null}
+        version={catalog.version}
+        demo={demo}
+        tabs={
+          <nav
+            aria-label="Filtrar por cola"
+            className="flex items-stretch overflow-x-auto border-t border-white/10 bg-primary/4 px-2"
           >
-            <ArrowLeftRight className="size-3" aria-hidden />
-            Comparar con otro jugador
-          </Link>
-        </div>
-      </aside>
+            {QUEUE_FILTERS.map((filter) => {
+              const active = filter.id === queueFilter;
+              return (
+                <Link
+                  key={filter.id}
+                  href={profileHref(platform, gameName, tagLine, {
+                    queue: filter.id,
+                    champion: championParam,
+                  })}
+                  aria-current={active ? "page" : undefined}
+                  className={cn(
+                    "flex shrink-0 items-center border-b-2 px-3 pb-2.5 pt-2 text-xs font-semibold transition-colors",
+                    active
+                      ? "border-primary text-fg"
+                      : "border-transparent text-muted hover:text-fg",
+                  )}
+                >
+                  {filter.label}
+                </Link>
+              );
+            })}
+          </nav>
+        }
+      />
 
-      {/* ---------------- contenido ---------------- */}
-      <div className="min-w-0 space-y-4">
-        <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <StatCard
-            label="Partidas analizadas"
-            value={String(summary.matches)}
-            hint={
-              partial
-                ? `de ${progress.known} conocidas · sigue en curso`
-                : summary.from && summary.to
-                  ? `${formatDate(summary.from)} — ${formatDate(summary.to)}`
-                  : "sin partidas"
-            }
-          />
-          <StatCard
-            label="Winrate (analizadas)"
-            value={percent(summary.winrate)}
-            hint={`${summary.wins}V · ${summary.losses}D`}
-            accent={summary.winrate >= 0.5 ? "win" : "loss"}
-          />
-          <StatCard
-            label="KDA promedio"
-            value={summary.kda.toFixed(2)}
-            hint="(K + A) / D"
-          />
-          <StatCard
-            label="Más jugado"
-            value={top ? (names[top.championName] ?? top.championName) : "—"}
-            hint={
-              top
-                ? `${top.games} partidas · ${percent(top.winrate)} WR`
-                : undefined
-            }
-            accent="gold"
-          />
-        </section>
+      <div className="grid gap-4 lg:grid-cols-[300px_minmax(0,1fr)]">
+        {/* ---------------- barra lateral ---------------- */}
+        <aside className="space-y-4 lg:sticky lg:top-[76px] lg:self-start">
+          <RankSummary league={league} rankStale={rankStale} />
 
-        {platformMismatch ? (
-          <p className="rounded-lg border border-gold-600/40 bg-gold-600/10 px-4 py-3 text-xs leading-relaxed text-gold-300">
-            Esta cuenta está guardada en{" "}
-            <strong className="font-semibold">
-              {PLATFORM_LABEL[effectivePlatform]}
-            </strong>
-            . La buscaste en {PLATFORM_LABEL[platform]}, así que te muestro los
-            datos de su región real.
-          </p>
-        ) : null}
-
-        {/* Con el historial completo no hay nada que cargar: el bloque de
-            sincronización desaparece y queda solo la confirmación. */}
-        {complete ? (
-          <p className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-line bg-ink-900/60 px-4 py-3 text-xs text-muted">
-            <CheckCircle2 className="size-4 shrink-0 text-win" aria-hidden />
-            <span>
-              Historial completo:{" "}
-              <strong className="text-gold-300">
-                {progress.detailed} partidas analizadas
-              </strong>
-              {summary.from && summary.to
-                ? ` (${formatDate(summary.from)} — ${formatDate(summary.to)})`
-                : ""}
-              .
-            </span>
-            <span className="text-[11px]">
-              Riot permite hasta ~1.000 por jugador.
-            </span>
-          </p>
-        ) : (
-          <section
-            className="rounded-xl border border-line bg-ink-900/60 p-4"
-            aria-label="Progreso del análisis"
-          >
-            <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
-              <p className="text-xs text-muted">
-                Historial analizado:{" "}
-                <strong className="text-gold-300">
-                  {progress.detailed} de {progress.known}
-                </strong>{" "}
-                partidas
-              </p>
-              <span className="text-[11px] text-muted">
-                Riot permite hasta ~1.000 por jugador
+          <div className="panel px-3 py-3">
+            <div className="flex items-baseline justify-between">
+              <p className="section-title">Forma reciente</p>
+              <span className="tabular text-[11px] font-semibold text-muted">
+                {recentWins}V · {recent.length - recentWins}D
               </span>
             </div>
 
-            <SyncButton
-              platform={effectivePlatform}
-              gameName={account.gameName ?? gameName}
-              tagLine={account.tagLine ?? tagLine}
-              known={progress.known}
-              detailed={progress.detailed}
-            />
-          </section>
-        )}
+            <div className="mt-2 flex flex-wrap gap-1">
+              {recent.map((row) => (
+                <Link
+                  key={row.matchId}
+                  href={`/partida/${encodeURIComponent(row.matchId)}?player=${encodeURIComponent(row.puuid)}${row.puuid === puuid ? "" : `&viewer=${encodeURIComponent(puuid)}`}`}
+                  title={`${names[row.championName] ?? row.championName} · ${row.win ? "Victoria" : "Derrota"}`}
+                  className={cn(
+                    "size-4 rounded-[2px] transition-transform hover:scale-125",
+                    row.win ? "bg-primary/80" : "bg-loss/70",
+                  )}
+                />
+              ))}
+            </div>
 
-        {source === "live" ? (
-          <p className="rounded-lg border border-gold-600/40 bg-gold-600/10 px-4 py-3 text-xs leading-relaxed text-gold-300">
-            Este jugador todavía no está en la base: se muestran las últimas{" "}
-            {matches.length} partidas pedidas en vivo. Usá{" "}
-            <strong>Cargar todo el historial</strong> para analizar los últimos
-            dos años.
-          </p>
-        ) : null}
-
-        {/* pool de campeones */}
-        <section className="space-y-2">
-          <div className="flex items-baseline justify-between">
-            <h2 className="text-sm font-semibold uppercase tracking-wider text-gold-400">
-              Tu pool
-            </h2>
-            <span className="text-[11px] text-muted">
-              {summary.champions.length} campeones
-            </span>
-          </div>
-          <ChampionPool
-            champions={summary.champions}
-            names={names}
-            version={catalog.version}
-            selected={selected?.championName}
-            hrefFor={(championName) =>
-              hrefFor({ champion: championName ?? null })
-            }
-          />
-        </section>
-
-        <nav aria-label="Filtrar por cola" className="flex flex-wrap gap-2">
-          {QUEUE_FILTERS.map((filter) => {
-            const active = filter.id === queueFilter;
-            return (
-              <Link
-                key={filter.id}
-                href={profileHref(platform, gameName, tagLine, {
-                  queue: filter.id,
-                  champion: championParam,
-                })}
-                aria-current={active ? "page" : undefined}
+            <div className="mt-3 flex items-baseline justify-between">
+              <span className="label">Winrate</span>
+              <span
                 className={cn(
-                  "rounded-full border px-3 py-1 text-xs transition-colors",
-                  active
-                    ? "border-gold-600/70 bg-gold-600/10 text-gold-200"
-                    : "border-line text-muted hover:border-gold-600/40 hover:text-gold-300",
+                  "tabular text-[12px] font-bold",
+                  summary.winrate >= 0.5 ? "text-gold-soft" : "text-orange/80",
                 )}
               >
-                {filter.label}
-              </Link>
-            );
-          })}
-        </nav>
+                {percent(summary.winrate)}
+              </span>
+            </div>
+            <WinrateBar value={summary.winrate} className="mt-1" />
+
+            <Link
+              href={`/comparar?a=${effectivePlatform}/${encodeURIComponent(account.gameName ?? gameName)}/${encodeURIComponent(account.tagLine ?? tagLine)}`}
+              className="mt-3 inline-flex items-center gap-1.5 text-[11px] font-semibold text-muted transition-colors hover:text-primary"
+            >
+              <ArrowLeftRight className="size-3" aria-hidden />
+              Comparar con otro jugador
+            </Link>
+          </div>
+        </aside>
+
+        {/* ---------------- contenido ---------------- */}
+        <div className="min-w-0 space-y-4">
+          <section className="panel grid grid-cols-2 gap-px overflow-hidden bg-line/60 sm:grid-cols-4">
+            <StatCard
+              label="Partidas analizadas"
+              value={String(summary.matches)}
+              hint={
+                partial
+                  ? `de ${progress.known} conocidas · sigue en curso`
+                  : summary.from && summary.to
+                    ? `${formatDate(summary.from)} — ${formatDate(summary.to)}`
+                    : "sin partidas"
+              }
+            />
+            <StatCard
+              label="Winrate (analizadas)"
+              value={percent(summary.winrate)}
+              hint={`${summary.wins}V · ${summary.losses}D`}
+              accent={summary.winrate >= 0.5 ? "gold" : "loss"}
+            />
+            <StatCard
+              label="KDA promedio"
+              value={summary.kda.toFixed(2)}
+              hint="(K + A) / D"
+              accent="blue"
+            />
+            <StatCard
+              label="Más jugado"
+              value={top ? (names[top.championName] ?? top.championName) : "—"}
+              hint={
+                top
+                  ? `${top.games} partidas · ${percent(top.winrate)} WR`
+                  : undefined
+              }
+              accent="gold"
+            />
+          </section>
+
+          {platformMismatch ? (
+            <p className="rounded-md border border-gold/20 bg-gold/8 px-3 py-2.5 text-[11px] leading-relaxed text-muted">
+              Esta cuenta está guardada en{" "}
+              <strong className="font-bold text-gold">
+                {PLATFORM_LABEL[effectivePlatform]}
+              </strong>
+              . La buscaste en {PLATFORM_LABEL[platform]}, así que te muestro los
+              datos de su región real.
+            </p>
+          ) : null}
+
+          {/* Con el historial completo no hay nada que cargar: el bloque de
+              sincronización desaparece y queda solo la confirmación. */}
+          {complete ? (
+            <p className="panel flex flex-wrap items-center gap-x-2 gap-y-1 px-3 py-2.5 text-[11px] text-muted">
+              <CheckCircle2 className="size-3.5 shrink-0 text-win" aria-hidden />
+              <span>
+                Historial completo:{" "}
+                <strong className="font-bold text-fg">
+                  {progress.detailed} partidas analizadas
+                </strong>
+                {summary.from && summary.to
+                  ? ` (${formatDate(summary.from)} — ${formatDate(summary.to)})`
+                  : ""}
+                .
+              </span>
+              <span className="text-dim">
+                Riot permite hasta ~1.000 por jugador.
+              </span>
+            </p>
+          ) : (
+            <section
+              className="panel px-3 py-3"
+              aria-label="Progreso del análisis"
+            >
+              <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
+                <p className="text-[11px] font-medium text-muted">
+                  Historial analizado:{" "}
+                  <strong className="font-bold text-fg">
+                    {progress.detailed} de {progress.known}
+                  </strong>{" "}
+                  partidas
+                </p>
+                <span className="text-[10px] font-medium text-dim">
+                  Riot permite hasta ~1.000 por jugador
+                </span>
+              </div>
+
+              <SyncButton
+                platform={effectivePlatform}
+                gameName={account.gameName ?? gameName}
+                tagLine={account.tagLine ?? tagLine}
+                known={progress.known}
+                detailed={progress.detailed}
+              />
+            </section>
+          )}
+
+          {source === "live" ? (
+            <p className="rounded-md border border-primary/20 bg-primary/8 px-3 py-2.5 text-[11px] leading-relaxed text-muted">
+              Este jugador todavía no está en la base: se muestran las últimas{" "}
+              {matches.length} partidas pedidas en vivo. Usá{" "}
+              <strong className="font-bold text-fg">
+                Cargar todo el historial
+              </strong>{" "}
+              para analizar los últimos dos años.
+            </p>
+          ) : null}
+
+          {/* pool de campeones */}
+          <section className="space-y-2">
+            <div className="flex items-baseline justify-between">
+              <h2 className="section-title">Tu pool</h2>
+              <span className="text-[11px] font-medium text-dim">
+                {summary.champions.length} campeones
+              </span>
+            </div>
+            <ChampionPool
+              champions={summary.champions}
+              names={names}
+              version={catalog.version}
+              selected={selected?.championName}
+              hrefFor={(championName) =>
+                hrefFor({ champion: championName ?? null })
+              }
+            />
+          </section>
 
         {selected ? (
-          <div className="rounded-xl border border-gold-600/40 bg-gold-600/[0.07] p-3">
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-              <p className="text-sm font-semibold text-gold-200">
+          <div className="rounded-md border border-primary/25 bg-primary/8 px-3 py-2.5">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+              <p className="text-[13px] font-bold text-fg">
                 {names[selected.championName] ?? selected.championName}
               </p>
-              <span className="text-xs text-muted">
+              <span className="tabular text-[11px] font-medium text-muted">
                 {selected.games} partidas · {selected.wins}V {selected.losses}D
               </span>
               <span
                 className={cn(
-                  "tabular text-xs",
-                  selected.winrate >= 0.5 ? "text-win" : "text-loss",
+                  "tabular text-[11px] font-bold",
+                  selected.winrate >= 0.5 ? "text-gold-soft" : "text-orange/80",
                 )}
               >
                 {percent(selected.winrate)} WR
               </span>
-              <span className="tabular text-xs text-muted">
+              <span className="tabular text-[11px] font-medium text-muted">
                 KDA {selected.kda.toFixed(2)}
               </span>
               <Link
                 href={hrefFor({ champion: null })}
-                className="ml-auto text-[11px] text-muted underline decoration-line hover:text-gold-300"
+                className="ml-auto text-[11px] font-semibold text-primary hover:underline"
               >
                 quitar filtro
               </Link>
@@ -403,16 +419,14 @@ export default async function ProfilePage({
           </div>
         ) : null}
 
-        <section className="rounded-xl border border-line bg-ink-900/80">
-          <div className="flex items-center justify-between border-b border-line px-4 py-3">
-            <h2 className="text-sm font-semibold uppercase tracking-wider text-gold-400">
-              Por campeón
-            </h2>
-            <span className="text-[11px] text-muted">
+        <section className="panel overflow-hidden">
+          <div className="flex items-center justify-between gap-2 px-3 pb-1.5 pt-3">
+            <h2 className="section-title">Por campeón</h2>
+            <span className="text-[11px] font-medium text-dim">
               {summary.champions.length} campeones
             </span>
           </div>
-          <div className="p-3">
+          <div className="pb-2">
             <ChampionTable
               champions={summary.champions}
               version={catalog.version}
@@ -427,17 +441,15 @@ export default async function ProfilePage({
               lessHref={hrefFor({ all: false })}
             />
           </div>
-          <div className="border-t border-line px-4 py-3">
+          <div className="border-t border-line/70 px-3 py-2">
             <RoleStrip rows={rows} />
           </div>
         </section>
 
-        <section className="rounded-xl border border-line bg-ink-900/80">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-3">
-            <h2 className="text-sm font-semibold uppercase tracking-wider text-gold-400">
-              Últimas partidas
-            </h2>
-            <span className="text-[11px] text-muted">
+        <section className="panel overflow-hidden">
+          <div className="flex flex-wrap items-center justify-between gap-2 px-3 pb-1.5 pt-3">
+            <h2 className="section-title">Últimas partidas</h2>
+            <span className="text-[11px] font-medium text-dim">
               {selected
                 ? `${filtered.length} con ${names[selected.championName] ?? selected.championName}`
                 : `${filtered.length} de ${summary.matches} analizadas`}
@@ -457,18 +469,18 @@ export default async function ProfilePage({
               page={page}
               totalPages={totalPages}
               hrefFor={(target) => hrefFor({ page: target })}
-              className="border-t border-line px-4 py-3"
+              className="border-t border-line/70 px-3 py-2"
             />
           ) : null}
         </section>
 
-        <div className="rounded-xl border border-line bg-ink-900/60 p-4">
+        <div className="rounded-md border border-white/5 bg-card/60 px-3 py-2.5">
           <div className="flex items-start gap-2">
-            <Info className="mt-0.5 size-4 shrink-0 text-gold-600" aria-hidden />
-            <div className="space-y-1.5 text-xs leading-relaxed text-muted">
+            <Info className="mt-0.5 size-3.5 shrink-0 text-primary" aria-hidden />
+            <div className="space-y-1 text-[11px] leading-relaxed text-muted">
               <p>
                 Base del cálculo:{" "}
-                <strong className="text-gold-300">
+                <strong className="font-bold text-fg">
                   {`${summary.matches} partidas${baseSuffix}.`}
                 </strong>{" "}
                 {source === "db"
@@ -487,6 +499,7 @@ export default async function ProfilePage({
               ) : null}
             </div>
           </div>
+        </div>
         </div>
       </div>
     </div>
@@ -520,18 +533,18 @@ function DataError({ error }: { error: unknown }) {
         : "Puede ser un problema temporal de Riot. Probá de nuevo en un rato.";
 
   return (
-    <div className="mx-auto max-w-xl rounded-xl border border-loss/40 bg-loss/[0.07] p-6">
+    <div className="mx-auto max-w-xl rounded-md border border-loss/25 bg-loss/8 p-5">
       <div className="flex items-center gap-2 text-loss">
-        <AlertTriangle className="size-5" aria-hidden />
-        <h1 className="text-lg font-semibold">{title}</h1>
+        <AlertTriangle className="size-4" aria-hidden />
+        <h1 className="text-[15px] font-bold">{title}</h1>
       </div>
-      <p className="mt-2 text-sm text-muted">{hint}</p>
-      <p className="mt-4 break-words rounded-lg bg-ink-950/70 p-3 font-mono text-[11px] text-muted/80">
+      <p className="mt-2 text-[12px] leading-relaxed text-muted">{hint}</p>
+      <p className="mt-3 break-words rounded bg-shade p-2.5 font-mono text-[10px] text-dim">
         {message}
       </p>
       <Link
         href="/"
-        className="mt-5 inline-block text-sm text-gold-400 underline decoration-line hover:text-gold-300"
+        className="mt-4 inline-block text-[12px] font-semibold text-primary hover:underline"
       >
         Volver al buscador
       </Link>

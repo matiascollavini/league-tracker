@@ -88,11 +88,11 @@ export function SearchForm({ defaultPlatform, size = "lg" }: Props) {
       </div>
 
       {error ? (
-        <p id="riot-id-error" role="alert" className="mt-2 text-sm text-loss">
+        <p id="riot-id-error" role="alert" className="mt-2 text-[12px] font-medium text-loss">
           {error}
         </p>
       ) : (
-        <p className="mt-2 text-xs text-muted">
+        <p className="mt-2 text-[11px] text-dim">
           El tag son los caracteres después del #. Si no lo sabés, aparece en el
           cliente de LoL arriba de tu nombre.
         </p>

@@ -106,11 +106,13 @@ export default async function ComparePage({
   return (
     <div className="space-y-5">
       <div className="flex items-center gap-2">
-        <ArrowLeftRight className="size-5 text-gold-500" aria-hidden />
-        <h1 className="text-xl font-semibold text-gold-200">Comparador</h1>
+        <ArrowLeftRight className="size-4 text-primary" aria-hidden />
+        <h1 className="text-[20px] font-extrabold tracking-tight text-fg">
+          Comparador
+        </h1>
       </div>
 
-      <section className="rounded-xl border border-line bg-ink-900/60 p-4">
+      <section className="panel px-3 py-3">
         <CompareForm
           defaultPlatform={platformFromEnv()}
           a={sideA ? { platform: sideA.platform, riotId: `${sideA.gameName}#${sideA.tagLine}` } : undefined}
@@ -119,9 +121,9 @@ export default async function ComparePage({
       </section>
 
       {!sideA || !sideB ? (
-        <div className="rounded-xl border border-line bg-ink-900/60 p-6 text-center">
-          <Swords className="mx-auto size-6 text-gold-600" aria-hidden />
-          <p className="mt-2 text-sm text-muted">
+        <div className="panel px-4 py-8 text-center">
+          <Swords className="mx-auto size-5 text-primary" aria-hidden />
+          <p className="mt-2 text-[12px] text-muted">
             Poné dos Riot ID para comparar partidas, winrate, KDA, rango y su
             campeón más jugado.
           </p>
@@ -133,7 +135,7 @@ export default async function ComparePage({
           {[errorA, errorB].filter(Boolean).map((message) => (
             <p
               key={message}
-              className="rounded-lg border border-loss/40 bg-loss/[0.07] px-4 py-3 text-sm text-loss"
+              className="rounded-md border border-loss/25 bg-loss/8 px-3 py-2.5 text-[12px] font-medium text-loss"
             >
               {message}
             </p>
@@ -148,7 +150,7 @@ export default async function ComparePage({
             <PlayerHeader player={playerB} version={catalog.version} names={names} />
           </section>
 
-          <section className="overflow-hidden rounded-xl border border-line bg-ink-900/80">
+          <section className="panel overflow-hidden">
             <table className="w-full">
               <caption className="sr-only">
                 Comparación métrica por métrica
@@ -160,7 +162,7 @@ export default async function ComparePage({
                       className={cn(
                         "w-[38%] px-3 py-2.5 text-right text-sm tabular sm:px-4",
                         metric.winner === "a"
-                          ? "font-semibold text-gold-200"
+                          ? "font-bold text-primary"
                           : "text-muted",
                       )}
                     >
@@ -173,7 +175,7 @@ export default async function ComparePage({
                       className={cn(
                         "w-[38%] px-3 py-2.5 text-left text-sm tabular sm:px-4",
                         metric.winner === "b"
-                          ? "font-semibold text-gold-200"
+                          ? "font-bold text-primary"
                           : "text-muted",
                       )}
                     >
@@ -190,7 +192,7 @@ export default async function ComparePage({
             <Pool player={playerB} version={catalog.version} names={names} />
           </section>
 
-          <p className="text-[11px] leading-relaxed text-muted">
+          <p className="text-[10px] leading-relaxed text-dim">
             Cada lado se calcula sobre las partidas analizadas de esa cuenta (
             {playerA.progress.detailed} y {playerB.progress.detailed}). Riot limita
             el historial recuperable a ~1.000 partidas por jugador, así que no es
@@ -214,9 +216,9 @@ function PlayerHeader({
   const href = profileHref(player.platform, player.name, player.tag);
 
   return (
-    <div className="rounded-xl border border-line bg-ink-900/80 p-4">
+    <div className="panel px-3 py-3">
       <div className="flex items-center gap-3">
-        <div className="size-12 shrink-0 overflow-hidden rounded-lg border border-gold-600/50 bg-ink-800">
+        <div className="size-11 shrink-0 overflow-hidden rounded-lg bg-soft">
           {player.iconId ? (
             <Image
               src={profileIconUrl(version, player.iconId)}
@@ -230,7 +232,7 @@ function PlayerHeader({
         <div className="min-w-0">
           <Link
             href={href}
-            className="block truncate text-sm font-semibold text-gold-200 hover:text-gold-300"
+            className="block truncate text-[13px] font-bold text-fg hover:text-primary"
           >
             {player.name}
             <span className="text-muted">#{player.tag}</span>
@@ -245,7 +247,7 @@ function PlayerHeader({
       <div className="mt-3 space-y-1.5">
         <div className="flex items-baseline justify-between text-[11px]">
           <span className="text-muted">Winrate</span>
-          <span className="tabular text-gold-300">
+          <span className="tabular font-semibold text-fg">
             {percent(player.summary.winrate)} · {player.summary.matches} partidas
           </span>
         </div>
@@ -259,7 +261,7 @@ function PlayerHeader({
         {player.summary.champions[0] ? (
           <p className="text-[11px] text-muted">
             Main:{" "}
-            <span className="text-gold-300">
+            <span className="font-semibold text-primary">
               {names[player.summary.champions[0].championName] ??
                 player.summary.champions[0].championName}
             </span>{" "}
@@ -281,10 +283,8 @@ function Pool({
   names: Record<string, string>;
 }) {
   return (
-    <div className="rounded-xl border border-line bg-ink-900/80 p-4">
-      <p className="text-[11px] font-medium uppercase tracking-wider text-muted">
-        Pool de {player.name}
-      </p>
+    <div className="panel px-3 py-3">
+      <p className="section-title">Pool de {player.name}</p>
       <ul className="mt-2 space-y-2">
         {player.pool.map((champion) => (
           <li key={champion.championName} className="flex items-center gap-2.5">
@@ -293,10 +293,10 @@ function Pool({
               alt=""
               width={32}
               height={32}
-              className="size-8 rounded border border-line/80"
+              className="size-8 rounded-sm bg-soft"
             />
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm text-gold-300">
+              <p className="truncate text-[13px] font-semibold text-fg">
                 {names[champion.championName] ?? champion.championName}
               </p>
               <p className="text-[11px] text-muted">
@@ -304,7 +304,7 @@ function Pool({
                 {champion.kda.toFixed(2)}
               </p>
             </div>
-            <div className="w-16">
+            <div className="w-20 shrink-0">
               <WinrateBar value={champion.winrate} size="sm" />
             </div>
           </li>

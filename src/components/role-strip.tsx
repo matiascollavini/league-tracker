@@ -45,13 +45,15 @@ export function RoleStrip({ rows }: { rows: MatchSummary[] }) {
                 ? "ARAM, Arena y otros modos sin posiciones fijas"
                 : undefined
             }
-            className="inline-flex items-center gap-1.5 rounded-full border border-line bg-ink-900/70 px-2.5 py-1 text-[11px]"
+            className="inline-flex items-center gap-1.5 rounded border border-white/10 bg-soft/50 px-2 py-1 text-[11px]"
           >
-            <span className="text-muted">{LABEL[role] ?? role}</span>
-            <span className="tabular text-gold-300">{stat.games}</span>
+            <span className="font-semibold text-fg">{LABEL[role] ?? role}</span>
+            <span className="tabular font-medium text-muted">{stat.games}</span>
             <span
               className={
-                winrate >= 0.5 ? "tabular text-win" : "tabular text-loss"
+                winrate >= 0.5
+                  ? "tabular font-semibold text-gold"
+                  : "tabular font-semibold text-orange"
               }
             >
               {percent(winrate)}

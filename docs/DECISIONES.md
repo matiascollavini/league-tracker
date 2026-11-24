@@ -385,6 +385,55 @@ hubiese llegado a 756. No era un contador roto: había **tres definiciones** de
 
 ---
 
+## ADR-011 — Sistema visual: estética de dpm.lol
+
+**Estado:** aceptada · **Fecha:** 2026-11-24
+
+### Contexto
+El operador pidió que la UI copie la estética de **dpm.lol** (tracker de LoL) sin
+sumar ni restar funcionalidades. dpm.lol está detrás de Cloudflare: el HTML no se
+puede bajar con `curl`/headless. Se obtuvo el HTML renderizado vía `r.jina.ai`
+(`X-Return-Format: html`) y, de ahí, sus **CSS compilados**
+(`/_next/static/chunks/*.css`), que sí se sirven sin challenge. El diseño se
+reconstruyó desde esa fuente primaria (tokens + markup), no de memoria.
+
+### Tokens tomados de su CSS (scope `theme-rft`, tema oscuro)
+| Token dpm | Valor | Uso en league-page |
+|---|---|---|
+| `--background` | `#131619` | `bg-bg` |
+| `--card` | `rgb(222 204 251 / .04)` ≈ `#1b1d22` | `bg-card` / `.panel` |
+| `--muted` | `#242832` | `bg-soft` (chips, tracks) |
+| `--foreground` | `#f9fafd` | `text-fg` |
+| `--muted-foreground` | `#9b9c9e` | `text-muted` |
+| `--primary` | `#a6b0f2` | `text-primary`, botones |
+| `--success` / `--destructive` | `#4ac97e` / `#f7665e` | `win` / `loss` |
+| `--gold` / `--rank-gold` | `#ffd147` | WR alto y rango |
+| `--dpm-blue-600/25` | `#1f264a` medido en pixel | tinte de fila ganada |
+| `--destructive/20` | `#452b2c` medido en pixel | tinte de fila perdida |
+| `--radius` | `.5rem` (cards `rounded-md` 6px) | `.panel` |
+| fuente | **Plus Jakarta Sans** 200–800 | `next/font/google` |
+
+### Decisiones
+- Los tokens de `globals.css` son **semánticos** (`bg`, `card`, `soft`, `line`,
+  `fg`, `muted`, `dim`, `primary`, `gold`, `win`, `loss`, `blue`, `orange`), no
+  nombres de la paleta vieja (`ink-*`, `gold-*`): si mañana cambia el tema se toca
+  un solo archivo.
+- Utilidades propias en `@layer utilities`: `.panel` (tarjeta dpm), `.section-title`
+  (12px bold uppercase primary), `.label` (10px uppercase), `.match-row` (barra de
+  62px con tinte + brillo diagonal).
+- La fuente se self-hostea con `next/font/google` (sin requests a Google en
+  runtime, sin dependencia nueva).
+- **Cero cambios funcionales**: mismas rutas, mismos datos, mismos filtros. Solo se
+  movió el filtro por cola a la barra de tabs del hero (era una fila de chips) y el
+  `ProfileCard` pasó a hero full-width + tarjetas de rango, como en dpm.
+
+### Consecuencias / cuándo revisar
+- Cualquier feature nueva debería usar los tokens y no colores sueltos.
+- Si dpm.lol cambia de piel, este ADR queda como registro de la versión copiada
+  (patch 16.23.1, noviembre 2026).
+
+---
+
 ## Registro de auditoría
 
 **2026-11-24 — auditoría de `docs/API-LOL.txt` v1.0.** Un `evidence-auditor` sin

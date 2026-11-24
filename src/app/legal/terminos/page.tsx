@@ -7,16 +7,16 @@ export const metadata: Metadata = {
 
 export default function TerminosPage() {
   return (
-    <article className="mx-auto max-w-2xl space-y-6 text-sm leading-relaxed text-muted">
-      <h1 className="text-2xl font-semibold text-gold-200">
+    <article className="mx-auto max-w-2xl space-y-6 text-[13px] leading-relaxed text-muted">
+      <h1 className="text-[26px] font-extrabold tracking-tight text-fg">
         Términos de uso
       </h1>
-      <p className="text-xs text-muted/70">
+      <p className="text-[11px] text-dim">
         Última actualización: 24 de noviembre de 2026.
       </p>
 
       <section className="space-y-2">
-        <h2 className="text-base font-semibold text-gold-300">Qué es esto</h2>
+        <h2 className="section-title">Qué es esto</h2>
         <p>
           league-page es un proyecto independiente que muestra estadísticas
           públicas de League of Legends obtenidas de la API oficial de Riot
@@ -26,7 +26,7 @@ export default function TerminosPage() {
       </section>
 
       <section className="space-y-2">
-        <h2 className="text-base font-semibold text-gold-300">
+        <h2 className="section-title">
           Exactitud de los datos
         </h2>
         <p>
@@ -39,7 +39,7 @@ export default function TerminosPage() {
       </section>
 
       <section className="space-y-2">
-        <h2 className="text-base font-semibold text-gold-300">Uso aceptable</h2>
+        <h2 className="section-title">Uso aceptable</h2>
         <ul className="list-disc space-y-1 pl-5">
           <li>No automatizar consultas masivas contra el sitio.</li>
           <li>
@@ -50,7 +50,7 @@ export default function TerminosPage() {
       </section>
 
       <section className="space-y-2">
-        <h2 className="text-base font-semibold text-gold-300">
+        <h2 className="section-title">
           Disponibilidad y responsabilidad
         </h2>
         <p>
@@ -61,7 +61,7 @@ export default function TerminosPage() {
       </section>
 
       <section className="space-y-2">
-        <h2 className="text-base font-semibold text-gold-300">Propiedad</h2>
+        <h2 className="section-title">Propiedad</h2>
         <p>
           League of Legends, Riot Games y todas las propiedades asociadas son
           marcas registradas de Riot Games, Inc. Las imágenes de campeones se
@@ -69,7 +69,7 @@ export default function TerminosPage() {
         </p>
       </section>
 
-      <p className="rounded-lg border border-line bg-ink-900/60 p-4 text-xs">
+      <p className="panel px-3 py-2.5 text-[11px] leading-relaxed">
         league-page isn&apos;t endorsed by Riot Games and doesn&apos;t reflect the
         views or opinions of Riot Games or anyone officially involved in producing
         or managing Riot Games properties. Riot Games, and all associated

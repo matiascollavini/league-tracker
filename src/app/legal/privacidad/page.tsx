@@ -7,16 +7,16 @@ export const metadata: Metadata = {
 
 export default function PrivacidadPage() {
   return (
-    <article className="prose-invert mx-auto max-w-2xl space-y-6 text-sm leading-relaxed text-muted">
-      <h1 className="text-2xl font-semibold text-gold-200">
+    <article className="prose-invert mx-auto max-w-2xl space-y-6 text-[13px] leading-relaxed text-muted">
+      <h1 className="text-[26px] font-extrabold tracking-tight text-fg">
         Política de privacidad
       </h1>
-      <p className="text-xs text-muted/70">
+      <p className="text-[11px] text-dim">
         Última actualización: 24 de noviembre de 2026.
       </p>
 
       <section className="space-y-2">
-        <h2 className="text-base font-semibold text-gold-300">
+        <h2 className="section-title">
           Qué datos tratamos
         </h2>
         <p>
@@ -29,7 +29,7 @@ export default function PrivacidadPage() {
       </section>
 
       <section className="space-y-2">
-        <h2 className="text-base font-semibold text-gold-300">
+        <h2 className="section-title">
           Para qué los usamos
         </h2>
         <p>
@@ -40,25 +40,25 @@ export default function PrivacidadPage() {
       </section>
 
       <section className="space-y-2">
-        <h2 className="text-base font-semibold text-gold-300">Con quién</h2>
+        <h2 className="section-title">Con quién</h2>
         <ul className="list-disc space-y-1 pl-5">
           <li>
-            <strong className="text-gold-400">Riot Games</strong>: origen de los
+            <strong className="font-semibold text-primary">Riot Games</strong>: origen de los
             datos, vía su API oficial.
           </li>
           <li>
-            <strong className="text-gold-400">Vercel</strong>: hosting y
+            <strong className="font-semibold text-primary">Vercel</strong>: hosting y
             registros técnicos básicos.
           </li>
           <li>
-            <strong className="text-gold-400">Data Dragon</strong>: imágenes de
+            <strong className="font-semibold text-primary">Data Dragon</strong>: imágenes de
             campeones, servidas desde el CDN de Riot.
           </li>
         </ul>
       </section>
 
       <section className="space-y-2">
-        <h2 className="text-base font-semibold text-gold-300">
+        <h2 className="section-title">
           Cuánto tiempo
         </h2>
         <p>
@@ -70,7 +70,7 @@ export default function PrivacidadPage() {
       </section>
 
       <section className="space-y-2">
-        <h2 className="text-base font-semibold text-gold-300">
+        <h2 className="section-title">
           Tus derechos
         </h2>
         <p>
@@ -82,14 +82,14 @@ export default function PrivacidadPage() {
       </section>
 
       <section className="space-y-2">
-        <h2 className="text-base font-semibold text-gold-300">Cookies</h2>
+        <h2 className="section-title">Cookies</h2>
         <p>
           No usamos cookies de publicidad ni de seguimiento. Si en el futuro
           agregamos analítica, se avisará en esta página.
         </p>
       </section>
 
-      <p className="rounded-lg border border-line bg-ink-900/60 p-4 text-xs">
+      <p className="panel px-3 py-2.5 text-[11px] leading-relaxed">
         Este sitio no está avalado por Riot Games y no refleja las opiniones de
         Riot Games ni de nadie involucrado en producir o gestionar propiedades de
         Riot Games. League of Legends y Riot Games son marcas registradas de Riot

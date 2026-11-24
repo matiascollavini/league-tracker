@@ -400,9 +400,9 @@ export function SyncButton({
       </div>
 
       {batchTotal > 0 ? (
-        <div className="h-1.5 overflow-hidden rounded-full bg-ink-800">
+        <div className="h-1.5 overflow-hidden rounded-full bg-soft">
           <div
-            className="h-full rounded-full bg-gold-500 transition-all"
+            className="h-full rounded-full bg-primary transition-all"
             style={{ width: `${Math.max(pct, analyzedInBatch > 0 ? 2 : 0)}%` }}
             role="progressbar"
             aria-valuenow={pct}
@@ -416,7 +416,7 @@ export function SyncButton({
         {error ? <p className="text-loss">{error}</p> : null}
 
         {stalled ? (
-          <p className="flex items-start gap-1.5 text-gold-300">
+          <p className="flex items-start gap-1.5 text-gold">
             <AlertTriangle className="mt-px size-3.5 shrink-0" aria-hidden />
             <span>
               Sin avance hace {formatElapsed(sinceProgressMs)}. Una vuelta normal

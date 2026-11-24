@@ -288,6 +288,15 @@ export function timeAgo(timestamp: number, now = Date.now()): string {
   return `hace ${months} mes${months === 1 ? "" : "es"}`;
 }
 
+/** Hora de la partida en formato 24 h ("19:45"), en la zona del server. */
+export function formatClock(timestamp: number): string {
+  return new Intl.DateTimeFormat("es-AR", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(new Date(timestamp));
+}
+
 export function formatDuration(seconds: number): string {
   const safe = Math.max(0, Math.round(seconds));
   const m = Math.floor(safe / 60);
