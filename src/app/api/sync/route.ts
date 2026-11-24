@@ -77,7 +77,10 @@ export async function POST(request: Request) {
       known: result.progress.known,
       done: result.done,
       requests: result.requests,
-      phase: result.phase,
+      // Si el bucket cortó la vuelta (en la fase que sea), la fase que le
+      // importa al cliente es "throttled": no es un lock ni un error.
+      phase: result.retryAfterMs ? "throttled" : result.phase,
+
       elapsedMs: result.elapsedMs,
       unavailable: result.unavailable,
       // Si otro proceso tenía el lock, el cliente espera antes de reintentar.

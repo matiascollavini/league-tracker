@@ -29,6 +29,7 @@ const PUUID_DEADLINE = "d".repeat(78);
 const PUUID_404 = "u".repeat(78);
 const PUUID_LOCK = "l".repeat(78);
 const PUUID_COMPLETE = "c".repeat(78);
+const PUUID_THROTTLE = "t".repeat(78);
 
 const participant = (puuid: string): Participant => ({
   puuid,
@@ -113,6 +114,31 @@ describe("syncPuuid — corrida acotada por tiempo", () => {
     expect(state?.lockedUntil).toBeNull();
     // El cursor de IDs se guardó igual (página corta = fin del historial).
     expect(state?.backfillState).toBe("done");
+  });
+});
+
+describe("syncPuuid — corte por rate limit", () => {
+  it("si el bucket niega la primera página, informa cuánto esperar (no es un lock)", async () => {
+    // Reproduce lo que pasa con el bucket saturado: el Riot ID se resolvió,
+    // pero la página de IDs ya no tiene turno.
+    vi.mocked(getMatchIdsPage).mockRejectedValue(
+      new RiotDeadlineError("/lol/match/v5/matches/by-puuid/x/ids", 63_000),
+    );
+
+    const result = await syncPuuid(PUUID_THROTTLE, "la2", {
+      budget: 30,
+      maxPages: 3,
+      deadlineMs: 40_000,
+    });
+
+    // Ni error ni lock: cero requests y un "esperá esto" explícito. El route lo
+    // publica como phase "throttled" y el loader no lo confunde con un lock.
+    expect(result.skipped).toBe(false);
+    expect(result.done).toBe(false);
+    expect(result.phase).toBe("ids");
+    expect(result.requests).toBe(0);
+    expect(result.retryAfterMs).toBe(63_000);
+    expect((await getSyncState(PUUID_THROTTLE))?.lockedUntil).toBeNull();
   });
 });
 

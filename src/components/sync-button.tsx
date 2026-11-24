@@ -272,12 +272,14 @@ export function SyncButton({
         notice = `${payload.error} Reintento en ${formatElapsed(retryMs)}.`;
       } else if (payload.phase === "throttled") {
         notice = `Riot nos está frenando (rate limit): espero ${formatElapsed(retryMs)} y sigo.`;
-      } else if (payload.skipped || (payload.requests ?? 0) === 0) {
+      } else if (payload.skipped) {
         const left =
           payload.lockForMs && payload.lockForMs > 0
             ? ` El lock vence en ~${formatElapsed(payload.lockForMs)}.`
             : "";
-        notice = `Otro proceso (el worker u otra pestaña) está sincronizando esta cuenta.${left} Espero y reintento.`;
+        notice =
+          "Otro proceso está sincronizando esta cuenta sobre la misma base: el worker, otra pestaña, o un segundo server (dev y `next start` a la vez)." +
+          `${left} Espero y reintento.`;
       } else {
         notice = null;
       }
