@@ -103,8 +103,8 @@ export async function loadProfile(
     };
   }
 
-  // Una sola consulta trae partidas + progreso.
-  let { matches, progress } = await getPlayerMatchesWithProgress(puuid);
+  // Una sola consulta trae partidas + progreso + si está en la cola.
+  let { matches, progress, queued } = await getPlayerMatchesWithProgress(puuid);
 
   // Fallback: si summoner-v4 falla, el icono y el nivel salen de la última
   // partida guardada (los mandó Riot en el payload del match).
@@ -131,7 +131,11 @@ export async function loadProfile(
     }
   }
 
-  if (progress.detailed < MIN_TO_ANALYZE) {
+  // Ojo con "tiene algunas partidas": quien aparece como participante de las
+  // partidas de otro tiene links pero NUNCA estuvo en la cola del worker, así
+  // que su historial propio no se pidió nunca y el perfil quedaba congelado en
+  // "N de N". Si no está en la cola, se sincroniza en esta visita.
+  if (progress.detailed < MIN_TO_ANALYZE || !queued) {
     try {
       const result = await syncAccount(effectivePlatform, gameName, tagLine, {
         budget: onDemandBudget(),
@@ -140,7 +144,7 @@ export async function loadProfile(
         deadlineMs: 30_000,
       });
       puuid = result.puuid;
-      ({ matches, progress } = await getPlayerMatchesWithProgress(puuid));
+      ({ matches, progress, queued } = await getPlayerMatchesWithProgress(puuid));
     } catch (error) {
       // 429 o 5xx: no rompemos la página, seguimos con lo que haya.
       console.warn(

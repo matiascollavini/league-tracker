@@ -1,7 +1,9 @@
 import type { MatchSummary } from "@/lib/riot/aggregate";
 import { percent } from "@/lib/riot/aggregate";
 
-const ORDER = ["TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY"];
+/** Orden de los chips. "SIN_ROL" siempre al final. */
+const SIN_ROL = "SIN_ROL";
+const ORDER = ["TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY", SIN_ROL];
 
 const LABEL: Record<string, string> = {
   TOP: "Top",
@@ -9,6 +11,7 @@ const LABEL: Record<string, string> = {
   MIDDLE: "Mid",
   BOTTOM: "ADC",
   UTILITY: "Support",
+  [SIN_ROL]: "Sin rol",
 };
 
 /** Reparto de partidas y winrate por rol, en chips compactos. */
@@ -16,11 +19,12 @@ export function RoleStrip({ rows }: { rows: MatchSummary[] }) {
   const stats = new Map<string, { games: number; wins: number }>();
 
   for (const row of rows) {
-    if (!row.role) continue;
-    const current = stats.get(row.role) ?? { games: 0, wins: 0 };
+    // ARAM, Arena y custom no tienen rol: van a un chip aparte, no a "Invalid".
+    const key = row.role || SIN_ROL;
+    const current = stats.get(key) ?? { games: 0, wins: 0 };
     current.games += 1;
     if (row.win) current.wins += 1;
-    stats.set(row.role, current);
+    stats.set(key, current);
   }
 
   const entries = [...stats.entries()].sort(
@@ -32,9 +36,15 @@ export function RoleStrip({ rows }: { rows: MatchSummary[] }) {
     <ul className="flex flex-wrap gap-1.5">
       {entries.map(([role, stat]) => {
         const winrate = stat.games > 0 ? stat.wins / stat.games : 0;
+        const noRole = role === SIN_ROL;
         return (
           <li
             key={role}
+            title={
+              noRole
+                ? "ARAM, Arena y otros modos sin posiciones fijas"
+                : undefined
+            }
             className="inline-flex items-center gap-1.5 rounded-full border border-line bg-ink-900/70 px-2.5 py-1 text-[11px]"
           >
             <span className="text-muted">{LABEL[role] ?? role}</span>

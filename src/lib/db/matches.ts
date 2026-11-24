@@ -235,7 +235,7 @@ export function rowToMatch(row: PlayerMatchRow): Match {
 export async function getPlayerMatchesWithProgress(
   puuid: string,
   limit = 1_000,
-): Promise<{ matches: Match[]; progress: Progress }> {
+): Promise<{ matches: Match[]; progress: Progress; queued: boolean }> {
   await ensureSchema();
   const result = await db().execute({
     sql: `SELECT pm.puuid, m.match_id, m.queue_id, m.game_mode, m.game_version,
@@ -245,7 +245,9 @@ export async function getPlayerMatchesWithProgress(
                  p.cs, p.gold_earned, p.vision_score, p.damage,
                  p.profile_icon, p.summoner_level,
                  (SELECT COUNT(*) FROM puuid_matches pm2
-                   WHERE pm2.puuid = pm.puuid) AS known_total
+                   WHERE pm2.puuid = pm.puuid) AS known_total,
+                 EXISTS (SELECT 1 FROM puuid_sync ps
+                          WHERE ps.puuid = pm.puuid) AS queued
             FROM puuid_matches pm
             JOIN matches m ON m.match_id = pm.match_id
             JOIN match_participants p
@@ -258,14 +260,19 @@ export async function getPlayerMatchesWithProgress(
 
   const matches: Match[] = [];
   let known = 0;
+  // Sin filas no hay a quién preguntar: el jugador se sincroniza igual porque
+  // no tiene ninguna partida guardada.
+  let queued = false;
   for (const row of result.rows) {
     matches.push(rowToMatch(row as PlayerMatchRow));
     known = num(row.known_total);
+    queued = num(row.queued) === 1;
   }
 
   return {
     matches,
     progress: { known: Math.max(known, matches.length), detailed: matches.length },
+    queued,
   };
 }
 

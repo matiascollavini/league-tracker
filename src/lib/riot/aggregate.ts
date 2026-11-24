@@ -51,7 +51,11 @@ export type MatchSummary = {
   queueLabel: string;
   durationSeconds: number;
   position: string;
-  /** Rol crudo de Riot (TOP, JUNGLE, MIDDLE, BOTTOM, UTILITY). */
+  /**
+   * Rol de la partida: TOP, JUNGLE, MIDDLE, BOTTOM o UTILITY. Vacío cuando el
+   * modo no tiene posiciones fijas (ARAM, Arena, custom): Riot manda "Invalid"
+   * o "" y eso no es un rol.
+   */
   role: string;
   cs: number;
   gold: number;
@@ -203,7 +207,9 @@ export function toMatchSummaries(
       queueLabel: queueLabel(match.info.queueId),
       durationSeconds: durationSeconds(match.info),
       position: normalizePosition(participant),
-      role: participant.teamPosition || participant.individualPosition || "",
+      role: normalizeRole(
+        participant.teamPosition || participant.individualPosition || "",
+      ),
       cs:
         (participant.totalMinionsKilled ?? ZERO) +
         ((participant as { neutralMinionsKilled?: number }).neutralMinionsKilled ??
@@ -214,6 +220,13 @@ export function toMatchSummaries(
   }
 
   return out.sort((a, b) => b.playedAt - a.playedAt);
+}
+
+/** Roles con posición fija. Lo demás ("Invalid", "", "NONE") no se cuenta. */
+export const ROLES = ["TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY"] as const;
+
+export function normalizeRole(raw: string): string {
+  return (ROLES as readonly string[]).includes(raw) ? raw : "";
 }
 
 export function normalizePosition(participant: Participant): string {

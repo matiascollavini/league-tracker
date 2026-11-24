@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   durationSeconds,
+  normalizeRole,
   formatDuration,
   kdaOf,
   patchOf,
@@ -178,5 +179,34 @@ describe("formatDuration", () => {
   it("formatea mm:ss", () => {
     expect(formatDuration(1_832)).toBe("30:32");
     expect(formatDuration(59)).toBe("0:59");
+  });
+});
+
+describe("rol", () => {
+  it("ARAM, Arena y custom no tienen rol: Riot manda 'Invalid' y no se cuenta", () => {
+    expect(normalizeRole("Invalid")).toBe("");
+    expect(normalizeRole("")).toBe("");
+    expect(normalizeRole("NONE")).toBe("");
+    expect(normalizeRole("UTILITY")).toBe("UTILITY");
+  });
+
+  it("toMatchSummaries deja el rol vacío en partidas sin posiciones", () => {
+    const aram: Match = {
+      ...makeMatch({ matchId: "a" }),
+      info: {
+        ...makeMatch({ matchId: "a" }).info,
+        queueId: 450,
+        participants: [
+          {
+            puuid: PUUID,
+            championId: 103,
+            championName: "Ahri",
+            win: true,
+            teamPosition: "Invalid",
+          },
+        ],
+      },
+    };
+    expect(toMatchSummaries([aram], PUUID)[0]?.role).toBe("");
   });
 });

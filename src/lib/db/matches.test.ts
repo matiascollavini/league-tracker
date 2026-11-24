@@ -8,6 +8,8 @@ process.env.DATABASE_URL = `file:${TEST_DB}`;
 import { closeDb, ensureSchema } from "./client";
 import {
   filterKnownMatchIds,
+  getPlayerMatchesWithProgress,
+  touchSyncState,
   findSyncForPuuid,
   findSyncedPuuid,
   getPlayerMatches,
@@ -148,6 +150,34 @@ describe("progreso del historial", () => {
     const pending = await pendingMatchIds(PUUID, 10);
     expect(pending.sort()).toEqual(["a", "c"]);
     expect(await pendingMatchIds(PUUID, 0)).toEqual([]);
+  });
+
+  it("avisa si el jugador está en la cola (participante de partidas ajenas = no)", async () => {
+    const AJENO = "a".repeat(78);
+    const AUTH = "b".repeat(78);
+    // Una partida bajada para OTRO jugador vincula a los 10 participantes.
+    const shared: Match = {
+      ...makeMatch({ matchId: "s1" }),
+      metadata: { matchId: "s1", participants: [AUTH, AJENO] },
+      info: {
+        ...makeMatch({ matchId: "s1" }).info,
+        participants: [
+          { puuid: AUTH, championId: 1, championName: "Ahri", win: true },
+          { puuid: AJENO, championId: 2, championName: "Jinx", win: false },
+        ],
+      },
+    };
+    await saveMatch(shared, "la2");
+
+    // Tiene partidas pero nunca estuvo en la cola: el perfil tiene que
+    // sincronizarlo, si no queda congelado en "1 de 1" para siempre.
+    const before = await getPlayerMatchesWithProgress(AJENO);
+    expect(before.matches).toHaveLength(1);
+    expect(before.queued).toBe(false);
+
+    await touchSyncState(AJENO, "la2", { backfillState: "none" });
+    const after = await getPlayerMatchesWithProgress(AJENO);
+    expect(after.queued).toBe(true);
   });
 
   it("filtra los IDs que ya están guardados", async () => {
