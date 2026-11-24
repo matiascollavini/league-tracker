@@ -105,7 +105,8 @@ Mientras tanto, cada visita al perfil analiza un poco (25 requests) si el
 jugador es nuevo, y muestra una barra de progreso.
 
 **Producción:** `docs/DEPLOY.md` (Turso + Vercel + worker en GitHub Actions,
-todo gratis).
+todo gratis). Para verificar a qué base está conectado el deploy:
+`/api/health`.
 
 ## Cómo está armado
 

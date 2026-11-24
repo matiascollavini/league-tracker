@@ -6,8 +6,11 @@ import { loadEnv } from "./env";
 
 async function main() {
   loadEnv();
-  const { db, ensureSchema, closeDb } = await import("../src/lib/db/client");
+  const { db, ensureSchema, closeDb, dbConfig, databaseHost } = await import(
+    "../src/lib/db/client"
+  );
   await ensureSchema();
+  const config = dbConfig();
 
   const c = db();
   const matches = await c.execute("SELECT COUNT(*) AS n FROM matches");

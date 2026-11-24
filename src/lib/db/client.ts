@@ -82,15 +82,55 @@ const MIGRATIONS = [
   `ALTER TABLE puuid_sync ADD COLUMN locked_by TEXT`,
 ];
 
-function databaseUrl(): string {
-  return process.env.DATABASE_URL?.trim() || "file:./data/league.db";
+export type DbConfig = {
+  url: string;
+  authToken?: string;
+  /** De qué variable salió la URL (para diagnóstico, sin exponer secretos). */
+  urlSource: string;
+  tokenSource?: string;
+};
+
+/**
+ * Acepta los nombres propios y los de la integración de Turso en Vercel
+ * (esa integración inyecta TURSO_DATABASE_URL / TURSO_AUTH_TOKEN).
+ */
+export function dbConfig(): DbConfig {
+  const urlCandidates: Array<[string, string | undefined]> = [
+    ["DATABASE_URL", process.env.DATABASE_URL],
+    ["TURSO_DATABASE_URL", process.env.TURSO_DATABASE_URL],
+    ["TURSO_CONNECTION_URL", process.env.TURSO_CONNECTION_URL],
+  ];
+  const tokenCandidates: Array<[string, string | undefined]> = [
+    ["DATABASE_AUTH_TOKEN", process.env.DATABASE_AUTH_TOKEN],
+    ["TURSO_AUTH_TOKEN", process.env.TURSO_AUTH_TOKEN],
+  ];
+
+  const url = urlCandidates.find(([, value]) => value?.trim());
+  const token = tokenCandidates.find(([, value]) => value?.trim());
+
+  return {
+    url: url?.[1]?.trim() || "file:./data/league.db",
+    authToken: token?.[1]?.trim(),
+    urlSource: url?.[0] ?? "(default local)",
+    tokenSource: token?.[0],
+  };
+}
+
+/** Host de la base, sin credenciales (seguro para mostrar). */
+export function databaseHost(): string {
+  const { url } = dbConfig();
+  if (url.startsWith("file:")) return "archivo local";
+  try {
+    return new URL(url).host;
+  } catch {
+    return "desconocido";
+  }
 }
 
 export function db(): Client {
   if (client) return client;
 
-  const url = databaseUrl();
-  const authToken = process.env.DATABASE_AUTH_TOKEN?.trim();
+  const { url, authToken } = dbConfig();
 
   // En local el archivo puede no existir todavía.
   if (url.startsWith("file:")) {

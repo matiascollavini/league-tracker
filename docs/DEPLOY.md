@@ -88,6 +88,33 @@ la cuenta queda casi completa en esa misma visita (~15 s).
 5. **Deploy**. La primera búsqueda va a sincronizar ~24 partidas en el momento
    y el resto queda en cola para el worker.
 
+### Si usaste la integración de Turso desde Vercel
+
+La integración del Marketplace **puede crear una base nueva** (vacía) en vez de
+usar la que ya tenés, y además inyecta las variables con otros nombres:
+`TURSO_DATABASE_URL` y `TURSO_AUTH_TOKEN`.
+
+El código acepta los dos juegos de nombres, con este orden de prioridad:
+
+1. `DATABASE_URL` / `DATABASE_AUTH_TOKEN`
+2. `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN` (integración de Vercel)
+3. `file:./data/league.db` (local, solo desarrollo)
+
+**Cómo saber a qué base está conectado el deploy:**
+
+```
+https://TU-APP.vercel.app/api/health
+```
+
+Devuelve el host, de qué variable salió, la versión del esquema y cuántas
+partidas/jugadores hay. Si ves `matches: 0` o un host distinto de
+`league-page-...turso.io`, está apuntando a la base nueva y vacía.
+
+**Qué hacer en ese caso:** cargar a mano `DATABASE_URL` y `DATABASE_AUTH_TOKEN`
+con la URL y el token de la base que ya tiene los datos (esas variables ganan
+sobre las de la integración) y redeployar. Alternativa: dejar la base nueva y
+subirle los datos con `npm run db:copy` apuntando a ella.
+
 ## 4. Activar el worker (GitHub Actions)
 
 El cron ya está en `.github/workflows/worker.yml`. Solo hay que darle los
