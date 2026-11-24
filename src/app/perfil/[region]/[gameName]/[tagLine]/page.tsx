@@ -93,6 +93,7 @@ export default async function ProfilePage({
     puuid,
     platform: effectivePlatform,
     platformMismatch,
+    rankStale,
     matches,
     summoner,
     league,
@@ -159,6 +160,7 @@ export default async function ProfilePage({
           version={catalog.version}
           league={league}
           demo={demo}
+          rankStale={rankStale}
         />
 
         <div className="rounded-xl border border-line bg-ink-900/60 p-4">

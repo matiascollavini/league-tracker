@@ -64,10 +64,11 @@ export async function saveMatch(
     })),
     ...info.participants.map((participant) => ({
       sql: `INSERT OR REPLACE INTO match_participants
-              (match_id, puuid, champion_id, champion_name, riot_id, team_id,
+              (match_id, puuid, champion_id, champion_name, riot_id,
+               profile_icon, summoner_level, team_id,
                team_position, win, kills, deaths, assists,
                gold_earned, cs, vision_score, damage)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       args: [
         matchId,
         participant.puuid,
@@ -76,6 +77,8 @@ export async function saveMatch(
         participant.riotIdGameName
           ? `${participant.riotIdGameName}#${participant.riotIdTagline ?? ""}`
           : null,
+        participant.profileIcon ?? null,
+        participant.summonerLevel ?? null,
         participant.teamId ?? null,
         participant.teamPosition || participant.individualPosition || null,
         participant.win ? 1 : 0,
@@ -198,6 +201,8 @@ export function rowToMatch(row: PlayerMatchRow): Match {
           totalMinionsKilled: num(row.cs),
           visionScore: num(row.vision_score),
           totalDamageDealtToChampions: num(row.damage),
+          profileIcon: row.profile_icon == null ? undefined : num(row.profile_icon),
+          summonerLevel: row.summoner_level == null ? undefined : num(row.summoner_level),
         },
       ],
     },
@@ -219,6 +224,7 @@ export async function getPlayerMatchesWithProgress(
                  p.champion_id, p.champion_name, p.team_id, p.team_position,
                  p.win, p.kills, p.deaths, p.assists,
                  p.cs, p.gold_earned, p.vision_score, p.damage,
+                 p.profile_icon, p.summoner_level,
                  (SELECT COUNT(*) FROM puuid_matches pm2
                    WHERE pm2.puuid = pm.puuid) AS known_total
             FROM puuid_matches pm
@@ -439,6 +445,42 @@ export async function unlockSync(puuid: string, token: string): Promise<void> {
     sql: "UPDATE puuid_sync SET locked_until = NULL, locked_by = NULL WHERE puuid = ? AND locked_by = ?",
     args: [puuid, token],
   });
+}
+
+/** Foto del rango: si Riot no responde, mostramos la última conocida. */
+export async function saveLeagueSnapshot(
+  puuid: string,
+  platform: Platform,
+  entries: unknown,
+): Promise<void> {
+  await ensureSchema();
+  await db().execute({
+    sql: `INSERT OR REPLACE INTO league_snapshots
+            (puuid, platform_id, payload, updated_at)
+          VALUES (?, ?, ?, ?)`,
+    args: [puuid, platform, JSON.stringify(entries), Date.now()],
+  });
+}
+
+export async function getLeagueSnapshot(
+  puuid: string,
+): Promise<{ entries: unknown[]; updatedAt: number } | null> {
+  await ensureSchema();
+  const result = await db().execute({
+    sql: "SELECT payload, updated_at FROM league_snapshots WHERE puuid = ?",
+    args: [puuid],
+  });
+  const row = result.rows[0];
+  if (!row) return null;
+  try {
+    const parsed: unknown = JSON.parse(str(row.payload));
+    return {
+      entries: Array.isArray(parsed) ? parsed : [],
+      updatedAt: num(row.updated_at),
+    };
+  } catch {
+    return null;
+  }
 }
 
 export type SyncOwner = {

@@ -15,6 +15,8 @@ type Props = {
   version: string;
   league: LeagueEntry[];
   demo: boolean;
+  /** El rango sale de una foto guardada: puede estar desactualizado. */
+  rankStale?: boolean;
 };
 
 const TIER_COLOR: Record<string, string> = {
@@ -40,6 +42,7 @@ export function ProfileCard({
   version,
   league,
   demo,
+  rankStale = false,
 }: Props) {
   const solo = league.find((entry) => entry.queueType === "RANKED_SOLO_5x5");
   const flex = league.find((entry) => entry.queueType === "RANKED_FLEX_SR");
@@ -91,6 +94,13 @@ export function ProfileCard({
         <RankCard label="Solo/Duo" entry={solo} />
         <RankCard label="Flex" entry={flex} />
       </div>
+
+      {rankStale ? (
+        <p className="mt-2 text-[10px] leading-relaxed text-muted/70">
+          Rango guardado: Riot no respondió en este momento, puede estar
+          desactualizado.
+        </p>
+      ) : null}
     </div>
   );
 }

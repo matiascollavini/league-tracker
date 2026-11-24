@@ -37,6 +37,8 @@ const SCHEMA = [
      champion_id  INTEGER NOT NULL,
      champion_name TEXT NOT NULL,
      riot_id      TEXT,
+     profile_icon INTEGER,
+     summoner_level INTEGER,
      team_id      INTEGER,
      team_position TEXT,
      win          INTEGER NOT NULL,
@@ -53,6 +55,12 @@ const SCHEMA = [
      ON match_participants (puuid)`,
   `CREATE INDEX IF NOT EXISTS idx_matches_start
      ON matches (game_start_ts DESC)`,
+  `CREATE TABLE IF NOT EXISTS league_snapshots (
+     puuid      TEXT PRIMARY KEY,
+     platform_id TEXT NOT NULL,
+     payload    TEXT NOT NULL,
+     updated_at INTEGER NOT NULL
+   )`,
   `CREATE TABLE IF NOT EXISTS puuid_matches (
      puuid    TEXT NOT NULL,
      match_id TEXT NOT NULL,
@@ -80,6 +88,8 @@ const SCHEMA = [
 const MIGRATIONS = [
   `ALTER TABLE match_participants ADD COLUMN riot_id TEXT`,
   `ALTER TABLE puuid_sync ADD COLUMN locked_by TEXT`,
+  `ALTER TABLE match_participants ADD COLUMN profile_icon INTEGER`,
+  `ALTER TABLE match_participants ADD COLUMN summoner_level INTEGER`,
 ];
 
 export type DbConfig = {
@@ -142,7 +152,7 @@ export function db(): Client {
   return client;
 }
 
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 4;
 
 /**
  * Crea las tablas si no existen. Idempotente y barato: en Turso cada statement

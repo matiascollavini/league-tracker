@@ -5,7 +5,9 @@ import { isMockMode } from "@/lib/riot/http";
 import {
   findSyncedPuuid,
   findSyncForPuuid,
+  getLeagueSnapshot,
   getPlayerMatchesWithProgress,
+  saveLeagueSnapshot,
   type Progress,
 } from "@/lib/db/matches";
 import { syncAccount } from "@/lib/ingest";
@@ -31,6 +33,8 @@ export type ProfileData = {
   platform: Platform;
   /** true si la plataforma de la URL no era la de la cuenta. */
   platformMismatch: boolean;
+  /** El rango viene de una foto guardada (Riot no respondió). */
+  rankStale: boolean;
   matches: Match[];
   progress: Progress;
   summoner: Summoner | null;
@@ -77,7 +81,7 @@ export async function loadProfile(
     }
   }
 
-  const [summoner, league] = await Promise.all([
+  const [summonerApi, leagueApi] = await Promise.all([
     getSummoner(puuid, effectivePlatform),
     getLeagueEntries(puuid, effectivePlatform),
   ]);
@@ -89,10 +93,11 @@ export async function loadProfile(
       puuid,
       platform: effectivePlatform,
       platformMismatch: effectivePlatform !== platform,
+      rankStale: false,
       matches,
       progress: { known: matches.length, detailed: matches.length },
-      summoner,
-      league,
+      summoner: summonerApi,
+      league: leagueApi,
       source: "demo",
       partial: false,
     };
@@ -100,6 +105,31 @@ export async function loadProfile(
 
   // Una sola consulta trae partidas + progreso.
   let { matches, progress } = await getPlayerMatchesWithProgress(puuid);
+
+  // Fallback: si summoner-v4 falla, el icono y el nivel salen de la última
+  // partida guardada (los mandó Riot en el payload del match).
+  const newestPlayer = matches[0]?.info.participants[0];
+  const summoner =
+    summonerApi ??
+    (newestPlayer?.profileIcon
+      ? {
+          puuid,
+          profileIconId: newestPlayer.profileIcon,
+          summonerLevel: newestPlayer.summonerLevel,
+        }
+      : null);
+  // Rango: si league-v4 no devuelve nada, usamos la última foto guardada.
+  let league = leagueApi;
+  let rankStale = false;
+  if (league.length > 0) {
+    void saveLeagueSnapshot(puuid, effectivePlatform, league).catch(() => {});
+  } else {
+    const snapshot = await getLeagueSnapshot(puuid);
+    if (snapshot && snapshot.entries.length > 0) {
+      league = snapshot.entries as typeof league;
+      rankStale = true;
+    }
+  }
 
   if (progress.detailed < MIN_TO_ANALYZE) {
     try {
@@ -131,6 +161,7 @@ export async function loadProfile(
     puuid,
     platform: effectivePlatform,
     platformMismatch: effectivePlatform !== platform,
+    rankStale,
     matches,
     progress,
     summoner,
