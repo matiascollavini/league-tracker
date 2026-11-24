@@ -32,6 +32,7 @@ const SCHEMA = [
      puuid        TEXT NOT NULL,
      champion_id  INTEGER NOT NULL,
      champion_name TEXT NOT NULL,
+     riot_id      TEXT,
      team_id      INTEGER,
      team_position TEXT,
      win          INTEGER NOT NULL,
@@ -53,6 +54,9 @@ const SCHEMA = [
      match_id TEXT NOT NULL,
      PRIMARY KEY (puuid, match_id)
    )`,
+  // Migraciones para bases creadas con un esquema anterior.
+  `ALTER TABLE match_participants ADD COLUMN riot_id TEXT`,
+  `ALTER TABLE puuid_sync ADD COLUMN locked_by TEXT`,
   `CREATE TABLE IF NOT EXISTS puuid_sync (
      puuid           TEXT PRIMARY KEY,
      platform_id     TEXT NOT NULL,
@@ -93,7 +97,13 @@ export async function ensureSchema(): Promise<void> {
   ready ??= (async () => {
     const c = db();
     for (const statement of SCHEMA) {
-      await c.execute(statement);
+      try {
+        await c.execute(statement);
+      } catch (error) {
+        // ALTER TABLE repetido en una base que ya tiene la columna: se ignora.
+        const message = error instanceof Error ? error.message : "";
+        if (!/duplicate column|already exists/i.test(message)) throw error;
+      }
     }
   })();
   return ready;

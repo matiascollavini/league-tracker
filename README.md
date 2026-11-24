@@ -55,6 +55,14 @@ ventana real de historial) e imprime los headers de rate limit de tu key.
 | `npm run ingest -- "Nombre#TAG" la2 --budget=120` | baja partidas a la base (worker) |
 | `npm run db:stats` | qué hay guardado y cuánto ocupa |
 
+La ingesta puede correr de fondo:
+
+```bash
+nohup npm run ingest -- "Nombre#TAG" la2 --budget=1100 --pages=10 > data/ingest.log 2>&1 &
+tail -f data/ingest.log      # ver el avance
+npm run db:stats             # resumen cada tanto
+```
+
 ---
 
 ## La base de datos (gratis)
@@ -123,6 +131,15 @@ Referencia completa de la API: **[`docs/API-LOL.txt`](docs/API-LOL.txt)**.
 Instrucciones permanentes del proyecto: **[`AGENTS.md`](AGENTS.md)**.
 
 ---
+
+## Páginas
+
+| Ruta | Qué muestra |
+| --- | --- |
+| `/` | buscador por Riot ID + región |
+| `/perfil/[region]/[nombre]/[tag]` | últimas partidas, campeón más jugado, filtros y forma reciente |
+| `/partida/[matchId]?player=<puuid>` | tabla completa de los 10 jugadores de esa partida |
+| `/legal/{terminos,privacidad}` | páginas requeridas para la production key |
 
 ## Lo que hay que tener en cuenta
 

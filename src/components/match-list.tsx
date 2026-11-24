@@ -1,4 +1,5 @@
 import Image from "next/image";
+import Link from "next/link";
 import { championIconUrl } from "@/lib/ddragon/champions";
 import {
   formatDuration,
@@ -12,9 +13,11 @@ type Props = {
   version: string;
   /** championName de Riot -> nombre localizado de Data Dragon. */
   names: Record<string, string>;
+  /** Para linkear al detalle resaltando a este jugador. */
+  puuid: string;
 };
 
-export function MatchList({ matches, version, names }: Props) {
+export function MatchList({ matches, version, names, puuid }: Props) {
   if (matches.length === 0) {
     return (
       <p className="p-4 text-sm text-muted">
@@ -26,15 +29,16 @@ export function MatchList({ matches, version, names }: Props) {
   return (
     <ul className="divide-y divide-line/70">
       {matches.map((match) => (
-        <li
-          key={match.matchId}
-          className={cn(
-            "flex items-center gap-3 border-l-2 px-3 py-2.5 sm:px-4",
-            match.win
-              ? "border-win/70 bg-win/[0.04]"
-              : "border-loss/70 bg-loss/[0.04]",
-          )}
-        >
+        <li key={match.matchId}>
+          <Link
+            href={`/partida/${encodeURIComponent(match.matchId)}?player=${encodeURIComponent(puuid)}`}
+            className={cn(
+              "flex items-center gap-3 border-l-2 px-3 py-2.5 transition-colors hover:bg-ink-800/60 sm:px-4",
+              match.win
+                ? "border-win/70 bg-win/[0.04]"
+                : "border-loss/70 bg-loss/[0.04]",
+            )}
+          >
           <span
             className={cn(
               "hidden w-14 shrink-0 text-[11px] font-semibold uppercase tracking-wide sm:block",
@@ -75,6 +79,7 @@ export function MatchList({ matches, version, names }: Props) {
               {match.kda.toFixed(2)} KDA · {formatDuration(match.durationSeconds)}
             </p>
           </div>
+          </Link>
         </li>
       ))}
     </ul>

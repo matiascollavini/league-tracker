@@ -133,7 +133,12 @@ scripts/        verify-riot.mjs (verificación contra la API real)
   imposible de confundir.
 - Los nombres visibles de campeones salen de **Data Dragon** (`catalog.all`),
   no de Riot: Riot manda el id interno (`Kaisa`, `Nunu`, `MonkeyKing`).
-- Siguiente: Postgres + Redis + worker de backfill (fase 2).
+- Siguiente (pendientes acordados, no perder de vista):
+  1. **Cron de ingesta** en GitHub Actions (gratis) para que el historial se
+     complete solo, sin correr `npm run ingest` a mano.
+  2. **Deploy**: crear cuenta gratis en Turso (SQLite en la nube) + Vercel, y
+     pedir la production key de Riot.
+  3. Más UI: gráficos (Recharts), comparador de jugadores.
 
 ---
 

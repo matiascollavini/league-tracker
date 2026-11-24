@@ -63,15 +63,18 @@ export async function saveMatch(
     })),
     ...info.participants.map((participant) => ({
       sql: `INSERT OR REPLACE INTO match_participants
-              (match_id, puuid, champion_id, champion_name, team_id,
+              (match_id, puuid, champion_id, champion_name, riot_id, team_id,
                team_position, win, kills, deaths, assists,
                gold_earned, cs, vision_score, damage)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       args: [
         matchId,
         participant.puuid,
         participant.championId,
         participant.championName,
+        participant.riotIdGameName
+          ? `${participant.riotIdGameName}#${participant.riotIdTagline ?? ""}`
+          : null,
         participant.teamId ?? null,
         participant.teamPosition || participant.individualPosition || null,
         participant.win ? 1 : 0,
@@ -391,6 +394,96 @@ export async function resetDbForTests(): Promise<void> {
   ]) {
     await c.execute(`DELETE FROM ${table}`);
   }
+}
+
+export type MatchDetailParticipant = {
+  puuid: string;
+  riotId: string | null;
+  championId: number;
+  championName: string;
+  teamId: number;
+  position: string | null;
+  win: boolean;
+  kills: number;
+  deaths: number;
+  assists: number;
+  gold: number;
+  cs: number;
+  vision: number;
+  damage: number;
+};
+
+export type MatchDetail = {
+  matchId: string;
+  platformId: string;
+  queueId: number;
+  gameVersion: string;
+  startedAt: number;
+  durationSeconds: number;
+  participants: MatchDetailParticipant[];
+};
+
+/** Partida completa (los 10 jugadores) para la página de detalle. */
+export async function getMatchDetail(
+  matchId: string,
+): Promise<MatchDetail | null> {
+  await ensureSchema();
+  const c = db();
+
+  const match = await c.execute({
+    sql: "SELECT * FROM matches WHERE match_id = ?",
+    args: [matchId],
+  });
+  const row = match.rows[0];
+  if (!row) return null;
+
+  const parts = await c.execute({
+    sql: "SELECT * FROM match_participants WHERE match_id = ?",
+    args: [matchId],
+  });
+
+  return {
+    matchId,
+    platformId: str(row.platform_id),
+    queueId: num(row.queue_id),
+    gameVersion: str(row.game_version),
+    startedAt: num(row.game_start_ts),
+    durationSeconds: num(row.game_duration_s),
+    participants: parts.rows.map((p) => ({
+      puuid: str(p.puuid),
+      riotId: p.riot_id == null ? null : str(p.riot_id),
+      championId: num(p.champion_id),
+      championName: str(p.champion_name),
+      teamId: num(p.team_id),
+      position: str(p.team_position) || null,
+      win: num(p.win) === 1,
+      kills: num(p.kills),
+      deaths: num(p.deaths),
+      assists: num(p.assists),
+      gold: num(p.gold_earned),
+      cs: num(p.cs),
+      vision: num(p.vision_score),
+      damage: num(p.damage),
+    })),
+  };
+}
+
+/** Nombre y región de un jugador sincronizado (para el link de vuelta). */
+export async function getPlayerLabel(
+  puuid: string,
+): Promise<{ gameName: string; tagLine: string; platform: string } | null> {
+  await ensureSchema();
+  const result = await db().execute({
+    sql: "SELECT game_name, tag_line, platform_id FROM puuid_sync WHERE puuid = ?",
+    args: [puuid],
+  });
+  const row = result.rows[0];
+  if (!row?.game_name) return null;
+  return {
+    gameName: str(row.game_name),
+    tagLine: str(row.tag_line),
+    platform: str(row.platform_id),
+  };
 }
 
 export { participantOf };

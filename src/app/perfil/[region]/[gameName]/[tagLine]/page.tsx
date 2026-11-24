@@ -294,6 +294,29 @@ export default async function ProfilePage({
           ) : null}
 
           <div className="rounded-xl border border-line bg-ink-900/60 p-4">
+            <p className="text-[11px] font-medium uppercase tracking-wider text-muted">
+              Forma reciente
+            </p>
+            <div className="mt-2 flex flex-wrap gap-1">
+              {rows.slice(0, 20).map((row) => (
+                <span
+                  key={row.matchId}
+                  title={`${names[row.championName] ?? row.championName} · ${row.win ? "Victoria" : "Derrota"}`}
+                  className={cn(
+                    "size-5 rounded-sm",
+                    row.win ? "bg-win/70" : "bg-loss/70",
+                  )}
+                />
+              ))}
+            </div>
+            <p className="mt-2 text-[11px] text-muted">
+              Últimas {Math.min(rows.length, 20)} partidas ·{" "}
+              {rows.slice(0, 20).filter((r) => r.win).length}V ·{" "}
+              {rows.slice(0, 20).filter((r) => !r.win).length}D
+            </p>
+          </div>
+
+          <div className="rounded-xl border border-line bg-ink-900/60 p-4">
             <div className="flex items-start gap-2">
               <Info className="mt-0.5 size-4 shrink-0 text-gold-600" aria-hidden />
               <div className="space-y-2 text-xs leading-relaxed text-muted">
@@ -333,7 +356,12 @@ export default async function ProfilePage({
               : `${visible.length} de ${summary.matches} analizadas`}
           </span>
         </div>
-        <MatchList matches={visible} version={catalog.version} names={names} />
+        <MatchList
+          matches={visible}
+          version={catalog.version}
+          names={names}
+          puuid={account.puuid}
+        />
       </section>
     </div>
   );

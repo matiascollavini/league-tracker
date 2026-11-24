@@ -259,6 +259,8 @@ test propio para que no vuelva a pasar.
 
 - [x] Persistencia + ingesta (fase 2): SQLite/Turso con backfill resumible.
 - [ ] Mover la ingesta a un cron (GitHub Actions) para que se complete sola.
+      **Pendiente acordado con el operador: hacerlo después de la UI.**
+- [ ] Turso + deploy (**después de la UI**, por decisión del operador).
 - [ ] Medir cuánto tarda un backfill completo de ~1.000 partidas con dev key.
 - [x] Correr `npm run verify:riot` con una dev key. Hecho el 2026-11-24: límites
       reales confirmados (100/2min + 20/1s), paginación medida (~519 partidas en
