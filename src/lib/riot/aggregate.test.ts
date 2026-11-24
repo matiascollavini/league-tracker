@@ -5,6 +5,7 @@ import {
   formatDuration,
   kdaOf,
   patchOf,
+  roleOrderIndex,
   summarize,
   toMatchSummaries,
 } from "./aggregate";
@@ -179,6 +180,22 @@ describe("formatDuration", () => {
   it("formatea mm:ss", () => {
     expect(formatDuration(1_832)).toBe("30:32");
     expect(formatDuration(59)).toBe("0:59");
+  });
+});
+
+describe("orden por rol en la tabla de una partida", () => {
+  it("ordena TOP, JUNGLA, MID, ADC, SUPPORT", () => {
+    const desordenados = ["UTILITY", "BOTTOM", "TOP", "MIDDLE", "JUNGLE"];
+    expect([...desordenados].sort((a, b) => roleOrderIndex(a) - roleOrderIndex(b)))
+      .toEqual(["TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY"]);
+  });
+
+  it("manda al final los roles desconocidos sin desordenar el resto", () => {
+    expect(roleOrderIndex("Invalid")).toBe(5);
+    expect(roleOrderIndex("NONE")).toBe(5);
+    expect(roleOrderIndex("")).toBe(5);
+    expect(roleOrderIndex(null)).toBe(5);
+    expect(roleOrderIndex("JUNGLE")).toBe(1);
   });
 });
 

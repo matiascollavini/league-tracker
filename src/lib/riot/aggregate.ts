@@ -240,6 +240,22 @@ export function normalizeRole(raw: string): string {
   return (ROLES as readonly string[]).includes(raw) ? raw : "";
 }
 
+const ROLE_ORDER: Record<string, number> = {
+  TOP: 0,
+  JUNGLE: 1,
+  MIDDLE: 2,
+  BOTTOM: 3,
+  UTILITY: 4,
+};
+
+/**
+ * Índice de orden por línea (TOP → SUPPORT). Los roles desconocidos
+ * ("Invalid", "NONE", vacío) van al final para no romper la tabla.
+ */
+export function roleOrderIndex(raw: string | null | undefined): number {
+  return raw && ROLE_ORDER[raw] !== undefined ? ROLE_ORDER[raw] : ROLES.length;
+}
+
 export function normalizePosition(participant: Participant): string {
   const raw = participant.teamPosition || participant.individualPosition || "";
   switch (raw) {

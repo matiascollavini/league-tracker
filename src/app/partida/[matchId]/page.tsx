@@ -3,7 +3,12 @@ import Link from "next/link";
 import { ArrowLeft, Swords } from "lucide-react";
 import { getChampionCatalog, championIconUrl } from "@/lib/ddragon/champions";
 import { getMatchDetail, getPlayerLabel } from "@/lib/db/matches";
-import { formatDuration, kdaOf, timeAgo } from "@/lib/riot/aggregate";
+import {
+  formatDuration,
+  kdaOf,
+  roleOrderIndex,
+  timeAgo,
+} from "@/lib/riot/aggregate";
 import { queueLabel } from "@/lib/riot/config";
 import { cn } from "@/lib/utils";
 
@@ -69,7 +74,9 @@ export default async function MatchPage({ params, searchParams }: Props) {
   const teams = [100, 200]
     .map((teamId) => ({
       teamId,
-      participants: detail.participants.filter((p) => p.teamId === teamId),
+      participants: detail.participants
+        .filter((p) => p.teamId === teamId)
+        .sort((a, b) => roleOrderIndex(a.position) - roleOrderIndex(b.position)),
     }))
     .filter((team) => team.participants.length > 0);
 
