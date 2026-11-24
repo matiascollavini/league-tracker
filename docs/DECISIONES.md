@@ -269,6 +269,13 @@ production key (20 s) conviene atarlo a una visita.
 - Un amigo que jugó con alguien ya cacheado cuesta 0 requests de detalle.
 - Límites de Turso: 12 escrituras por partida (1 partida + 10 participantes +
   1 vínculo). 10M/mes ≈ 800 cuentas completas.
+- **La cola no puede mirar solo `backfill_state`**: "done" significa "ya descubrí
+  todos los IDs", no "ya bajé todos los detalles". El worker selecciona a quien
+  tenga IDs pendientes de detalle, aunque el descubrimiento esté completo.
+- **Turso no acepta `PRAGMA user_version = N`**: la versión del esquema se guarda
+  en una tabla `meta`. Con eso el arranque en frío hace 2 viajes en vez de 8.
+- **Una sola consulta por render**: `getPlayerMatchesWithProgress` trae partidas
+  y progreso juntos (cada query a Turso es un viaje de red).
 
 ---
 

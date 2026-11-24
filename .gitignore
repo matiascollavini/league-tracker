@@ -7,3 +7,4 @@ dist
 .pi/subagents/
 *.tsbuildinfo
 data/
+.env*.local

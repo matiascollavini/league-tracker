@@ -46,6 +46,22 @@ $env:DATABASE_URL="libsql://..."; $env:DATABASE_AUTH_TOKEN="eyJ..."; npm run db:
 
 Debe imprimir las 4 tablas y `✔ esquema listo`.
 
+### Subir el historial que ya tenés en local
+
+No hace falta volver a pedirle nada a Riot: se copia el archivo local a Turso.
+
+```bash
+npm run db:copy -- --prod     # local -> Turso (usa .env.turso.local)
+npm run db:stats -- --prod    # ver qué quedó en la nube
+```
+
+Los scripts aceptan `--prod`, que carga `.env.turso.local` (gitignoreado) con la
+URL y el token de Turso. Para el worker en producción:
+
+```bash
+npm run worker -- --prod --minutes=8 --budget=250
+```
+
 ## 3. Deploy en Vercel
 
 1. Subí el repo a GitHub (privado o público).
@@ -62,6 +78,7 @@ Debe imprimir las 4 tablas y `✔ esquema listo`.
 | `DD_LOCALE` | `es_ES` |
 | `RIOT_ANALYZE_COUNT` | `24` |
 | `RIOT_ONDEMAND_BUDGET` | `25` con dev key · `300`–`400` con production key |
+| `TURSO` | no hace falta en Vercel (solo para los scripts locales) |
 
 **Qué significa `RIOT_ONDEMAND_BUDGET`:** cuántos requests puede gastar la
 primera búsqueda de una cuenta nueva. Con `25`, el usuario ve las últimas ~24

@@ -17,6 +17,10 @@ let client: Client | null = null;
 let ready: Promise<void> | null = null;
 
 const SCHEMA = [
+  `CREATE TABLE IF NOT EXISTS meta (
+     key   TEXT PRIMARY KEY,
+     value TEXT NOT NULL
+   )`,
   `CREATE TABLE IF NOT EXISTS matches (
      match_id        TEXT PRIMARY KEY,
      platform_id     TEXT NOT NULL,
@@ -98,22 +102,48 @@ export function db(): Client {
   return client;
 }
 
-/** Crea las tablas si no existen. Idempotente. */
+const SCHEMA_VERSION = 2;
+
+/**
+ * Crea las tablas si no existen. Idempotente y barato: en Turso cada statement
+ * es un viaje de red, así que miramos `user_version` (1 viaje) y solo hacemos
+ * el trabajo pesado la primera vez (1 batch).
+ */
 export async function ensureSchema(): Promise<void> {
   ready ??= (async () => {
     const c = db();
-    for (const statement of SCHEMA) {
-      await c.execute(statement);
-    }
+
+    // Turso no permite `PRAGMA user_version = N`, así que la versión va en una
+    // tabla. Son 2 viajes por arranque en frío y el trabajo pesado corre una vez.
+    await c.execute(
+      "CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
+    );
+    const current = await c.execute({
+      sql: "SELECT value FROM meta WHERE key = ?",
+      args: ["schema_version"],
+    });
+    const version = Number(current.rows[0]?.value ?? 0);
+    if (version >= SCHEMA_VERSION) return;
+
+    await c.batch(
+      SCHEMA.map((sql) => ({ sql, args: [] })),
+      "write",
+    );
+
     for (const statement of MIGRATIONS) {
       try {
         await c.execute(statement);
       } catch (error) {
-        // La columna ya existe: es lo esperado en cada arranque.
+        // La columna ya existe: es lo esperado en bases nuevas.
         const message = error instanceof Error ? error.message : "";
         if (!/duplicate column/i.test(message)) throw error;
       }
     }
+
+    await c.execute({
+      sql: "INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)",
+      args: ["schema_version", String(SCHEMA_VERSION)],
+    });
   })();
   return ready;
 }

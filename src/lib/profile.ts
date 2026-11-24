@@ -2,7 +2,10 @@ import type { Platform } from "@/lib/riot/config";
 import { getLeagueEntries, getSummoner, resolveAccount } from "@/lib/riot/account";
 import { getRecentMatches } from "@/lib/riot/matches";
 import { isMockMode } from "@/lib/riot/http";
-import { getPlayerMatches, getProgress, type Progress } from "@/lib/db/matches";
+import {
+  getPlayerMatchesWithProgress,
+  type Progress,
+} from "@/lib/db/matches";
 import { syncAccount } from "@/lib/ingest";
 import type { Account, LeagueEntry, Match, Summoner } from "@/lib/riot/types";
 
@@ -68,15 +71,16 @@ export async function loadProfile(
     };
   }
 
-  let progress = await getProgress(account.puuid);
+  // Una sola consulta trae partidas + progreso.
+  let { matches, progress } = await getPlayerMatchesWithProgress(account.puuid);
 
   if (progress.detailed < MIN_TO_ANALYZE) {
     try {
-      const result = await syncAccount(platform, gameName, tagLine, {
+      await syncAccount(platform, gameName, tagLine, {
         budget: onDemandBudget(),
         maxPages: 4,
       });
-      progress = result.progress;
+      ({ matches, progress } = await getPlayerMatchesWithProgress(account.puuid));
     } catch (error) {
       // 429 o 5xx: no rompemos la página, seguimos con lo que haya.
       console.warn(
@@ -86,8 +90,6 @@ export async function loadProfile(
     }
   }
 
-  let matches =
-    progress.detailed > 0 ? await getPlayerMatches(account.puuid) : [];
   let source: ProfileSource = "db";
 
   if (matches.length === 0) {

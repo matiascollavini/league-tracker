@@ -204,6 +204,46 @@ export function rowToMatch(row: PlayerMatchRow): Match {
   };
 }
 
+/**
+ * Partidas + progreso en UNA sola consulta (importante en Turso: cada query es
+ * un viaje de red). Devuelve también cuántas partidas conocidas hay en total.
+ */
+export async function getPlayerMatchesWithProgress(
+  puuid: string,
+  limit = 1_000,
+): Promise<{ matches: Match[]; progress: Progress }> {
+  await ensureSchema();
+  const result = await db().execute({
+    sql: `SELECT pm.puuid, m.match_id, m.queue_id, m.game_mode, m.game_version,
+                 m.game_start_ts, m.game_duration_s,
+                 p.champion_id, p.champion_name, p.team_id, p.team_position,
+                 p.win, p.kills, p.deaths, p.assists,
+                 p.cs, p.gold_earned, p.vision_score, p.damage,
+                 (SELECT COUNT(*) FROM puuid_matches pm2
+                   WHERE pm2.puuid = pm.puuid) AS known_total
+            FROM puuid_matches pm
+            JOIN matches m ON m.match_id = pm.match_id
+            JOIN match_participants p
+              ON p.match_id = pm.match_id AND p.puuid = pm.puuid
+           WHERE pm.puuid = ?
+           ORDER BY m.game_start_ts DESC
+           LIMIT ?`,
+    args: [puuid, limit],
+  });
+
+  const matches: Match[] = [];
+  let known = 0;
+  for (const row of result.rows) {
+    matches.push(rowToMatch(row as PlayerMatchRow));
+    known = num(row.known_total);
+  }
+
+  return {
+    matches,
+    progress: { known: Math.max(known, matches.length), detailed: matches.length },
+  };
+}
+
 /** Partidas guardadas de un jugador, de la más nueva a la más vieja. */
 export async function getPlayerMatches(
   puuid: string,
@@ -419,7 +459,15 @@ export async function listPendingPlayers(
   const result = await db().execute({
     sql: `SELECT ps.puuid, ps.platform_id, ps.game_name, ps.tag_line
             FROM puuid_sync ps
-           WHERE ps.backfill_state <> 'done'
+           WHERE (
+                   ps.backfill_state <> 'done'
+                   OR EXISTS (
+                     SELECT 1
+                       FROM puuid_matches pm
+                       LEFT JOIN matches m ON m.match_id = pm.match_id
+                      WHERE pm.puuid = ps.puuid AND m.match_id IS NULL
+                   )
+                 )
              AND (ps.locked_until IS NULL OR ps.locked_until < ?)
            ORDER BY COALESCE(ps.last_synced_at, 0) ASC
            LIMIT ?`,
@@ -439,7 +487,17 @@ export async function listPendingPlayers(
 export async function countPendingPlayers(): Promise<number> {
   await ensureSchema();
   const result = await db().execute({
-    sql: "SELECT COUNT(*) AS n FROM puuid_sync WHERE backfill_state <> 'done'",
+    sql: `SELECT COUNT(*) AS n
+            FROM puuid_sync ps
+           WHERE (
+             ps.backfill_state <> 'done'
+             OR EXISTS (
+               SELECT 1
+                 FROM puuid_matches pm
+                 LEFT JOIN matches m ON m.match_id = pm.match_id
+                WHERE pm.puuid = ps.puuid AND m.match_id IS NULL
+             )
+           )`,
   });
   return num(result.rows[0]?.n);
 }

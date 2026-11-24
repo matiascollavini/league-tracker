@@ -1,21 +1,8 @@
 #!/usr/bin/env tsx
 /** Resumen de lo que hay guardado: npm run db:stats */
 
-import { readFileSync, existsSync } from "node:fs";
-import { resolve } from "node:path";
 
-function loadEnv() {
-  const file = resolve(process.cwd(), ".env.local");
-  if (!existsSync(file)) return;
-  for (const line of readFileSync(file, "utf8").split(/\r?\n/)) {
-    const match = /^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/.exec(line);
-    if (!match) continue;
-    const key = match[1];
-    const raw = match[2];
-    if (!key || raw == null) continue;
-    if (!(key in process.env)) process.env[key] = raw.replace(/^["']|["']$/g, "");
-  }
-}
+import { loadEnv } from "./env";
 
 async function main() {
   loadEnv();

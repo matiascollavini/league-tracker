@@ -56,6 +56,7 @@ ventana real de historial) e imprime los headers de rate limit de tu key.
 | `npm run db:stats` | qué hay guardado y cuánto ocupa |
 | `npm run worker -- --minutes=8` | baja lo pendiente de la cola (lo que corre el cron) |
 | `npm run db:migrate` | crea/migra el esquema en la base configurada |
+| `npm run db:copy -- --prod` | sube la base local a Turso sin re-descargar |
 | `npm run repair:names` | completa nombres faltantes en partidas viejas |
 
 La ingesta puede correr de fondo:
