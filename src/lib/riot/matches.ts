@@ -10,12 +10,20 @@ export function analyzeCount(): number {
   return Math.min(100, Math.max(1, value));
 }
 
+/** Riot retiene 2 años de historial: pedimos explícitamente esa ventana. */
+export const HISTORY_WINDOW_DAYS = 730;
+
+export function historyWindowStart(now = Date.now()): number {
+  return Math.floor((now - HISTORY_WINDOW_DAYS * 86_400_000) / 1_000);
+}
+
 /** Una página de IDs (count 0..100). Host REGIONAL. */
 export async function getMatchIdsPage(
   puuid: string,
   platform: Platform,
   start = 0,
   count = 100,
+  sinceSeconds?: number,
 ): Promise<string[]> {
   if (isMockMode()) {
     return mockMatches()
@@ -23,8 +31,9 @@ export async function getMatchIdsPage(
       .map((match) => match.metadata.matchId);
   }
 
+  const since = sinceSeconds ? `&startTime=${sinceSeconds}` : "";
   return riotFetch(
-    `/lol/match/v5/matches/by-puuid/${puuid}/ids?start=${start}&count=${count}`,
+    `/lol/match/v5/matches/by-puuid/${puuid}/ids?start=${start}&count=${count}${since}`,
     // MATCH-V5 vive en el host REGIONAL.
     { cluster: clusterFor(platform), revalidate: 120, schema: MatchIdsSchema },
   ).catch((error: unknown) => {

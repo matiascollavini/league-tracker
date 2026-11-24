@@ -35,6 +35,8 @@ type RouteParams = { region: string; gameName: string; tagLine: string };
 type SearchParams = Record<string, string | string[] | undefined>;
 
 export const revalidate = 120;
+// En Vercel el render puede sincronizar un poco contra Riot.
+export const maxDuration = 60;
 
 function first(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;

@@ -235,6 +235,43 @@ Medición real: 39 partidas con 390 participantes = **0,12 MB** (3 KB/partida).
 
 ---
 
+## ADR-008 — Producción: cola de pendientes + worker con presupuesto
+
+**Estado:** aceptada · **Fecha:** 2026-11-24
+
+### Contexto
+En producción no hay disco persistente y el backfill de una cuenta (~1.000
+partidas = ~1.011 requests) no entra en el request de un usuario, ni con
+production key (20 s) conviene atarlo a una visita.
+
+### Decisión
+1. **Cola implícita en `puuid_sync`**: `backfill_state != 'done'` es la lista de
+   pendientes. No hace falta una tabla de jobs: el estado ya existía.
+2. **Worker desacoplado** (`npm run worker`): toma jugadores de la cola, les baja
+   partidas con presupuesto de **tiempo** (`--minutes`) y de **requests**
+   (`--budget`) y vuelve a encolarlos. Corre en GitHub Actions cada 10 minutos
+   (gratis en repos públicos) y también a mano.
+3. **Reanudable por cursor**: cada corrida mira la página 0 (partidas nuevas) y
+   sigue el backfill desde `idsCursor / 100`, en vez de repetir las mismas
+   páginas. Antes el worker re-leía siempre 0..N y un jugador completo nunca
+   llegaba a `done`.
+4. **Ventana explícita de 2 años** (`startTime`), que es lo que Riot retiene.
+5. **La visita al perfil no bloquea**: si el jugador es nuevo, sincroniza 25
+   requests y muestra el resto con barra de progreso; el worker completa.
+6. **Sin Turso no hay producción**: Vercel no tiene disco persistente. Turso es
+   el mismo SQLite (`libsql://`) y el código no cambia.
+
+### Consecuencias
+- El worker no gasta el request de resolver el Riot ID: trabaja con el `puuid`
+  guardado (`syncPuuid`).
+- Costo por cuenta nueva: ~1.011 requests **una vez**; después, 1 request por
+  corrida para detectar partidas nuevas.
+- Un amigo que jugó con alguien ya cacheado cuesta 0 requests de detalle.
+- Límites de Turso: 12 escrituras por partida (1 partida + 10 participantes +
+  1 vínculo). 10M/mes ≈ 800 cuentas completas.
+
+---
+
 ## Registro de auditoría
 
 **2026-11-24 — auditoría de `docs/API-LOL.txt` v1.0.** Un `evidence-auditor` sin
@@ -258,8 +295,8 @@ test propio para que no vuelva a pasar.
 ## Pendientes (no decididos todavía)
 
 - [x] Persistencia + ingesta (fase 2): SQLite/Turso con backfill resumible.
-- [ ] Mover la ingesta a un cron (GitHub Actions) para que se complete sola.
-      **Pendiente acordado con el operador: hacerlo después de la UI.**
+- [x] Cron de ingesta en GitHub Actions (`.github/workflows/worker.yml`).
+- [ ] Crear la base en Turso y deployar en Vercel (guía: `docs/DEPLOY.md`).
 - [ ] Turso + deploy (**después de la UI**, por decisión del operador).
 - [ ] Medir cuánto tarda un backfill completo de ~1.000 partidas con dev key.
 - [x] Correr `npm run verify:riot` con una dev key. Hecho el 2026-11-24: límites

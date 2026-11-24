@@ -54,6 +54,9 @@ ventana real de historial) e imprime los headers de rate limit de tu key.
 | `npm run verify:riot -- "Nombre#TAG" la2` | verificación empírica contra la API real |
 | `npm run ingest -- "Nombre#TAG" la2 --budget=120` | baja partidas a la base (worker) |
 | `npm run db:stats` | qué hay guardado y cuánto ocupa |
+| `npm run worker -- --minutes=8` | baja lo pendiente de la cola (lo que corre el cron) |
+| `npm run db:migrate` | crea/migra el esquema en la base configurada |
+| `npm run repair:names` | completa nombres faltantes en partidas viejas |
 
 La ingesta puede correr de fondo:
 
@@ -99,6 +102,9 @@ key, ~20 segundos.
 
 Mientras tanto, cada visita al perfil analiza un poco (25 requests) si el
 jugador es nuevo, y muestra una barra de progreso.
+
+**Producción:** `docs/DEPLOY.md` (Turso + Vercel + worker en GitHub Actions,
+todo gratis).
 
 ## Cómo está armado
 

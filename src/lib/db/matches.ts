@@ -1,4 +1,5 @@
 import type { Row } from "@libsql/client";
+import { isPlatform, type Platform } from "@/lib/riot/config";
 import { db, ensureSchema } from "./client";
 import { durationSeconds, participantOf } from "@/lib/riot/aggregate";
 import type { Match } from "@/lib/riot/types";
@@ -315,28 +316,47 @@ export async function touchSyncState(
   },
 ): Promise<void> {
   await ensureSchema();
-  await db().execute({
-    sql: `INSERT INTO puuid_sync
-            (puuid, platform_id, game_name, tag_line, last_synced_at,
-             ids_cursor, backfill_state)
-          VALUES (?, ?, ?, ?, ?, ?, ?)
-          ON CONFLICT(puuid) DO UPDATE SET
-            platform_id    = excluded.platform_id,
-            game_name      = COALESCE(excluded.game_name, puuid_sync.game_name),
-            tag_line       = COALESCE(excluded.tag_line, puuid_sync.tag_line),
-            last_synced_at = COALESCE(excluded.last_synced_at, puuid_sync.last_synced_at),
-            ids_cursor     = MAX(excluded.ids_cursor, puuid_sync.ids_cursor),
-            backfill_state = excluded.backfill_state`,
-    args: [
-      puuid,
-      platformId,
-      values.gameName ?? null,
-      values.tagLine ?? null,
-      values.lastSyncedAt ?? null,
-      values.idsCursor ?? 0,
-      values.backfillState ?? "none",
-    ],
-  });
+
+  const baseArgs = [
+    puuid,
+    platformId,
+    values.gameName ?? null,
+    values.tagLine ?? null,
+    values.lastSyncedAt ?? null,
+    values.idsCursor ?? 0,
+  ];
+
+  // Sin backfillState se actualiza solo el resto: NUNCA pisar el estado
+  // (antes se sobreescribía un 'done' con 'none' y el jugador volvía a la cola).
+  const sql =
+    values.backfillState === undefined
+      ? `INSERT INTO puuid_sync
+           (puuid, platform_id, game_name, tag_line, last_synced_at, ids_cursor)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT(puuid) DO UPDATE SET
+           platform_id    = excluded.platform_id,
+           game_name      = COALESCE(excluded.game_name, puuid_sync.game_name),
+           tag_line       = COALESCE(excluded.tag_line, puuid_sync.tag_line),
+           last_synced_at = COALESCE(excluded.last_synced_at, puuid_sync.last_synced_at),
+           ids_cursor     = MAX(excluded.ids_cursor, puuid_sync.ids_cursor)`
+      : `INSERT INTO puuid_sync
+           (puuid, platform_id, game_name, tag_line, last_synced_at,
+            ids_cursor, backfill_state)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(puuid) DO UPDATE SET
+           platform_id    = excluded.platform_id,
+           game_name      = COALESCE(excluded.game_name, puuid_sync.game_name),
+           tag_line       = COALESCE(excluded.tag_line, puuid_sync.tag_line),
+           last_synced_at = COALESCE(excluded.last_synced_at, puuid_sync.last_synced_at),
+           ids_cursor     = MAX(excluded.ids_cursor, puuid_sync.ids_cursor),
+           backfill_state = excluded.backfill_state`;
+
+  const args =
+    values.backfillState === undefined
+      ? baseArgs
+      : [...baseArgs, values.backfillState];
+
+  await db().execute({ sql, args });
 }
 
 /**
@@ -379,6 +399,49 @@ export async function unlockSync(puuid: string, token: string): Promise<void> {
     sql: "UPDATE puuid_sync SET locked_until = NULL, locked_by = NULL WHERE puuid = ? AND locked_by = ?",
     args: [puuid, token],
   });
+}
+
+export type PendingPlayer = {
+  puuid: string;
+  platform: Platform;
+  gameName: string | null;
+  tagLine: string | null;
+};
+
+/**
+ * Jugadores a los que les falta historial, ordenados por "hace más que no se
+ * tocan" (round-robin justo entre búsquedas nuevas y viejas).
+ */
+export async function listPendingPlayers(
+  limit = 5,
+): Promise<PendingPlayer[]> {
+  await ensureSchema();
+  const result = await db().execute({
+    sql: `SELECT ps.puuid, ps.platform_id, ps.game_name, ps.tag_line
+            FROM puuid_sync ps
+           WHERE ps.backfill_state <> 'done'
+             AND (ps.locked_until IS NULL OR ps.locked_until < ?)
+           ORDER BY COALESCE(ps.last_synced_at, 0) ASC
+           LIMIT ?`,
+    args: [Date.now(), limit],
+  });
+
+  return result.rows
+    .map((row) => ({
+      puuid: str(row.puuid),
+      platform: str(row.platform_id),
+      gameName: row.game_name == null ? null : str(row.game_name),
+      tagLine: row.tag_line == null ? null : str(row.tag_line),
+    }))
+    .filter((row): row is PendingPlayer => isPlatform(row.platform));
+}
+
+export async function countPendingPlayers(): Promise<number> {
+  await ensureSchema();
+  const result = await db().execute({
+    sql: "SELECT COUNT(*) AS n FROM puuid_sync WHERE backfill_state <> 'done'",
+  });
+  return num(result.rows[0]?.n);
 }
 
 export async function totalMatchesInDb(): Promise<number> {

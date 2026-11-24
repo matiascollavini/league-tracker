@@ -1,0 +1,33 @@
+name: worker
+
+# Baja historial a la base (Turso) en segundo plano. Gratis en repos públicos.
+on:
+  schedule:
+    - cron: "*/10 * * * *" # cada 10 minutos (el mínimo de Actions es 5)
+  workflow_dispatch: # botón para correrlo a mano
+
+concurrency:
+  group: ingest
+  cancel-in-progress: false
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Bajar partidas pendientes
+        run: npm run worker -- --minutes=8 --budget=900 --players=5
+        env:
+          RIOT_API_KEY: ${{ secrets.RIOT_API_KEY }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_AUTH_TOKEN: ${{ secrets.DATABASE_AUTH_TOKEN }}
+          DD_LOCALE: es_ES

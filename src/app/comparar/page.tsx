@@ -20,6 +20,7 @@ export const metadata: Metadata = {
 };
 
 export const revalidate = 300;
+export const maxDuration = 60;
 
 type SearchParams = Record<string, string | string[] | undefined>;
 

@@ -94,7 +94,7 @@ _(Detalle y justificación en `docs/DECISIONES.md`.)_
 | Hosting | Vercel Hobby (escape hatch: Fly.io) | decidido |
 | Caché caliente | `fetch` de Next (sin Redis: la DB hace de caché y de lock) | decidido |
 | Persistencia | **SQLite** local / **Turso** free en prod (ADR-007) | implementado |
-| Ingest | `npm run ingest` (backfill resumible); cron pendiente | implementado |
+| Ingest | `npm run ingest` + `npm run worker` (cola con cursor) + cron en Actions | implementado |
 | Estado del código | v1 funcionando con **datos reales** (dev key en `.env.local`) | implementado |
 
 ### Regla de producto derivada del ADR-002
@@ -134,11 +134,9 @@ scripts/        verify-riot.mjs (verificación contra la API real)
 - Los nombres visibles de campeones salen de **Data Dragon** (`catalog.all`),
   no de Riot: Riot manda el id interno (`Kaisa`, `Nunu`, `MonkeyKing`).
 - Siguiente (pendientes acordados, no perder de vista):
-  1. **Cron de ingesta** en GitHub Actions (gratis) para que el historial se
-     complete solo, sin correr `npm run ingest` a mano.
-  2. **Deploy**: crear cuenta gratis en Turso (SQLite en la nube) + Vercel, y
-     pedir la production key de Riot.
-  3. Más UI: gráficos (Recharts), comparador de jugadores.
+  1. **Deploy**: crear cuenta gratis en Turso + Vercel (paso a paso en
+     `docs/DEPLOY.md`) y pedir la production key de Riot.
+  2. Más UI: gráficos (winrate por campeón, evolución temporal).
 
 ---
 
