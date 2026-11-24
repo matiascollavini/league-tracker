@@ -107,7 +107,13 @@ export async function loadProfile(
   // Un jugador puede tener varios puuids (Riot los reasigna): se lee el conjunto.
   // Incluye el que devolvió Riot en esta visita, que puede no tener fila todavía.
   const playerPuuids = [
-    ...new Set([account.puuid, ...(await getAliasPuuids(puuid))]),
+    ...new Set([
+      account.puuid,
+      ...(await getAliasPuuids(puuid, {
+        gameName: account.gameName ?? gameName,
+        tagLine: account.tagLine ?? tagLine,
+      })),
+    ]),
   ];
 
   // Una sola consulta trae partidas + progreso + si está en la cola.

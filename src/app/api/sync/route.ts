@@ -73,6 +73,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       ok: true,
+      // Con qué puuid trabajó: sirve para ver si Riot devolvió uno viejo.
+      puuid: result.puuid,
       detailed: result.progress.detailed,
       known: result.progress.known,
       done: result.done,

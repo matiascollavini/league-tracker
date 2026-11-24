@@ -15,7 +15,9 @@ const enc = encodeURIComponent;
 
 /**
  * ACCOUNT-V1: Riot ID (gameName#tagLine) -> puuid.
- * Host REGIONAL. El puuid es estable; el nombre no. Cacheamos una semana.
+ * Host REGIONAL. El nombre no es estable y el puuid tampoco: Riot lo reasigna
+ * (keke#6seve tiene dos). Una semana de caché dejaba un puuid viejo pegado y
+ * partía el historial del jugador; con una hora alcanza y se corrige rápido.
  */
 export async function resolveAccount(
   platform: Platform,
@@ -31,7 +33,7 @@ export async function resolveAccount(
     // ACCOUNT-V1 vive en el host REGIONAL, no en el de plataforma.
     {
       cluster: clusterFor(platform),
-      revalidate: 604_800,
+      revalidate: 3_600,
       schema: AccountSchema,
       deadline,
     },

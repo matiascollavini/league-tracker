@@ -354,9 +354,12 @@ hubiese llegado a 756. No era un contador roto: había **tres definiciones** de
 ### Decisión
 1. **Las lecturas aceptan un conjunto de puuids** (`string | readonly string[]`):
    `getProgress`, `pendingMatchIds` y `getPlayerMatchesWithProgress`.
-2. **`getAliasPuuids(puuid)`** une por Riot ID: todos los `puuid_sync` que
-   comparten `game_name`/`tag_line` son la misma persona. El perfil además suma
-   el puuid que devolvió Riot en esa visita (puede no tener fila todavía).
+2. **`getAliasPuuids(puuid)`** une por Riot ID con **dos fuentes**: los
+   `puuid_sync` que comparten `game_name`/`tag_line` **y** los `riot_id` que
+   quedaron guardados en `match_participants`. La segunda es la que no depende
+   de Riot: `account-v1` puede devolver (o tener cacheado) el puuid viejo y las
+   partidas ya tienen el nuevo escrito. El perfil además suma el puuid que
+   devolvió Riot en esa visita (puede no tener fila todavía).
 3. **Una partida cuenta como analizada solo si el jugador aparece de verdad en
    ella** (fila de participante de cualquiera de sus puuids). Es la misma
    definición para el botón, para la página y para el `done`.
@@ -374,6 +377,11 @@ hubiese llegado a 756. No era un contador roto: había **tres definiciones** de
   perfil: aceptable frente a tener números que no cierran.
 - Un `puuid_sync` con nombre repetido y puuid inválido ya no rompe nada: se suma
   como alias y sus partidas se siguen mostrando.
+- **`account-v1` ya no se cachea una semana** (`revalidate: 3600`): suponer que
+  el puuid es inmutable fue el error. Con una hora, si Riot lo reasigna, se
+  corrige solo; mientras tanto los alias por `riot_id` sostienen los datos.
+- `/api/sync` devuelve el `puuid` con el que trabajó: si vuelve a pasar algo
+  raro con una cuenta, se ve en la respuesta sin adivinar.
 
 ---
 

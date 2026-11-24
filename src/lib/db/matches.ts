@@ -27,20 +27,35 @@ const inClause = (count: number): string =>
   Array.from({ length: count }, () => "?").join(",");
 
 /**
- * Todos los puuids que son la misma persona: los que comparten Riot ID en
- * `puuid_sync`. Barato (1 query) y solo cuando hay nombre guardado.
+ * Todos los puuids que son la misma persona.
+ *
+ * Dos fuentes, en la misma query: las filas de `puuid_sync` con el mismo Riot ID
+ * y los `riot_id` que quedaron guardados en las partidas. La segunda es la que
+ * salva el caso real: `account-v1` puede devolver un puuid viejo (o estar
+ * cacheado) mientras las partidas ya tienen el nuevo, y así y todo se juntan.
  */
-export async function getAliasPuuids(puuid: string): Promise<string[]> {
+export async function getAliasPuuids(
+  puuid: string,
+  riotId?: { gameName: string | null; tagLine: string | null },
+): Promise<string[]> {
   const state = await getSyncState(puuid);
-  if (!state?.gameName || !state.tagLine) return [puuid];
+  const gameName = riotId?.gameName ?? state?.gameName ?? null;
+  const tagLine = riotId?.tagLine ?? state?.tagLine ?? null;
+
+  const aliases = new Set<string>([puuid]);
+  if (!gameName || !tagLine) return [...aliases];
 
   const result = await db().execute({
     sql: `SELECT puuid FROM puuid_sync
-           WHERE game_name = ? COLLATE NOCASE AND tag_line = ? COLLATE NOCASE`,
-    args: [state.gameName, state.tagLine],
+           WHERE game_name = ? COLLATE NOCASE AND tag_line = ? COLLATE NOCASE
+          UNION
+          SELECT puuid FROM match_participants
+           WHERE riot_id = ? COLLATE NOCASE`,
+    args: [gameName, tagLine, `${gameName}#${tagLine}`],
   });
 
-  return [...new Set([puuid, ...result.rows.map((row) => str(row.puuid))])];
+  for (const row of result.rows) aliases.add(str(row.puuid));
+  return [...aliases];
 }
 
 const num = (value: unknown): number => {
