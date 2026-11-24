@@ -1,8 +1,14 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
-import { CheckCircle2, Loader2, RefreshCw } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Loader2,
+  RefreshCw,
+  Square,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { Platform } from "@/lib/riot/config";
 
@@ -15,19 +21,78 @@ type Props = {
   detailed: number;
 };
 
+/**
+ * Respuesta de /api/sync. Todo opcional a propósito: un 429 o un error vuelve
+ * SIN progreso, y el loader tiene que poder contarlo igual.
+ */
+type SyncPayload = {
+  ok?: boolean;
+  detailed?: number;
+  known?: number;
+  done?: boolean;
+  requests?: number;
+  retryAfterMs?: number;
+  error?: string;
+};
+
 type State = {
   running: boolean;
   detailed: number;
   known: number;
+  /** Error que corta la carga (rojo). */
   error: string | null;
+  /** Aviso que NO corta nada: lock, 429, tope de vueltas (gris). */
+  notice: string | null;
   done: boolean;
+  round: number;
+  requests: number;
+  startedAt: number | null;
+  /** Último momento en que el contador de partidas se movió. */
+  lastProgressAt: number | null;
+  /** Reloj del tick: hace correr el cronómetro mientras esperamos al server. */
+  now: number;
 };
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+/**
+ * Una vuelta del servidor (40 requests) tarda entre 18 y 60 s porque Riot
+ * permite 100 requests cada 2 minutos con dev key. El cronómetro de la línea
+ * de progreso muestra que está vivo; este umbral es para lo anormal: pasado
+ * bastante más que una vuelta normal, avisamos en vez de girar en silencio.
+ */
+const STALL_MS = 90_000;
+/** Tope de vueltas: 60 × 40 requests = 2.400, más que el máximo real. */
+const MAX_ROUNDS = 60;
+
+function formatElapsed(ms: number): string {
+  const total = Math.max(0, Math.round(ms / 1_000));
+  const minutes = Math.floor(total / 60);
+  const seconds = total % 60;
+  return minutes > 0
+    ? `${minutes}:${String(seconds).padStart(2, "0")}`
+    : `${seconds} s`;
+}
+
+/** Sleep cancelable: si el usuario aprieta "Detener", despierta al toque. */
+function sleep(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    if (signal.aborted) {
+      resolve();
+      return;
+    }
+    const timer = setTimeout(done, ms);
+    function done() {
+      clearTimeout(timer);
+      signal.removeEventListener("abort", done);
+      resolve();
+    }
+    signal.addEventListener("abort", done, { once: true });
+  });
+}
 
 /**
  * Botón para completar el historial. Va pidiendo tandas al servidor y muestra
- * el progreso; al terminar refresca la página.
+ * el progreso, el tiempo, la fase y por qué se está esperando; al terminar
+ * refresca la página.
  */
 export function SyncButton({
   platform,
@@ -37,80 +102,184 @@ export function SyncButton({
   detailed,
 }: Props) {
   const router = useRouter();
+  const abortRef = useRef<AbortController | null>(null);
   const [state, setState] = useState<State>({
     running: false,
     detailed,
     known,
     error: null,
+    notice: null,
     done: false,
+    round: 0,
+    requests: 0,
+    startedAt: null,
+    lastProgressAt: null,
+    now: 0,
   });
 
-  async function run() {
-    setState((prev) => ({ ...prev, running: true, error: null }));
+  // Cronómetro: un tick por segundo mientras corre, así se ve que está vivo
+  // aunque una vuelta tarde un minuto en contestar.
+  useEffect(() => {
+    if (!state.running) return;
+    const id = setInterval(() => {
+      setState((prev) => (prev.running ? { ...prev, now: Date.now() } : prev));
+    }, 1_000);
+    return () => clearInterval(id);
+  }, [state.running]);
 
-    // Tope de vueltas: 60 × 40 requests = 2.400, más que el máximo real.
-    for (let round = 0; round < 60; round++) {
-      let payload: {
-        ok?: boolean;
-        detailed?: number;
-        known?: number;
-        done?: boolean;
-        retryAfterMs?: number;
-        error?: string;
-      };
+  // Si desmontan la página, cortamos el request en curso.
+  useEffect(() => () => abortRef.current?.abort(), []);
+
+  async function run() {
+    const controller = new AbortController();
+    abortRef.current = controller;
+    const startedAt = Date.now();
+
+    // Copias locales: el loop no depende de `state` (que quedaría viejo).
+    let currentDetailed = state.detailed;
+    let currentKnown = state.known;
+    let requests = 0;
+    let lastProgressAt = startedAt;
+    let notice: string | null = null;
+    let roundsDone = 0;
+
+    const publish = (extra: Partial<State> = {}) =>
+      setState({
+        running: true,
+        detailed: currentDetailed,
+        known: currentKnown,
+        error: null,
+        notice,
+        done: false,
+        round: roundsDone,
+        requests,
+        startedAt,
+        lastProgressAt,
+        now: Date.now(),
+        ...extra,
+      });
+
+    const finish = (extra: Partial<State>) =>
+      setState((prev) => ({
+        ...prev,
+        running: false,
+        error: null,
+        notice: null,
+        done: false,
+        detailed: currentDetailed,
+        known: currentKnown,
+        round: roundsDone,
+        requests,
+        startedAt,
+        lastProgressAt,
+        now: Date.now(),
+        ...extra,
+      }));
+
+    publish();
+
+    for (let round = 1; round <= MAX_ROUNDS; round += 1) {
+      roundsDone = round;
+
+      let payload: SyncPayload;
+      let status = 0;
 
       try {
         const res = await fetch("/api/sync", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ platform, gameName, tagLine }),
+          signal: controller.signal,
         });
-        payload = (await res.json()) as typeof payload;
-
-        if (!res.ok && res.status !== 429) {
-          setState((prev) => ({
-            ...prev,
-            running: false,
-            error: payload.error ?? "No se pudo continuar.",
-          }));
+        status = res.status;
+        payload = (await res.json()) as SyncPayload;
+      } catch {
+        if (controller.signal.aborted) {
+          finish({
+            notice:
+              "Detuviste la carga. El avance quedó guardado: podés retomarla cuando quieras.",
+          });
           return;
         }
-      } catch {
-        setState((prev) => ({
-          ...prev,
-          running: false,
-          error: "Se cortó la conexión. Probá de nuevo.",
-        }));
+        finish({
+          error: `Se cortó la conexión con el servidor a los ${formatElapsed(
+            Date.now() - startedAt,
+          )}. El avance quedó guardado.`,
+        });
         return;
       }
 
+      requests += typeof payload.requests === "number" ? payload.requests : 0;
+
       if (typeof payload.detailed === "number") {
-        setState((prev) => ({
-          ...prev,
-          detailed: payload.detailed ?? prev.detailed,
-          known: payload.known ?? prev.known,
-          error: payload.error ?? null,
-        }));
+        if (payload.detailed > currentDetailed) lastProgressAt = Date.now();
+        currentDetailed = payload.detailed;
+      }
+      if (typeof payload.known === "number") currentKnown = payload.known;
+
+      // Cualquier respuesta que no sea 200 ni el 429 (que se reintenta).
+      if (status !== 200 && status !== 429) {
+        finish({
+          error: payload.error ?? `El servidor respondió ${status}.`,
+        });
+        return;
       }
 
       if (payload.done) {
-        setState((prev) => ({ ...prev, running: false, done: true }));
+        publish({ running: false, done: true, notice: null });
         router.refresh();
         return;
       }
 
-      await sleep(payload.retryAfterMs ?? 600);
+      const retryMs = Math.min(
+        15_000,
+        typeof payload.retryAfterMs === "number" ? payload.retryAfterMs : 600,
+      );
+
+      // Explicamos por qué no avanzó, en vez de reintentar en silencio.
+      if (payload.error) {
+        notice = `${payload.error} Reintento en ${formatElapsed(retryMs)}.`;
+      } else if ((payload.requests ?? 0) === 0) {
+        notice =
+          "Otro proceso (el worker u otra pestaña) está sincronizando esta cuenta. Espero y reintento.";
+      } else {
+        notice = null;
+      }
+
+      publish();
+      await sleep(retryMs, controller.signal);
     }
 
-    setState((prev) => ({ ...prev, running: false }));
+    if (controller.signal.aborted) {
+      finish({
+        notice:
+          "Detuviste la carga. El avance quedó guardado: podés retomarla cuando quieras.",
+      });
+      return;
+    }
+
+    finish({
+      notice: `Se cortó a las ${MAX_ROUNDS} vueltas (${formatElapsed(
+        Date.now() - startedAt,
+      )}) sin terminar. El avance quedó guardado: volvé a tocar el botón para seguir.`,
+    });
   }
 
+  function stop() {
+    abortRef.current?.abort();
+  }
+
+  const { running, done, error, notice, round, requests, startedAt } = state;
   const pct =
     state.known > 0
       ? Math.min(100, Math.round((state.detailed / state.known) * 100))
       : 0;
+  const elapsedMs = startedAt === null ? 0 : state.now - startedAt;
+  const sinceProgressMs =
+    state.lastProgressAt === null ? 0 : state.now - state.lastProgressAt;
+  const stalled = running && !error && sinceProgressMs >= STALL_MS;
 
-  if (state.done) {
+  if (done) {
     return (
       <div className="flex items-center gap-2 text-xs text-win">
         <CheckCircle2 className="size-4" aria-hidden />
@@ -127,19 +296,29 @@ export function SyncButton({
           size="sm"
           variant="secondary"
           onClick={run}
-          disabled={state.running}
+          disabled={running}
         >
-          {state.running ? (
+          {running ? (
             <Loader2 className="size-4 animate-spin" aria-hidden />
           ) : (
             <RefreshCw className="size-4" aria-hidden />
           )}
-          {state.running ? "Analizando…" : "Cargar todo el historial"}
+          {running ? "Analizando…" : "Cargar todo el historial"}
         </Button>
 
-        <span className="tabular text-[11px] text-muted">
+        {running ? (
+          <Button type="button" size="sm" variant="ghost" onClick={stop}>
+            <Square className="size-3" aria-hidden />
+            Detener
+          </Button>
+        ) : null}
+
+        <span className="tabular text-[11px] text-muted" aria-live="polite">
           {state.detailed} de {state.known} partidas
           {state.known > 0 ? ` · ${pct}%` : ""}
+          {running
+            ? ` · ${formatElapsed(elapsedMs)} · vuelta ${round}${requests > 0 ? ` · ${requests} req` : ""}`
+            : ""}
         </span>
       </div>
 
@@ -154,14 +333,31 @@ export function SyncButton({
         />
       </div>
 
-      {state.error ? (
-        <p className="text-[11px] text-loss">{state.error}</p>
-      ) : (
-        <p className="text-[11px] text-muted">
-          Se puede cerrar la página: el avance queda guardado y se retoma donde
-          quedó.
-        </p>
-      )}
+      <div className="space-y-1 text-[11px] leading-relaxed">
+        {error ? <p className="text-loss">{error}</p> : null}
+
+        {stalled ? (
+          <p className="flex items-start gap-1.5 text-gold-300">
+            <AlertTriangle className="mt-px size-3.5 shrink-0" aria-hidden />
+            <span>
+              Sin avance hace {formatElapsed(sinceProgressMs)}. Una vuelta normal
+              tarda hasta ~60 s, así que esto ya es más de lo esperado: puede ser
+              el rate limit de Riot (100 requests cada 2 minutos con dev key) o un
+              request colgado. Sigue esperando o apretá Detener; el avance queda
+              guardado igual.
+            </span>
+          </p>
+        ) : null}
+
+        {notice && !error ? <p className="text-muted">{notice}</p> : null}
+
+        {!running && !error && !notice ? (
+          <p className="text-muted">
+            Se puede cerrar la página: el avance queda guardado y se retoma
+            donde quedó.
+          </p>
+        ) : null}
+      </div>
     </div>
   );
 }
