@@ -1,0 +1,731 @@
+[](https://vercel.com/oss)[![NextjsLogotype](https://nextjs.org/_next/static/immutable/media/nextjs-logotype-light.00-_80jv8_dct.svg)![NextjsLogotype](https://nextjs.org/_next/static/immutable/media/nextjs-logotype-dark.3h4a2z2v_dkod.svg)](https://nextjs.org/)
+  * [![NextjsLogotype](https://nextjs.org/_next/static/immutable/media/nextjs-logotype-light.00-_80jv8_dct.svg)![NextjsLogotype](https://nextjs.org/_next/static/immutable/media/nextjs-logotype-dark.3h4a2z2v_dkod.svg)](https://nextjs.org/)
+
+
+  * [Docs](https://nextjs.org/docs)
+  * [Learn](https://nextjs.org/learn)
+  * [Showcase](https://nextjs.org/showcase)
+  * [Blog](https://nextjs.org/blog)
+  * [Templates](https://vercel.com/templates/next.js)
+  * [Deploy](https://vercel.com/new)
+
+
+Search…`⌘K`Ask AIAsk AI[![](https://nextjs.org/_next/static/immutable/media/logo-github-light.3dl3lqjq1azpp.svg)![](https://nextjs.org/_next/static/immutable/media/logo-github-dark.1k-70sin_m3qn.svg)](https://github.com/vercel/next.js)
+Search…`⌘K`
+[Docs](https://nextjs.org/docs)[Learn](https://nextjs.org/learn)[Showcase](https://nextjs.org/showcase)[Blog](https://nextjs.org/blog)[Templates](https://vercel.com/templates/next.js)[Deploy](https://vercel.com/new)[GitHub](https://github.com/vercel/next.js)Vercel OSS
+Latest
+  * [eve](https://eve.dev/)
+
+
+Frameworks
+  * [Svelte](https://svelte.dev/)
+  * [Nuxt](https://nuxt.com/)
+  * [Nitro](https://nitro.build/)
+
+
+SDKs
+  * [AI SDK](https://ai-sdk.dev/)
+  * [Chat SDK](https://chat-sdk.dev/)
+  * [Flags SDK](https://flags-sdk.dev/)
+  * [Workflow SDK](https://workflow-sdk.dev/)
+
+
+Other
+  * [Turborepo](https://turborepo.dev/)
+  * [shadcn/ui](https://ui.shadcn.com/)
+  * [SWR](https://swr.vercel.app/)
+  * [just-bash](https://justbash.dev/)
+  * [deepsec](https://deepsec.sh/)
+
+
+Select a display theme: systemlightdark
+Using App RouterFeatures available in /appLatestv16.4.6
+  * [Getting Started](https://nextjs.org/docs/app/getting-started)
+    * [Installation](https://nextjs.org/docs/app/getting-started/installation)
+    * [Project Structure](https://nextjs.org/docs/app/getting-started/project-structure)
+    * [Layouts and Pages](https://nextjs.org/docs/app/getting-started/layouts-and-pages)
+    * [Linking and Navigating](https://nextjs.org/docs/app/getting-started/linking-and-navigating)
+    * [Server and Client Components](https://nextjs.org/docs/app/getting-started/server-and-client-components)
+    * [Fetching Data](https://nextjs.org/docs/app/getting-started/fetching-data)
+    * [Mutating Data](https://nextjs.org/docs/app/getting-started/mutating-data)
+    * [Caching](https://nextjs.org/docs/app/getting-started/caching)
+    * [Revalidating](https://nextjs.org/docs/app/getting-started/revalidating)
+    * [Error Handling](https://nextjs.org/docs/app/getting-started/error-handling)
+    * [CSS](https://nextjs.org/docs/app/getting-started/css)
+    * [Image Optimization](https://nextjs.org/docs/app/getting-started/images)
+    * [Font Optimization](https://nextjs.org/docs/app/getting-started/fonts)
+    * [Metadata and OG images](https://nextjs.org/docs/app/getting-started/metadata-and-og-images)
+    * [Route Handlers](https://nextjs.org/docs/app/getting-started/route-handlers)
+    * [Proxy](https://nextjs.org/docs/app/getting-started/proxy)
+    * [Deploying](https://nextjs.org/docs/app/getting-started/deploying)
+    * [Upgrading](https://nextjs.org/docs/app/getting-started/upgrading)
+  * [Guides](https://nextjs.org/docs/app/guides)
+  * [API Reference](https://nextjs.org/docs/app/api-reference)
+  * [Glossary](https://nextjs.org/docs/app/glossary)
+  * [Architecture](https://nextjs.org/docs/architecture)
+    * [Accessibility](https://nextjs.org/docs/architecture/accessibility)
+    * [Fast Refresh](https://nextjs.org/docs/architecture/fast-refresh)
+    * [Next.js Compiler](https://nextjs.org/docs/architecture/nextjs-compiler)
+    * [Supported Browsers](https://nextjs.org/docs/architecture/supported-browsers)
+  * [Community](https://nextjs.org/docs/community)
+    * [Contribution Guide](https://nextjs.org/docs/community/contribution-guide)
+    * [Rspack](https://nextjs.org/docs/community/rspack)
+
+
+[App Router](https://nextjs.org/docs/app)[API Reference](https://nextjs.org/docs/app/api-reference)[Directives](https://nextjs.org/docs/app/api-reference/directives)
+Menu
+# use cache
+Copy for LLMView MarkdownAsk AI about this page
+The `use cache` directive allows you to mark a route, React component, or a function as cacheable. It can be used at the top of a file to indicate that all exports in the file should be cached, or inline at the top of a function or component to cache the return value. Functions and components that use `use cache` must be async.
+Good to know
+  * To use cookies or headers, read them outside cached scopes and pass values as arguments. This is the preferred pattern.
+  * If the in-memory cache isn't sufficient for runtime data, [`'use cache: remote'`](https://nextjs.org/docs/app/api-reference/directives/use-cache-remote) allows platforms to provide a dedicated cache handler, though it requires a network roundtrip to check the cache and typically incurs platform fees.
+  * For compliance requirements or when you can't refactor to pass runtime data as arguments to a `use cache` scope, see [`'use cache: private'`](https://nextjs.org/docs/app/api-reference/directives/use-cache-private).
+
+
+## [Usage](https://nextjs.org/docs/app/api-reference/directives/use-cache#usage)
+`use cache` is a Cache Components feature. To enable it, add the [`cacheComponents`](https://nextjs.org/docs/app/api-reference/config/next-config-js/cacheComponents) option to your `next.config.ts` file:
+TypeScript
+TypeScript JavaScript
+TypeScriptJavaScript
+next.config.ts
+
+```
+import type { NextConfig } from 'next'
+
+const nextConfig: NextConfig = {
+  cacheComponents: true,
+}
+
+export default nextConfig
+```
+
+Then, add `use cache` at the function, component, or file level. Cached functions and components must be async:
+
+```
+// Function level
+export async function getData() {
+  'use cache'
+  const res = await fetch('https://api.example.com/data')
+  const data = await res.json()
+  return data
+}
+
+// Component level
+export async function MyComponent() {
+  'use cache'
+  return <></>
+}
+```
+
+When used at file level, every exported function becomes a cached function and must also be async:
+
+```
+// File level
+'use cache'
+
+export default async function Page() {
+  // ...
+}
+```
+
+## [How `use cache` works](https://nextjs.org/docs/app/api-reference/directives/use-cache#how-use-cache-works)
+### [Cache keys](https://nextjs.org/docs/app/api-reference/directives/use-cache#cache-keys)
+A cache entry's key is generated using a serialized version of its inputs, which includes:
+  1. **Build ID** - Unique per build, changing this invalidates all cache entries. If [`deploymentId`](https://nextjs.org/docs/app/api-reference/config/next-config-js/deploymentId) is configured, it overrides the build ID for cache key purposes.
+  2. **Function ID** - A secure hash of the function's location and signature in the codebase
+  3. **Serializable arguments** - Props (for components) or function arguments
+  4. **HMR refresh hash** (development only) - Invalidates cache on hot module replacement
+
+
+When a cached function references variables from outer scopes, those variables are automatically captured and bound as arguments, making them part of the cache key.
+lib/data.ts
+
+```
+async function Component({ userId }: { userId: string }) {
+  const getData = async (filter: string) => {
+    'use cache'
+    // Cache key includes both userId (from closure) and filter (argument)
+    const res = await fetch(
+      `https://api.example.com/users/${userId}/data?filter=${filter}`
+    )
+    return res.json()
+  }
+
+  return getData('active')
+}
+```
+
+In the snippet above, `userId` is captured from the outer scope and `filter` is passed as an argument, so both become part of the `getData` function's cache key. This means different user and filter combinations will have separate cache entries.
+Good to know
+When a cached function reads [root parameters](https://nextjs.org/docs/app/api-reference/functions/next-root-params), only the ones it actually reads become part of its cache key.
+### [Cache output](https://nextjs.org/docs/app/api-reference/directives/use-cache#cache-output)
+A cached function produces the same output for the same inputs. The first call with a given set of inputs runs the function body and stores its output. Every later call with the same inputs reuses that output, within a render pass and across requests, for as long as the entry lasts.
+Outputs are stored by a [cache handler](https://nextjs.org/docs/app/api-reference/config/next-config-js/cacheHandlers), [in memory](https://nextjs.org/docs/app/api-reference/directives/use-cache#runtime-caching-considerations) by default, and last until they [revalidate](https://nextjs.org/docs/app/api-reference/directives/use-cache#revalidation).
+lib/orders.ts
+
+```
+import { cacheLife } from 'next/cache'
+
+export async function getOrderSummary(accountId: string) {
+  'use cache'
+  cacheLife('hours')
+
+  const orders = await getOrders(accountId)
+  const totals = await getOrderTotals(accountId)
+
+  return { orders, totals }
+}
+
+export async function getOrders(accountId: string) {
+  'use cache'
+  cacheLife('hours')
+
+  return db.orders.findMany({ where: { accountId } })
+}
+
+export async function getOrderTotals(accountId: string) {
+  return db.orders.aggregate({ where: { accountId }, _sum: { amount: true } })
+}
+```
+
+In the example above, each `accountId` has its own entry for `getOrderSummary`, holding the serialized `{ orders, totals }` object it returns. Calls to `getOrders` have their own entries, keyed by the same `accountId`. If an earlier call, through the summary or directly, already filled one, `db.orders.findMany` doesn't run and those orders become part of the summary's output. See [nested caching behavior](https://nextjs.org/docs/app/api-reference/functions/cacheLife#nested-caching-behavior) for how an inner lifetime affects the entry around it.
+Note that `getOrderTotals` is not cached. It is exported so other parts of the application can read fresh totals in an uncached scope. Inside `getOrderSummary`, though, the totals query only runs when that function runs following the `'hours'` lifetime set there.
+With [Cache Components](https://nextjs.org/docs/app/api-reference/config/next-config-js/cacheComponents), prerendering fills the entry and keeps rendering, so this output contributes to the route's [static shell](https://nextjs.org/docs/app/getting-started/caching#prerendering) and can contribute to its [prefetch](https://nextjs.org/docs/app/getting-started/caching#prefetching). A cache life too short to store safely leaves a hole that resolves at request time instead. See [prerendering behavior](https://nextjs.org/docs/app/api-reference/functions/cacheLife#prerendering-behavior) for the thresholds.
+## [Serialization](https://nextjs.org/docs/app/api-reference/directives/use-cache#serialization)
+Arguments to cached functions and their return values must be serializable.
+For a complete reference, see:
+  * [Serializable arguments](https://react.dev/reference/rsc/use-server#serializable-parameters-and-return-values) - Uses **React Server Components** serialization
+  * [Serializable return types](https://react.dev/reference/rsc/use-client#serializable-types) - Uses **React Client Components** serialization
+
+
+Good to know
+Arguments and return values use different serialization systems. Server Component serialization (for arguments) is more restrictive than Client Component serialization (for return values). This means you can return JSX elements but cannot accept them as arguments unless using pass-through patterns.
+### [Supported types](https://nextjs.org/docs/app/api-reference/directives/use-cache#supported-types)
+**Arguments:**
+  * Primitives: `string`, `number`, `boolean`, `null`, `undefined`
+  * Plain objects: `{ key: value }`
+  * Arrays: `[1, 2, 3]`
+  * Dates, Maps, Sets, TypedArrays, ArrayBuffers
+  * React elements (as pass-through only)
+
+
+**Return values:**
+  * Same as arguments, plus JSX elements
+
+
+### [Unsupported types](https://nextjs.org/docs/app/api-reference/directives/use-cache#unsupported-types)
+  * Class instances
+  * Functions (except as pass-through)
+  * Symbols, WeakMaps, WeakSets
+  * URL instances
+
+
+app/components/user-card.tsx
+
+```
+// Valid - primitives and plain objects
+async function UserCard({
+  id,
+  config,
+}: {
+  id: string
+  config: { theme: string }
+}) {
+  'use cache'
+  return <div>{id}</div>
+}
+
+// Invalid - class instance
+async function UserProfile({ user }: { user: UserClass }) {
+  'use cache'
+  // Error: Cannot serialize class instance
+  return <div>{user.name}</div>
+}
+```
+
+### [Pass-through (non-serializable arguments)](https://nextjs.org/docs/app/api-reference/directives/use-cache#pass-through-non-serializable-arguments)
+You can accept non-serializable values **as long as you don't introspect them**. This enables composition patterns with `children` and Server Actions:
+app/components/cached-wrapper.tsx
+
+```
+async function CachedWrapper({ children }: { children: ReactNode }) {
+  'use cache'
+  // Don't read or modify children - just pass it through
+  return (
+    <div className="wrapper">
+      <header>Cached Header</header>
+      {children}
+    </div>
+  )
+}
+
+// Usage: children can be dynamic
+export default function Page() {
+  return (
+    <CachedWrapper>
+      <DynamicComponent /> {/* Not cached, passed through */}
+    </CachedWrapper>
+  )
+}
+```
+
+You can also pass Server Actions through cached components:
+app/components/cached-form.tsx
+
+```
+async function CachedForm({ action }: { action: () => Promise<void> }) {
+  'use cache'
+  // Don't call action here - just pass it through
+  return <form action={action}>{/* ... */}</form>
+}
+```
+
+## [Constraints](https://nextjs.org/docs/app/api-reference/directives/use-cache#constraints)
+Cached functions execute in an isolated environment. The following constraints ensure cache behavior remains predictable and secure.
+### [Request-time APIs](https://nextjs.org/docs/app/api-reference/directives/use-cache#request-time-apis)
+Cached functions and components **cannot** access runtime APIs like `cookies()`, `headers()`, or `searchParams`, and the restriction follows the call stack: a helper the cached function calls that reads one of these fails the same way, with the [`next-request-in-use-cache`](https://nextjs.org/docs/messages/next-request-in-use-cache) error. On a dynamically rendered route this surfaces when the route runs, so it can pass `next build` and fail under `next start`. Read these values outside the cached scope and pass them as arguments.
+### [Runtime caching considerations](https://nextjs.org/docs/app/api-reference/directives/use-cache#runtime-caching-considerations)
+While `use cache` is designed primarily to include uncached data in the static shell, it can also cache data at runtime using in-memory LRU (Least Recently Used) storage.
+With the default in-memory handler, runtime cache behavior depends on your hosting environment:  
+| Environment  | Runtime Caching Behavior  |  
+| --- | --- |  
+| **Serverless**  | Cache entries typically don't persist across requests (each request can be a different instance), or during revalidation. Build-time caching works normally.  |  
+| **Self-hosted**  | Cache entries persist across requests. Control cache size with [`cacheMaxMemorySize`](https://nextjs.org/docs/app/api-reference/config/next-config-js/cacheMaxMemorySize).  |  
+For example, in a serverless environment, a cached function shared by two pages executes on each static shell revalidation, whereas in self-hosted or environments with persistent memory, the cached output is reused if it's still fresh.
+For tag invalidation across server instances, see [Distributed Tag Coordination](https://nextjs.org/docs/app/api-reference/config/next-config-js/cacheHandlers#distributed-tag-coordination).
+Hosting providers can replace the default cache handler, and some do not store `use cache` output at runtime. Values computed during prerendering are still reused by later requests, but values computed at request time are not. Check your hosting provider's documentation for its runtime caching behavior.
+If the default in-memory cache isn't enough, or your provider does not store runtime output, consider **[`use cache: remote`](https://nextjs.org/docs/app/api-reference/directives/use-cache-remote)**which allows platforms to provide a dedicated cache handler (like Redis or KV database). This helps reduce hits against data sources not scaled to your total traffic, though it comes with costs (storage, network latency, platform fees).
+Note
+With the default in-memory handler, serverless instances are ephemeral, so entries may not be reused between requests, unlike with `use cache: remote`. Neither caching directive carries over to a new deploy, because the [cache key](https://nextjs.org/docs/app/api-reference/directives/use-cache#cache-keys) includes the build (or `deploymentId`) ID.
+For data that needs to persist across deploys, use [`unstable_cache`](https://nextjs.org/docs/app/api-reference/functions/unstable_cache) for non-`fetch` functions or the [`fetch`](https://nextjs.org/docs/app/api-reference/functions/fetch) cache.
+Very rarely, for compliance requirements or when you can't refactor your code to pass runtime data as arguments to a `use cache` scope, you might need [`use cache: private`](https://nextjs.org/docs/app/api-reference/directives/use-cache-private).
+### [Draft Mode](https://nextjs.org/docs/app/api-reference/directives/use-cache#draft-mode)
+When [Draft Mode](https://nextjs.org/docs/app/guides/draft-mode) is enabled, all cached functions and components re-execute on every request, and results are not saved to the cache. This ensures draft content is always fresh without requiring any changes to your caching code.
+You can read `isEnabled` from [`draftMode()`](https://nextjs.org/docs/app/api-reference/functions/draft-mode) inside a `use cache` scope, however, other runtime APIs like `cookies()` and `headers()` are not allowed, even when Draft Mode is active. See [Passing runtime values to cached functions](https://nextjs.org/docs/app/getting-started/caching#passing-runtime-values-to-cached-functions) for the recommended pattern.
+app/components/content.tsx
+
+```
+import { draftMode } from 'next/headers'
+
+async function Content() {
+  'use cache'
+
+  const { isEnabled } = await draftMode()
+  const url = isEnabled
+    ? 'https://draft.example.com/content'
+    : 'https://production.example.com/content'
+
+  const data = await fetch(url)
+  return <article>{/* ... */}</article>
+}
+```
+
+Calling `enable()` or `disable()` inside a caching directive scope will also throw an error. Draft Mode can only be toggled in [Route Handlers](https://nextjs.org/docs/app/api-reference/file-conventions/route) or [Server Actions](https://nextjs.org/docs/app/getting-started/mutating-data).
+### [React.cache isolation](https://nextjs.org/docs/app/api-reference/directives/use-cache#reactcache-isolation)
+[`React.cache`](https://react.dev/reference/react/cache) operates in an isolated scope inside `use cache` boundaries. Values stored via `React.cache` outside a `use cache` function are not visible inside it.
+This means you cannot use `React.cache` to pass data into a `use cache` scope:
+
+```
+import { cache } from 'react'
+
+const store = cache(() => ({ current: null as string | null }))
+
+function Parent() {
+  const shared = store()
+  shared.current = 'value from parent'
+  return <Child />
+}
+
+async function Child() {
+  'use cache'
+  const shared = store()
+  // shared.current is null, not 'value from parent'
+  // use cache has its own isolated React.cache scope
+  return <div>{shared.current}</div>
+}
+```
+
+This isolation ensures cached functions have predictable, self-contained behavior. To pass data into a `use cache` scope, use function arguments instead.
+## [`use cache` at runtime](https://nextjs.org/docs/app/api-reference/directives/use-cache#use-cache-at-runtime)
+On the **server** , cache entries are stored in-memory and respect the `revalidate` and `expire` times from your `cacheLife` configuration. You can customize the cache storage by configuring [`cacheHandlers`](https://nextjs.org/docs/app/api-reference/config/next-config-js/cacheHandlers) in your `next.config.js` file.
+On the **client** , content from the server cache is stored in the browser's memory for the duration defined by the `stale` time. The client router enforces a **minimum 30-second stale time** , regardless of configuration.
+The `x-nextjs-stale-time` response header communicates cache lifetime from server to client, ensuring coordinated behavior.
+## [Revalidation](https://nextjs.org/docs/app/api-reference/directives/use-cache#revalidation)
+Cached functions revalidate based on the `revalidate` and `expire` times in their `cacheLife` profile, or on-demand through tags. These two approaches are not mutually exclusive and are often paired:
+  * **[Time-based](https://nextjs.org/docs/app/api-reference/directives/use-cache#time-based-revalidation)** : refresh automatically after a set duration with [`cacheLife`](https://nextjs.org/docs/app/api-reference/functions/cacheLife).
+  * **[On-demand](https://nextjs.org/docs/app/api-reference/directives/use-cache#on-demand-revalidation)** : invalidate after a mutation with [`cacheTag`](https://nextjs.org/docs/app/api-reference/functions/cacheTag) and [`revalidateTag`](https://nextjs.org/docs/app/api-reference/functions/revalidateTag) or [`updateTag`](https://nextjs.org/docs/app/api-reference/functions/updateTag).
+
+
+For example, a blog post that changes only when its author edits it can use a long `cacheLife` like `max` with a `cacheTag`, then invalidate on demand when the post is saved. A list of recent posts that updates throughout the day can use a shorter profile like `hours` to refresh on its own, without manual invalidation.
+### [Time-based revalidation](https://nextjs.org/docs/app/api-reference/directives/use-cache#time-based-revalidation)
+Set an explicit cache lifetime with [`cacheLife`](https://nextjs.org/docs/app/api-reference/functions/cacheLife) in every `use cache` scope. It makes the cache behavior clear at the call site, instead of depending on the `default` profile or surrounding caches.
+lib/data.ts
+
+```
+import { cacheLife } from 'next/cache'
+
+async function getData() {
+  'use cache'
+  cacheLife('hours') // Use built-in 'hours' profile
+  const res = await fetch('https://api.example.com/data')
+  return res.json()
+}
+```
+
+If you omit `cacheLife`, the `default` profile applies and the lifetime is no longer explicit at the call site:
+  * **stale** : 5 minutes (client-side)
+  * **revalidate** : 15 minutes (server-side)
+  * **expire** : never expires by time
+
+
+lib/data.ts
+
+```
+async function getData() {
+  'use cache'
+  // Implicitly uses the 'default' profile
+  const res = await fetch('https://api.example.com/data')
+  return res.json()
+}
+```
+
+Nesting a short-lived use cache inside one without an explicit [cacheLife](https://nextjs.org/docs/app/api-reference/functions/cacheLife) fails the build during prerendering. See [Nested short-lived caches](https://nextjs.org/docs/app/api-reference/functions/cacheLife#nested-short-lived-caches) for the rule and fix.
+### [On-demand revalidation](https://nextjs.org/docs/app/api-reference/directives/use-cache#on-demand-revalidation)
+Use [`cacheTag`](https://nextjs.org/docs/app/api-reference/functions/cacheTag), [`updateTag`](https://nextjs.org/docs/app/api-reference/functions/updateTag), or [`revalidateTag`](https://nextjs.org/docs/app/api-reference/functions/revalidateTag) for on-demand cache invalidation:
+lib/data.ts
+
+```
+import { cacheTag } from 'next/cache'
+
+async function getProducts() {
+  'use cache'
+  cacheTag('products')
+  const res = await fetch('https://api.example.com/products')
+  return res.json()
+}
+```
+
+app/actions.ts
+
+```
+'use server'
+
+import { updateTag } from 'next/cache'
+
+export async function updateProduct() {
+  await db.products.update(...)
+  updateTag('products') // Invalidates all 'products' caches
+}
+```
+
+Both `cacheLife` and `cacheTag` integrate across client and server caching layers, meaning you configure your caching semantics in one place and they apply everywhere.
+## [Examples](https://nextjs.org/docs/app/api-reference/directives/use-cache#examples)
+### [Caching function output with `use cache`](https://nextjs.org/docs/app/api-reference/directives/use-cache#caching-function-output-with-use-cache)
+You can add `use cache` to any asynchronous function, not only to components and routes. You might want to cache a network request, a database query, or a slow computation.
+TypeScript
+TypeScript JavaScript
+TypeScriptJavaScript
+app/actions.ts
+
+```
+export async function getData() {
+  'use cache'
+
+  const res = await fetch('https://api.example.com/data')
+  const data = await res.json()
+  return data
+}
+```
+
+[Proxy](https://nextjs.org/docs/app/api-reference/file-conventions/proxy) does not apply [directive transforms](https://nextjs.org/docs/app/api-reference/directives), so `use cache` has no effect in Proxy. A function that is cached elsewhere in your application runs as an ordinary function when Proxy imports it.
+Calling [`cacheLife`](https://nextjs.org/docs/app/api-reference/functions/cacheLife) or [`cacheTag`](https://nextjs.org/docs/app/api-reference/functions/cacheTag) in that function throws because Proxy does not create a cache scope.
+### [Caching a component's output with `use cache`](https://nextjs.org/docs/app/api-reference/directives/use-cache#caching-a-components-output-with-use-cache)
+You can use `use cache` at the component level to cache any fetches or computations performed within that component. The cache entry will be reused as long as the serialized props produce the same value in each instance.
+TypeScript
+TypeScript JavaScript
+TypeScriptJavaScript
+app/components/bookings.tsx
+
+```
+export async function Bookings({ type = 'haircut' }: BookingsProps) {
+  'use cache'
+  async function getBookingsData() {
+    const response = await fetch(
+      `https://api.example.com/bookings?type=${encodeURIComponent(type)}`
+    )
+    const data = await response.json()
+    return data
+  }
+  return //...
+}
+
+interface BookingsProps {
+  type: string
+}
+```
+
+### [Interleaving](https://nextjs.org/docs/app/api-reference/directives/use-cache#interleaving)
+In React, composition with `children` or slots is a well-known pattern for building flexible components. When using `use cache`, you can continue to compose your UI in this way. Anything included as `children`, or other compositional slots, in the returned JSX will be passed through the cached component without affecting its cache entry.
+As long as you don't directly reference any of the JSX slots inside the body of the cacheable function itself, their presence in the returned output won't affect the cache entry.
+TypeScript
+TypeScript JavaScript
+TypeScriptJavaScript
+app/page.tsx
+
+```
+export default async function Page() {
+  const uncachedData = await getData()
+  return (
+    // Pass compositional slots as props, e.g. header and children
+    <CacheComponent header={<h1>Home</h1>}>
+      {/* DynamicComponent is provided as the children slot */}
+      <DynamicComponent data={uncachedData} />
+    </CacheComponent>
+  )
+}
+
+async function CacheComponent({
+  header, // header: a compositional slot, injected as a prop
+  children, // children: another slot for nested composition
+}: {
+  header: ReactNode
+  children: ReactNode
+}) {
+  'use cache'
+  const res = await fetch('https://api.example.com/cached-data')
+  const cachedData = await res.json()
+  return (
+    <div>
+      {header}
+      <PrerenderedComponent data={cachedData} />
+      {children}
+    </div>
+  )
+}
+```
+
+You can also pass Server Actions through cached components to Client Components without invoking them inside the cacheable function.
+TypeScript
+TypeScript JavaScript
+TypeScriptJavaScript
+app/page.tsx
+
+```
+import ClientComponent from './ClientComponent'
+
+export default async function Page() {
+  const performUpdate = async () => {
+    'use server'
+    // Perform some server-side update
+    await db.update(...)
+  }
+
+  return <CachedComponent performUpdate={performUpdate} />
+}
+
+async function CachedComponent({
+  performUpdate,
+}: {
+  performUpdate: () => Promise<void>
+}) {
+  'use cache'
+  // Do not call performUpdate here
+  return <ClientComponent action={performUpdate} />
+}
+```
+
+app/ClientComponent.tsx
+
+```
+'use client'
+
+export default function ClientComponent({
+  action,
+}: {
+  action: () => Promise<void>
+}) {
+  return <button onClick={action}>Update</button>
+}
+```
+
+### [Caching a module's exports with `use cache`](https://nextjs.org/docs/app/api-reference/directives/use-cache#caching-a-modules-exports-with-use-cache)
+Placing the directive at the top of a file covers every export, instead of repeating it on each one. Every exported function it covers must be async.
+app/lib/reports.ts
+
+```
+'use cache'
+
+export async function getMonthlyTotals(accountId: string) {
+  return db.orders.aggregate({ where: { accountId }, _sum: { amount: true } })
+}
+
+export async function getTopProducts() {
+  return db.products.findMany({ orderBy: { sales: 'desc' }, take: 10 })
+}
+```
+
+Framework function exports are covered like any other, so [`generateMetadata`](https://nextjs.org/docs/app/api-reference/functions/generate-metadata) and [`generateStaticParams`](https://nextjs.org/docs/app/api-reference/functions/generate-static-params) must be async in such a file.
+Good to know
+  * When a cached directive (`use cache`, [`use cache: private`](https://nextjs.org/docs/app/api-reference/directives/use-cache-private), or [`use cache: remote`](https://nextjs.org/docs/app/api-reference/directives/use-cache-remote)) is at the top of a file, you can import its exported functions into a Client Component and call them directly; they run on the server and return the result, similar to a [Server Function](https://nextjs.org/docs/app/glossary#server-function). Prefer calling cached functions on the server and passing results down as props.
+  * Only exported functions are available to Client Components. Other exports, such as constants and objects, are dropped from what the client receives, so importing one fails the build with an "export doesn't exist" error. Move shared values to a separate file without the directive.
+
+
+### [Caching a route segment's output with `use cache`](https://nextjs.org/docs/app/api-reference/directives/use-cache#caching-a-route-segments-output-with-use-cache)
+A `page` or `layout` file is a module too, so a file-level directive there follows the same rules. Each route segment is a separate entry point and is cached independently. To prerender a whole route, add `use cache` to the top of every segment file it renders: the `page`, the `layout`, and any [parallel route](https://nextjs.org/docs/app/api-reference/file-conventions/parallel-routes) slots.
+TypeScript
+TypeScript JavaScript
+TypeScriptJavaScript
+app/layout.tsx
+
+```
+'use cache'
+
+export default async function Layout({ children }: { children: ReactNode }) {
+  return <div>{children}</div>
+}
+```
+
+A cached `layout` does not cache the `children` it renders, since slots pass through without affecting its entry. See [Interleaving](https://nextjs.org/docs/app/api-reference/directives/use-cache#interleaving).
+TypeScript
+TypeScript JavaScript
+TypeScriptJavaScript
+app/page.tsx
+
+```
+'use cache'
+
+async function Users() {
+  const res = await fetch('https://api.example.com/users')
+  const users = await res.json()
+  // loop through users
+}
+
+export default async function Page() {
+  return (
+    <main>
+      <Users />
+    </main>
+  )
+}
+```
+
+## [Troubleshooting](https://nextjs.org/docs/app/api-reference/directives/use-cache#troubleshooting)
+### [Debugging cache behavior](https://nextjs.org/docs/app/api-reference/directives/use-cache#debugging-cache-behavior)
+#### [Verbose logging](https://nextjs.org/docs/app/api-reference/directives/use-cache#verbose-logging)
+Set `NEXT_PRIVATE_DEBUG_CACHE=1` for verbose cache logging:
+
+```
+NEXT_PRIVATE_DEBUG_CACHE=1 npm run dev
+# or for production
+NEXT_PRIVATE_DEBUG_CACHE=1 npm run start
+```
+
+Good to know
+This environment variable also logs ISR and other caching mechanisms. See [Verifying correct production behavior](https://nextjs.org/docs/app/guides/incremental-static-regeneration#verifying-correct-production-behavior) for more details.
+#### [Console log replays](https://nextjs.org/docs/app/api-reference/directives/use-cache#console-log-replays)
+In development, console logs from cached functions appear with a `Cache` prefix.
+### [Build Hangs (Cache Timeout)](https://nextjs.org/docs/app/api-reference/directives/use-cache#build-hangs-cache-timeout)
+If your build hangs, you're accessing Promises that resolve to uncached or runtime data, created outside a `use cache` boundary. The cached function waits for data that can't resolve during the build, causing a timeout after 50 seconds.
+When the build timeouts you'll see this error message:
+> Error: Filling a cache during prerender timed out, likely because request-specific arguments such as params, searchParams, cookies() or uncached data were used inside "use cache".
+Common ways this happens: passing such Promises as props, accessing them via closure, or retrieving them from shared storage (Maps).
+Good to know
+Directly calling `cookies()` or `headers()` inside `use cache` fails immediately with a [different error](https://nextjs.org/docs/messages/next-request-in-use-cache), not a timeout.
+**Passing runtime data Promises as props:**
+app/page.tsx
+
+```
+import { cookies } from 'next/headers'
+import { Suspense } from 'react'
+
+export default function Page() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <Dynamic />
+    </Suspense>
+  )
+}
+
+async function Dynamic() {
+  const cookieStore = cookies()
+  return <Cached promise={cookieStore} /> // Build hangs
+}
+
+async function Cached({ promise }: { promise: Promise<unknown> }) {
+  'use cache'
+  const data = await promise // Waits for runtime data during build
+  return <p>..</p>
+}
+```
+
+Await the `cookies` store in the `Dynamic` component, and pass a cookie value to the `Cached` component.
+**Shared deduplication storage:**
+app/page.tsx
+
+```
+// Problem: Map stores dynamic Promises, accessed by cached code
+import { Suspense } from 'react'
+
+const cache = new Map<string, Promise<string>>()
+
+export default function Page() {
+  return (
+    <>
+      <Suspense fallback={<div>Loading...</div>}>
+        <Dynamic id="data" />
+      </Suspense>
+      <Cached id="data" />
+    </>
+  )
+}
+
+async function Dynamic({ id }: { id: string }) {
+  // Stores dynamic Promise in shared Map
+  cache.set(
+    id,
+    fetch(`https://api.example.com/${id}`).then((r) => r.text())
+  )
+  return <p>Dynamic</p>
+}
+
+async function Cached({ id }: { id: string }) {
+  'use cache'
+  return <p>{await cache.get(id)}</p> // Build hangs - retrieves dynamic Promise
+}
+```
+
+Use Next.js's built-in `fetch()` deduplication or use separate Maps for cached and uncached contexts.
+## [Platform Support](https://nextjs.org/docs/app/api-reference/directives/use-cache#platform-support)  
+| Deployment Option  | Supported  |  
+| --- | --- |  
+| [Node.js server](https://nextjs.org/docs/app/getting-started/deploying#nodejs-server)  | Yes  |  
+| [Docker container](https://nextjs.org/docs/app/getting-started/deploying#docker)  | Yes  |  
+| [Static export](https://nextjs.org/docs/app/getting-started/deploying#static-export)  | No  |  
+| [Adapters](https://nextjs.org/docs/app/getting-started/deploying#adapters)  | Platform-specific  |  
+Learn how to [configure caching](https://nextjs.org/docs/app/guides/self-hosting#caching-and-isr) when self-hosting Next.js.
+## [Version History](https://nextjs.org/docs/app/api-reference/directives/use-cache#version-history)  
+| Version  | Changes  |  
+| --- | --- |  
+| `v16.0.0`  |  `"use cache"` stabilized and is enabled with the Cache Components feature.  |  
+| `v15.0.0`  |  `"use cache"` is introduced as an experimental feature.  |  
+## [Related](https://nextjs.org/docs/app/api-reference/directives/use-cache#related)
+View related API references.
+### [use cache: private Learn how to use the "use cache: private" directive to cache functions that access runtime request APIs.](https://nextjs.org/docs/app/api-reference/directives/use-cache-private)### [cacheComponents Learn how to enable the cacheComponents flag in Next.js.](https://nextjs.org/docs/app/api-reference/config/next-config-js/cacheComponents)### [cacheLife Learn how to set up cacheLife configurations in Next.js.](https://nextjs.org/docs/app/api-reference/config/next-config-js/cacheLife)### [cacheHandlers Configure custom cache handlers for use cache directives in Next.js.](https://nextjs.org/docs/app/api-reference/config/next-config-js/cacheHandlers)### [cacheTag Learn how to use the cacheTag function to manage cache invalidation in your Next.js application.](https://nextjs.org/docs/app/api-reference/functions/cacheTag)### [cacheLife Learn how to use the cacheLife function to set the cache expiration time for a cached function or component.](https://nextjs.org/docs/app/api-reference/functions/cacheLife)### [revalidateTag API Reference for the revalidateTag function.](https://nextjs.org/docs/app/api-reference/functions/revalidateTag)
+Last updated November 18, 2026
+[Previoususe cache: remote](https://nextjs.org/docs/app/api-reference/directives/use-cache-remote)[Nextuse client](https://nextjs.org/docs/app/api-reference/directives/use-client)
+On this page
+[Usage](https://nextjs.org/docs/app/api-reference/directives/use-cache#usage)[How use cache works](https://nextjs.org/docs/app/api-reference/directives/use-cache#how-use-cache-works)[Cache keys](https://nextjs.org/docs/app/api-reference/directives/use-cache#cache-keys)[Cache output](https://nextjs.org/docs/app/api-reference/directives/use-cache#cache-output)[Serialization](https://nextjs.org/docs/app/api-reference/directives/use-cache#serialization)[Supported types](https://nextjs.org/docs/app/api-reference/directives/use-cache#supported-types)[Unsupported types](https://nextjs.org/docs/app/api-reference/directives/use-cache#unsupported-types)[Pass-through (non-serializable arguments)](https://nextjs.org/docs/app/api-reference/directives/use-cache#pass-through-non-serializable-arguments)[Constraints](https://nextjs.org/docs/app/api-reference/directives/use-cache#constraints)[Request-time APIs](https://nextjs.org/docs/app/api-reference/directives/use-cache#request-time-apis)[Runtime caching considerations](https://nextjs.org/docs/app/api-reference/directives/use-cache#runtime-caching-considerations)[Draft Mode](https://nextjs.org/docs/app/api-reference/directives/use-cache#draft-mode)[React.cache isolation](https://nextjs.org/docs/app/api-reference/directives/use-cache#reactcache-isolation)[use cache at runtime](https://nextjs.org/docs/app/api-reference/directives/use-cache#use-cache-at-runtime)[Revalidation](https://nextjs.org/docs/app/api-reference/directives/use-cache#revalidation)[Time-based revalidation](https://nextjs.org/docs/app/api-reference/directives/use-cache#time-based-revalidation)[On-demand revalidation](https://nextjs.org/docs/app/api-reference/directives/use-cache#on-demand-revalidation)[Examples](https://nextjs.org/docs/app/api-reference/directives/use-cache#examples)[Caching function output with use cache](https://nextjs.org/docs/app/api-reference/directives/use-cache#caching-function-output-with-use-cache)[Caching a component's output with use cache](https://nextjs.org/docs/app/api-reference/directives/use-cache#caching-a-components-output-with-use-cache)[Interleaving](https://nextjs.org/docs/app/api-reference/directives/use-cache#interleaving)[Caching a module's exports with use cache](https://nextjs.org/docs/app/api-reference/directives/use-cache#caching-a-modules-exports-with-use-cache)[Caching a route segment's output with use cache](https://nextjs.org/docs/app/api-reference/directives/use-cache#caching-a-route-segments-output-with-use-cache)[Troubleshooting](https://nextjs.org/docs/app/api-reference/directives/use-cache#troubleshooting)[Debugging cache behavior](https://nextjs.org/docs/app/api-reference/directives/use-cache#debugging-cache-behavior)[Verbose logging](https://nextjs.org/docs/app/api-reference/directives/use-cache#verbose-logging)[Console log replays](https://nextjs.org/docs/app/api-reference/directives/use-cache#console-log-replays)[Build Hangs (Cache Timeout)](https://nextjs.org/docs/app/api-reference/directives/use-cache#build-hangs-cache-timeout)[Platform Support](https://nextjs.org/docs/app/api-reference/directives/use-cache#platform-support)[Version History](https://nextjs.org/docs/app/api-reference/directives/use-cache#version-history)[Related](https://nextjs.org/docs/app/api-reference/directives/use-cache#related)
+Give feedback[Edit this page on GitHub](https://github.com/vercel/next.js/edit/canary/docs/01-app/03-api-reference/01-directives/use-cache.mdx)
+## Get started
+[Docs](https://nextjs.org/docs)[Support Policy](https://nextjs.org/support-policy)[Learn](https://nextjs.org/learn)[Showcase](https://nextjs.org/showcase)[Blog](https://nextjs.org/blog)[Team](https://nextjs.org/team)[Analytics](https://vercel.com/analytics?utm_source=next-site&utm_medium=footer&utm_campaign=docs_app_api-reference_directives_use-cache)[Next.js Conf](https://nextjs.org/conf)[Previews](https://vercel.com/products/previews?utm_source=next-site&utm_medium=footer&utm_campaign=docs_app_api-reference_directives_use-cache)[Evals](https://nextjs.org/evals)
+## More
+[Next.js Commerce](https://vercel.com/templates/next.js/nextjs-commerce?utm_source=next-site&utm_medium=footer&utm_campaign=docs_app_api-reference_directives_use-cache)[Contact Sales](https://vercel.com/contact/sales?utm_source=next-site&utm_medium=footer&utm_campaign=docs_app_api-reference_directives_use-cache)[Community](https://community.vercel.com)[GitHub](https://github.com/vercel/next.js)[Releases](https://github.com/vercel/next.js/releases)[Telemetry](https://nextjs.org/telemetry)[Governance](https://nextjs.org/governance)[Ecosystem Working Group](https://nextjs.org/ecosystem-working-group)
+## About Vercel
+[About Vercel](https://vercel.com/about?utm_source=next-site&utm_medium=footer&utm_campaign=docs_app_api-reference_directives_use-cache)[Next.js + Vercel](https://vercel.com/solutions/nextjs?utm_source=next-site&utm_medium=footer&utm_campaign=docs_app_api-reference_directives_use-cache)[Open Source Software](https://vercel.com/oss?utm_source=next-site&utm_medium=footer&utm_campaign=docs_app_api-reference_directives_use-cache)[GitHub](https://github.com/vercel)[Bluesky](https://bsky.app/profile/vercel.com)[X](https://x.com/vercel)
+## Legal
+[Privacy Policy](https://vercel.com/legal/privacy-policy)Cookie Preferences
+Subscribe to our newsletter
+Subscribe
+Stay updated on new releases and features, guides, and case studies.
+Select a display theme: systemlightdark

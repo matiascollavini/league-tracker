@@ -1,0 +1,996 @@
+================================================================================
+  REFERENCIA TECNICA — RIOT GAMES API (LEAGUE OF LEGENDS)
+  Documento de trabajo para league-page
+================================================================================
+  Versión del documento : 1.0
+  Fecha de verificación  : 2026-11-24
+  Patch de referencia    : 16.23.1
+  API keys               : todas gratuitas (dev / personal / producción)
+  Estado                 : verificado PARCIALMENTE. Lo marcado [OK] se comprobó
+                           con doc oficial o curl en vivo el 2026-11-24. Lo que
+                           depende de una key real sigue en §16 y §18.
+  Autor                  : investigación asistida (web-research x4 + verificación
+                           manual de datos críticos por el agente padre)
+================================================================================
+
+ÍNDICE
+  0.  Cómo usar este documento
+  1.  Decisión: qué API usamos y por qué
+  2.  LÍMITE CRÍTICO: no existe "todas las partidas de la cuenta"
+  3.  Registro, tipos de key y requisitos
+  4.  Rate limits y manejo de 429
+  5.  Routing: host de plataforma vs host regional (tabla)
+  6.  Autenticación y convenciones generales
+  7.  Endpoints
+      7.1 ACCOUNT-V1        (Riot ID -> PUUID)
+      7.2 MATCH-V5          (historial + detalle de partida)
+      7.3 SUMMONER-V4
+      7.4 LEAGUE-V4
+      7.5 CHAMPION-MASTERY-V4
+      7.6 LOL-STATUS-V4
+      7.7 Data Dragon       (estáticos: campeones, iconos, locales)
+      7.8 CommunityDragon / Meraki (opcionales)
+  8.  Modelo de datos y trampas conocidas
+  9.  Recetas de código (TypeScript)
+  10. Arquitectura de caché recomendada
+  11. Costo en requests (tabla)
+  12. Códigos de error y troubleshooting
+  13. Políticas y legal (obligatorio para publicar)
+  14. Checklist de implementación v1
+  15. Fuentes
+  16. Datos NO verificados (marcados UNVERIFIED)
+  17. Changelog
+
+================================================================================
+0. CÓMO USAR ESTE DOCUMENTO
+================================================================================
+Este es el documento de referencia de trabajo, no un resumen. Cuando haya que
+tocar la capa de datos de league-page, se lee acá. Si un dato de acá contradice
+a la documentación oficial, gana la oficial y se actualiza este archivo con la
+fecha nueva en el changelog.
+
+Convención de marcas:
+  [OK]         verificado hoy, con prueba (curl/doc oficial citada)
+  [UNVERIFIED] no se pudo confirmar; tratarlo como hipótesis
+  [GOTCHA]     error clásico que rompe la integración
+
+================================================================================
+1. DECISIÓN: QUÉ API USAMOS Y POR QUÉ
+================================================================================
+Usamos la API oficial de Riot Games + Data Dragon. Nada más.
+
+Motivos:
+  - Es la ÚNICA fuente gratuita, legal y estable de datos por jugador
+    (partidas, resultado, campeón, KDA, cola, duración).
+  - No hay plan pago: todas las keys son gratis. El costo real es el rate limit.
+  - Las alternativas (OP.GG, U.GG, DeepLoL, Mobalytics, LeagueOfGraphs,
+    LoLalytics) NO tienen API pública documentada; su JSON interno es
+    indocumentado, rota, está detrás de Cloudflare o prohibido por sus ToS.
+  - Además, todas ellas están aguas abajo de la misma API de Riot, así que
+    heredan el mismo tope de historial (ver sección 2). Scrapearlas no te da
+    más datos: te da menos y con riesgo legal.
+  - Data Dragon (oficial, sin key, sin rate limit) resuelve el join
+    championId -> nombre/icono/tags y los nombres en español.
+
+Descartados y por qué (resumen; detalle en research/03-alternatives.md):
+  OP.GG            : sin API pública; ToS prohíbe scraping (su FAQ se contradice).
+  U.GG             : robots.txt bloquea toda URL con query string; Cloudflare JS.
+  DeepLoL          : api.deeplol.gg no existe (NXDOMAIN); sin docs.
+  Mobalytics       : solo widgets para streamers.
+  LeagueOfGraphs   : robots.txt con Disallow: /api/*.
+  LoLalytics       : scrape frágil, anti-bot.
+  RapidAPI (proxies): revendedores; el precio es por request y viola la política
+                     de registro/reenvío de Riot.
+  LoL Esports API  : solo partidas profesionales (útil para un futuro tab de esports).
+  Leaguepedia Cargo: solo profesional + requiere bot password.
+
+================================================================================
+2. LÍMITE CRÍTICO: NO EXISTE "TODAS LAS PARTIDAS DE LA CUENTA"
+================================================================================
+Esto define el producto. Leerlo antes de diseñar la UI.
+
+La API de Riot devuelve, como máximo, las últimas ~1000 partidas del jugador
+(no es un parámetro: es un tope del backend).
+
+  [SECONDARY] Esto NO figura en la documentación oficial: sale de un comentario
+  de un dev de Riot en el tracker público (RiotGames/developer-relations,
+  issue #957, 2024-07-15) y de la política de retención de 2019. Ver §18 para la
+  prueba empírica que lo cierra con evidencia propia.
+  Texto exacto del comentario:
+
+  "Match data is retained for 2 years, match timelines for 1 year. A player's
+   match list will only show up to the last 1000 matches played. Non-public
+   games (customs, practice tool, etc.) count towards the 1000 match limit so
+   it may never hold exactly 1000. Games exceeding the limit but not exceeding
+   the retention period will only be accessible through the match list of
+   another player that participated in the game, or directly by the match id."
+
+Consecuencias para league-page:
+  - "Campeón más jugado en el total de la cuenta" NO se puede cumplir al 100%.
+    Se redefine como: "campeón más jugado en las últimas N partidas recuperables
+    (máx. ~1.000, ventana de 2 años)".
+  - En la UI SIEMPRE hay que mostrar la base del cálculo:
+      "Campeón más jugado — 320 partidas analizadas (de las últimas 1.000,
+       límite de la API de Riot), desde 12/03/2025 hasta 24/11/2026."
+    Sin ese texto el número es engañoso y el usuario va a reportar "está mal".
+  - Jugadores con mucho historial verán 950-1000; cuentas nuevas, 40. Los
+    customs y remakes consumen cupo, así que rara vez son exactamente 1000.
+  - Partidas fuera del tope pero dentro de los 2 años SÍ se pueden traer por ID
+    directo (/matches/{matchId}), pero necesitás el ID desde el historial de
+    OTRO participante. No es un camino viable para stats propias; sirve solo
+    para "¿viste esa partida?".
+  - No existe endpoint de "partidas totales jugadas" en ningún servicio:
+      CHAMPION-MASTERY-V4 -> puntos, nivel y lastPlayTime, NO partidas jugadas.
+      LEAGUE-V4           -> wins/losses de la season actual, por cola.
+      ACCOUNT-V1/SUMMONER -> nada.
+      League Client (LCU) -> solo local, no soportado para terceros.
+  - "start" más allá del final devuelve 200 con []. Un puuid sin partidas
+    devuelve 404 "Data not found" [UNVERIFIED: comportamiento observado por la
+    comunidad, no documentado]. Manejo recomendado: tratá 404 y [] igual
+    ("sin partidas").
+  - Los detalles de partida se retienen 2 años; los timelines, 1 año.
+
+Diseño recomendado: guardar las partidas en tu propia base desde el día 1
+(append-only) y calcular los agregados por campeón vos mismo. Así, con el
+tiempo, TU base acumula más historia que la ventana de 1000 de Riot. Ese es
+el único camino real para acercarse a "toda la cuenta".
+
+================================================================================
+3. REGISTRO, TIPOS DE KEY Y REQUISITOS
+================================================================================
+Portal: https://developer.riotgames.com
+Docs:   https://developer.riotgames.com/docs/portal
+
+3.1 Development key (para desarrollar hoy mismo)
+  - Se emite automáticamente al iniciar sesión con una cuenta de Riot.
+  - SE DESACTIVA CADA 24 HORAS. Hay que regenerarla a mano (botón "Regenerate")
+    o vas a ver 403 "Forbidden" de un día para el otro.
+  - Solo para prototipos. Prohibido usarla en un producto público.
+  - Rate limit real: ~20 req/1s + 100 req/2min por región (ver 4.1).
+    [UNVERIFIED por doc] El portal no publica el número de las dev keys. Los
+    Términos viejos (2013) dicen 10 requests cada 10s, que es MÁS estricto.
+    Diseñá a 1 rps y logueá X-App-Rate-Limit en la primera llamada real.
+
+3.2 Personal key (registrada, todavía NO pública)
+  - Se pide en https://developer.riotgames.com/app-type con descripción del
+    producto.
+  - Límites: 20 req/1s + 100 req/2min por región. Sin verificación de sitio no
+    hay aumentos.
+  - Texto oficial: "You may not run your application for public consumption
+    using a personal key… public consumption includes open alpha/beta tests."
+  - Sirve para: uso propio, demo privada, desarrollo con datos reales.
+
+3.3 Production key (lo que necesita una página pública)
+  - Mismo formulario, marcando "larger scale", y Riot audita la app.
+  - Límites iniciales: 500 req/10s + 30.000 req/10min POR REGIÓN (50 rps
+    sostenidos). Para un sitio chico con caché es holgado.
+  - Requisitos oficiales:
+      * Sitio/dominio EN VIVO y funcional ("near-complete state").
+      * Verificación de dominio: Riot te da un string que tenés que publicar en
+        tu URL (https://developer.riotgames.com/how-to-verify-site.html).
+      * Terms of Service y Privacy Policy visibles en el sitio.
+      * Evidencia del flujo: screenshots, video demo o app testeable por Riot.
+      * Un producto por key. Crear varias apps para saltar límites = violación.
+  - Tiempos: revisión semanal de lo de la semana anterior; puede tardar hasta
+    3 semanas (docs/faqs). Aprobado el caso de uso "player stats / match history".
+  - Plan: construir con dev/personal y pedir la production key EN CUANTO el
+    sitio esté deployado con dominio propio + páginas legales.
+
+================================================================================
+4. RATE LIMITS Y MANEJO DE 429
+================================================================================
+4.1 Números vigentes
+  Personal  : 20 requests / 1 segundo  Y  100 requests / 2 minutos
+  Producción: 500 requests / 10 segundos  Y  30.000 requests / 10 minutos
+  Los límites se aplican POR REGIÓN: el cupo de na1 es independiente del de euw1.
+
+4.2 Tres capas de límite (todas por región)
+  - application: por key, todas las methods juntas.
+  - method     : por endpoint + key (ej. match-v5 detail).
+  - service    : compartido entre TODAS las apps del mundo (el que te limita
+                 sin avisar cuando Riot está bajo carga).
+  Throughput efectivo = min(app, method, service).
+
+4.3 Headers que devuelve Riot (leerlos, no adivinar)
+  X-App-Rate-Limit        : "20:1,100:120"      -> permitido:segundos, por lista
+  X-App-Rate-Limit-Count  : "18:1,95:120"      -> consumido en la ventana
+  X-Method-Rate-Limit      / -Count            -> idem por endpoint
+  Retry-After             : "5"                -> SOLO en 429, en segundos
+  X-Rate-Limit-Type       : application|method|service  -> SOLO en 429
+
+  [GOTCHA] Si un 429 NO trae X-Rate-Limit-Type, el que te frenó es el servicio
+  de abajo (no el borde de la API): hay que retroceder mucho más fuerte.
+  Las ventanas arrancan con tu primer request, no están alineadas al reloj.
+
+4.4 Reglas de implementación (obligatorias)
+  - Un token bucket por (región, method) en UN solo proceso. Si cada request
+    de una Vercel Function crea su propio bucket, no hay control: por eso el
+    ingest va en un worker/cron, no en el request del usuario.
+  - Al 429: dormir Retry-After + jitter, drenar ese bucket, reintentar.
+    Reintentos con exponential backoff + full jitter, máximo 3.
+  - Nunca fan-out por page view: ver sección 10.
+  - NUNCA rotar varias dev keys para multiplicar cupo. Ver 13.3.
+
+================================================================================
+5. ROUTING: HOST DE PLATAFORMA VS HOST REGIONAL
+================================================================================
+[GOTCHA] Este es el error #1 de las integraciones nuevas: pegarle a la región
+equivocada devuelve 403/404 y parece "key inválida".
+
+  - HOST DE PLATAFORMA  -> datos de un servidor (summoner, league, mastery)
+                           {platform}.api.riotgames.com
+  - HOST REGIONAL       -> datos cross-región (account, match)
+                           {americas|asia|europe|sea}.api.riotgames.com
+
+Plataformas (platformId):
+  la1 (LA Norte)  la2 (LA Sur)  na1  br1  euw1  eun1  kr  jp1
+  oc1  tr1  ru  ph2  sg2  th2  vn2  me1
+
+Clusters regionales (para ACCOUNT-V1 y MATCH-V5):
+  americas : na1, br1, la1, la2
+  asia     : kr, jp1
+  europe   : euw1, eun1, tr1, ru, me1
+  sea      : oc1, ph2, sg2, th2, vn2
+
+  El matchId viene con prefijo de plataforma: KR_7412345678, LA1_..., NA1_...
+  El prefijo NO es el host: para el detalle usás el cluster regional.
+  (Ej.: match KR_... -> https://asia.api.riotgames.com/lol/match/v5/matches/KR_...)
+
+================================================================================
+6. AUTENTICACIÓN Y CONVENCIONES GENERALES
+================================================================================
+  Header:  X-Riot-Token: RGAPI-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+  (Existe ?api_key= pero filtra la key en logs/proxies: no usarlo.)
+
+  - Todas las respuestas son JSON (salvo error de infraestructura).
+  - Riot omite los campos vacíos: "Any numeric field that isn't returned can be
+    assumed to be 0". [GOTCHA] No hagas .toFixed() sobre un campo que puede no
+    venir: usá ?? 0.
+  - Los servicios llevan su major version en el path: account/v1, match/v5,
+    summoner/v4, league/v4, champion-mastery/v4, lol-status/v4.
+  - Deprecaciones: Riot mantiene versión vieja y nueva ~60 días y avisa por el
+    blog/Discord de DevRel.
+  - PUUID: string de exactamente 78 caracteres. Es el identificador estable;
+    el nombre puede cambiar. Guardá SIEMPRE el puuid, nunca el nombre como PK.
+
+================================================================================
+7. ENDPOINTS
+================================================================================
+Formato de cada ejemplo: request real -> respuesta ilustrativa.
+[NOTA] Los bodies de ejemplo muestran la FORMA y los campos confirmados por la
+referencia oficial, pero los valores son ficticios. Que un campo opcional
+aparezca acá no garantiza que venga siempre.
+
+--------------------------------------------------------------------------------
+7.1 ACCOUNT-V1 — Riot ID -> PUUID          (host REGIONAL)
+--------------------------------------------------------------------------------
+GET https://{cluster}.api.riotgames.com/riot/account/v1/accounts/by-riot-id/{gameName}/{tagLine}
+
+  gameName : 3-16 caracteres, NO único (muchos "Faker"). Puede tener espacios
+             y acentos ("Hide on bush"); el formato exacto no está documentado.
+  tagLine  : 3-5 caracteres alfanuméricos (KR1, LAN, 1234...).
+  Un Riot ID se identifica por la COMBINACIÓN gameName#tagLine.
+  URL-encodeá ambos segmentos (espacios, acentos, ñ). El '#' NO va en la URL:
+  va como separador → partís "Nombre#TAG" en dos path params.
+
+  GET https://americas.api.riotgames.com/riot/account/v1/accounts/by-riot-id/Hide%20on%20bush/KR1
+  200 -> {
+    "puuid": "b2N0...78 chars...",
+    "gameName": "Hide on bush",
+    "tagLine": "KR1"
+  }
+
+  Variantes:
+  GET /riot/account/v1/accounts/by-puuid/{puuid}                  -> mismo objeto
+  GET /riot/account/v1/active-shards/by-game/lol/by-puuid/{puuid} -> shard activo
+      (útil si no sabés en qué plataforma jugó: { "active": true, "game": "lol",
+       "region": "na1" })
+  GET /riot/account/v1/region/by-game/lol/by-puuid/{puuid}
+
+  Notas:
+  - Se puede consultar cualquier cuenta desde cualquier cluster: la data de
+    cuentas es idéntica en americas/asia/europe/sea. Igual elegí el cluster
+    correcto por consistencia y para no mezclar con match.
+  - Desde el 2023-11-20 el Riot ID es la identidad oficial.
+    summoner-v4/by-name/{summonerName} está DEPRECADO y Riot avisó que va a
+    eliminar los summoner names de la API.
+
+--------------------------------------------------------------------------------
+7.2 MATCH-V5 — historial y detalle     (host REGIONAL)
+--------------------------------------------------------------------------------
+7.2.1 Lista de match IDs
+GET https://{cluster}.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids
+    ?start=0&count=100&startTime=&endTime=&queue=&type=
+
+  start     : índice inicial. Default 0. (Sin tope documentado; más allá del
+              final devuelve [].)
+  count     : Default 20. VALID VALUES: 0 a 100.  [GOTCHA] count=101 -> 400.
+  queue     : int, queueId (420 ranked solo, 450 ARAM...). Ver 8.4.
+  type      : ranked | normal | tourney | tutorial
+  startTime / endTime : epoch SEGUNDOS. "The matchlist started storing
+              timestamps on June 16th, 2021. Any matches played before June
+              16th, 2021 won't be included in the results if the startTime
+              filter is set."
+  queue y type son mutuamente incluyentes: "any match ids returned must match
+  both the queue and type filters".
+
+  GET .../by-puuid/{puuid}/ids?start=0&count=20&type=ranked&queue=420
+  200 -> ["LA1_1938475621","LA1_1938471022", ...]   (List[string])
+
+  Orden: más reciente primero. Sin partidas -> 404 "Data not found".
+
+7.2.2 Detalle de una partida
+GET https://{cluster}.api.riotgames.com/lol/match/v5/matches/{matchId}
+        (matchId incluye el prefijo de plataforma: LA1_1938475621)
+
+  200 -> {
+    "metadata": {
+      "dataVersion": "2",
+      "matchId": "LA1_1938475621",
+      "participants": ["puuid1", ..., "puuid10"]     // 10 puuids
+    },
+    "info": {
+      "gameCreation": 1763900000000,        // ms epoch (inicio de la creación)
+      "gameStartTimestamp": 1763900012000,
+      "gameEndTimestamp": 1763901832000,    // presente en partidas nuevas
+      "gameDuration": 1832,                 // SEGUNDOS si hay gameEndTimestamp
+      "gameMode": "CLASSIC",
+      "gameType": "MATCHED_GAME",
+      "gameVersion": "16.23.541.1234",      // los 2 primeros segmentos = patch
+      "mapId": 11,
+      "platformId": "LA1",
+      "queueId": 420,
+      "endOfGameResult": "GameComplete",
+      "participants": [
+        {
+          "puuid": "...",
+          "riotIdGameName": "Hide on bush",
+          "riotIdTagline": "KR1",
+          "championId": 103,
+          "championName": "Ahri",
+          "teamId": 100,
+          "teamPosition": "MIDDLE",        // TOP|JUNGLE|MIDDLE|BOTTOM|UTILITY|""
+          "individualPosition": "MIDDLE",
+          "lane": "MIDDLE",
+          "role": "SOLO",
+          "win": true,
+          "kills": 7, "deaths": 2, "assists": 9,
+          "champLevel": 16,
+          "profileIcon": 4321,
+          "summonerLevel": 512,
+          "totalMinionsKilled": 210,
+          "neutralMinionsKilled": 12,
+          "goldEarned": 13400,
+          "visionScore": 31,
+          "totalDamageDealtToChampions": 24500,
+          "item0": 3078, "item1": 0, "item2": 0, "item3": 0,
+          "item4": 0, "item5": 0, "item6": 3340,
+          "teamEarlySurrendered": false,
+          "timePlayed": 1832,
+          "challenges": { "kda": 8.0, "killParticipation": 0.55, ... }
+        }
+        // ... 9 más
+      ],
+      "teams": [
+        { "teamId": 100, "win": true, "objectives": {...}, "bans": [...] },
+        { "teamId": 200, "win": false, "objectives": {...}, "bans": [...] }
+      ]
+    }
+  }
+
+  Variantes:
+  GET /lol/match/v5/matches/{matchId}/timeline   -> eventos minuto a minuto
+                                   (1 año de retención; solo si hacés gráficos)
+  GET /lol/match/v5/matches/by-tournament-code/{code}/ids
+
+  Para las stats de v1 alcanza con: metadata.matchId, info.participants[] del
+  jugador (championId, championName, win, kills, deaths, assists, teamPosition),
+  info.queueId, info.gameCreation, info.gameDuration, teams[].win.
+  Todo lo demás (items, daño, challenges) es material para features futuras.
+
+--------------------------------------------------------------------------------
+7.3 SUMMONER-V4                             (host de PLATAFORMA)
+--------------------------------------------------------------------------------
+GET https://{platform}.api.riotgames.com/lol/summoner/v4/summoners/by-puuid/{puuid}
+
+  200 -> {
+    "puuid": "...",
+    "profileIconId": 4321,
+    "revisionDate": 1763900000000,
+    "summonerLevel": 512
+  }
+
+  [GOTCHA] El DTO actual NO trae id, accountId ni name (documentación vieja sí
+  los muestra). El nivel y el icono ya vienen en cada participante del match,
+  así que para v1 este endpoint es OPCIONAL.
+
+--------------------------------------------------------------------------------
+7.4 LEAGUE-V4                              (host de PLATAFORMA)
+--------------------------------------------------------------------------------
+GET https://{platform}.api.riotgames.com/lol/league/v4/entries/by-puuid/{puuid}
+  [OK] la referencia oficial de league-v4 lista "entries/by-puuid" (verificado
+  hoy por grep en developer.riotgames.com/api-details/league-v4).
+  [UNVERIFIED] no se pudo probar la respuesta con una key real (ver §18).
+
+  200 -> [
+    {
+      "leagueId": "...",
+      "queueType": "RANKED_SOLO_5x5",   // o RANKED_FLEX_SR
+      "tier": "PLATINUM", "rank": "II",
+      "leaguePoints": 64,
+      "wins": 120, "losses": 110,
+      "hotStreak": false, "veteran": true, "freshBlood": false,
+      "inactive": false,
+      "miniSeries": null
+    }
+  ]
+
+  wins/losses son de la SEASON ACTUAL y de esa cola: no sirven para "total
+  histórico". Jugador sin rank -> array vacío. [UNVERIFIED] si puede devolver
+  404 en vez de []; manejá ambos casos.
+
+--------------------------------------------------------------------------------
+7.5 CHAMPION-MASTERY-V4                    (host de PLATAFORMA)
+--------------------------------------------------------------------------------
+GET https://{platform}.api.riotgames.com/lol/champion-mastery/v4/champion-masteries/by-puuid/{puuid}
+  [OK] la referencia oficial de champion-mastery-v4 lista "by-puuid" (verificado
+  hoy por grep). [UNVERIFIED] respuesta con key real (ver §18).
+
+  200 -> [ { "championId": 103, "championLevel": 12, "championPoints": 245000,
+             "lastPlayTime": 1763800000000, "chestGranted": true,
+             "tokensEarned": 2, "championSeasonMilestone": 3, ... } ]  // puntos desc
+
+  Variantes:
+    .../by-puuid/{puuid}/top?count=10
+    .../by-puuid/{puuid}/by-champion/{championId}
+    .../scores/by-puuid/{puuid}
+
+  [GOTCHA] Ordena por PUNTOS de maestría, no por partidas jugadas. NO sirve
+  como "campeón más jugado" exacto. Es un buen fallback instantáneo (1 request)
+  para mostrar algo mientras corre el análisis real, o para "tu main según
+  maestría". No hay campo de partidas jugadas.
+
+--------------------------------------------------------------------------------
+7.6 LOL-STATUS-V4                          (host de PLATAFORMA)
+--------------------------------------------------------------------------------
+GET https://{platform}.api.riotgames.com/lol/status/v4/platform-data
+  Útil para un banner "el servidor está en mantenimiento" cuando el ingest
+  empieza a fallar. Opcional para v1.
+
+--------------------------------------------------------------------------------
+7.7 DATA DRAGON — estáticos (SIN KEY, SIN RATE LIMIT)
+--------------------------------------------------------------------------------
+Documentación: https://developer.riotgames.com/docs/lol#data-dragon
+
+  Versiones (más nueva primero):
+  GET https://ddragon.leagueoflegends.com/api/versions.json
+  200 -> ["16.23.1","16.22.1", ...]        [OK] verificado 2026-11-24
+
+  Versión del cliente por región. Los realms son códigos de DDragon, NO
+  platformIds: na, euw, eune, kr, br, lan, las, oce, tr, ru, jp, pbe (la lista
+  puede crecer; no la derives de la tabla de §5).
+  GET https://ddragon.leagueoflegends.com/realms/na.json
+  200 -> { "n": {"item":"16.23.1","champion":"16.23.1","profileicon":"16.23.1",...},
+           "v": "16.23.1", "l": "en_US",
+           "cdn": "https://ddragon.leagueoflegends.com/cdn",
+           "profileiconmax": 28, ... }
+  [GOTCHA] https://ddragon.leagueoflegends.com/realms/la1.json devuelve 403
+  (AccessDenied): para LAN/LAS se usa "lan"/"las". Verificado con curl hoy.
+
+  Locales disponibles:
+  GET https://ddragon.leagueoflegends.com/cdn/languages.json
+  incluye es_ES, es_MX, es_AR. Usamos es_ES.
+
+  Catálogo de campeones (al 16.23.1 son 173 en es_ES — conteo observado, no lo
+  hardcodees: usá Object.keys(data).length):
+  GET https://ddragon.leagueoflegends.com/cdn/16.23.1/data/es_ES/champion.json
+  200 -> {
+    "type": "champion", "format": "...", "version": "16.23.1",
+    "data": {
+      "Ahri": {
+        "id": "Ahri",              // string, se usa en las URLs de assets
+        "key": "103",              // championId numérico, pero como STRING
+        "name": "Ahri",
+        "title": "La Mujer Zorro de nueve Colas",     // localizado
+        "blurb": "...",
+        "info": { "attack": 3, "defense": 4, "magic": 8, "difficulty": 5 },
+        "image": { "full": "Ahri.png", "sprite": "champion0.png",
+                   "group": "champion", "x": 48, "y": 0, "w": 48, "h": 48 },
+        "tags": ["mage","assassin"],
+        "partype": "Maná",
+        "stats": { "hp": 590, "movespeed": 330, ... }
+      },
+      ...
+    }
+  }
+
+  Ficha individual (incluye skins, pasivas, hechizos, tips):
+  GET https://ddragon.leagueoflegends.com/cdn/16.23.1/data/es_ES/champion/Ahri.json
+  (la clave de "data" es el id string: "Ahri", no el 103)
+
+  Imágenes:
+    Icono cuadrado : https://ddragon.leagueoflegends.com/cdn/16.23.1/img/champion/Ahri.png
+    Splash         : https://ddragon.leagueoflegends.com/cdn/img/champion/splash/Ahri_0.jpg
+    Loading        : https://ddragon.leagueoflegends.com/cdn/img/champion/loading/Ahri_0.jpg
+    Icono de perfil: https://ddragon.leagueoflegends.com/cdn/16.23.1/img/profileicon/{profileIconId}.png
+    Ítems         : https://ddragon.leagueoflegends.com/cdn/16.23.1/img/item/{itemId}.png
+    Hechizos      : https://ddragon.leagueoflegends.com/cdn/16.23.1/img/spell/{id}.png
+
+  Cómo usarlo:
+  - Traé champion.json 1 vez por patch (cachealo fuerte, es estático) y armá
+    un Map<number, Champion> indexando por Number(key).
+  - Los nombres en es_ES salen de acá, no de la API de partidas.
+  - El CDN de imágenes se puede hot-linkear desde el browser sin key ni límite.
+
+--------------------------------------------------------------------------------
+7.8 COMMUNITYDRAGON Y MERAKI (opcionales, NO oficiales)
+--------------------------------------------------------------------------------
+  CommunityDragon — espejo no oficial del cliente.
+    https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/v1/champion-summary.json   [OK] 200, ~60 KB
+    https://cdn.communitydragon.org/
+    Su propia doc avisa que el CDN "will be deprecated in the future".
+    Útil para iconos de habilidades, augments, ítems de Arena, etc.
+    Riesgo: mantenido por voluntarios, sin SLA. No lo pongas en el camino crítico.
+
+  Meraki Analytics CDN — no oficial, sin key.
+    https://cdn.merakianalytics.com/riot/lol/resources/latest/en-US/champions.json   (~13 MB)
+    .../items.json, .../championrates.json
+    championrates.json da play rate global por championId x rol:
+      {"data":{"1":{"MIDDLE":{"playRate":0.595}}}}
+    Sirve solo para un futuro "meta global", nunca para datos por jugador.
+    Requiere atribución y fallback si se cae.
+
+================================================================================
+8. MODELO DE DATOS Y TRAMPAS CONOCIDAS
+================================================================================
+8.1 championId vs championName  [GOTCHA]
+  - Riot recomienda identificar el campeón por championName: "championId was
+    invalid for matches before patch 11.4 (2021-02-18); we recommend determining
+    the champion based on the championName field".
+  - championName coincide con el "id" de Data Dragon ("Ahri", "MonkeyKing").
+  - Para el join con el catálogo: DDragon.key (string) -> Number() = championId.
+  - Regla del proyecto: agrupá SIEMPRE por championName (es la recomendación
+    oficial y coincide con el "id" de Data Dragon). Guardá championId igual,
+    para iconos/joins, pero NUNCA lo uses como clave en partidas < 11.4.
+
+8.2 gameDuration  [GOTCHA]
+  Cambió en el patch 11.20: antes venía en MILISEGUNDOS, ahora en SEGUNDOS.
+  Regla: si existe gameEndTimestamp -> gameDuration ya es segundos;
+  si no existe -> dividí por 1000.
+
+8.3 Campos omitidos
+  Si un campo numérico no viene, vale 0. Nunca asumas su presencia.
+  Los strings vacíos sí pueden venir ("").
+
+8.4 queueId más usados
+  400 Draft Pick · 420 Ranked Solo · 430 Blind Pick · 440 Ranked Flex
+  450 ARAM · 700 Clash · 1700 Arena · 1900 URF · 0 Custom
+  Lista completa: https://static.developer.riotgames.com/docs/lol/queues.json
+  Para v1: por defecto mostrar TODAS las colas, con filtro rápido
+  "Solo/Duo" (420) / "Flex" (440) / "Normal" (400+430) / "ARAM" (450).
+  [GOTCHA legal] No mostrar partidas de cola custom (queueId 0) sin opt-in del
+  jugador, y no mostrar winrates de Augments/ítems de Arena (ver 13).
+
+8.5 teamPosition
+  Usá teamPosition (recomendación oficial), no individualPosition, para
+  "rol jugado". Viene "" cuando no aplica (ARAM, partidas viejas).
+
+8.6 Riot ID y PUUID
+  - PUUID: 78 chars, estable, por juego. Guardalo como PK.
+  - gameName no es único; la identidad es gameName + tagLine.
+  - El jugador puede cambiar de nombre: el puuid sobrevive, el nombre no.
+  - Cambio de Riot ID: 1 gratis cada 90 días (Riot ID FAQ).
+
+8.7 Ventanas de tiempo
+  - gameCreation / gameStartTimestamp / gameEndTimestamp: epoch en MS.
+  - startTime/endTime de by-puuid/ids: epoch en SEGUNDOS. No mezclar.
+
+================================================================================
+9. RECETAS DE CÓDIGO (TypeScript)
+================================================================================
+9.1 Cliente con token bucket (solo en el servidor / worker)
+--------------------------------------------------------------------------------
+type Bucket = { tokens: number; last: number };
+
+const buckets = new Map<string, Bucket>();
+
+const WINDOWS: Array<[number, number]> = [ [1, 20], [120, 100] ]; // [seg, tokens]
+
+export async function riotFetch<T>(url: string, region: string): Promise<T> {
+  const key = process.env.RIOT_API_KEY;
+  if (!key) throw new Error("RIOT_API_KEY no configurada");
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    // espera hasta que el bucket de esta región tenga lugar
+    const b = buckets.get(region) ?? { tokens: 20, last: Date.now() };
+    const now = Date.now();
+    const elapsed = (now - b.last) / 1000;
+    b.tokens = Math.min(20, b.tokens + elapsed * (20 / 1));
+    b.last = now;
+
+    if (b.tokens < 1) {
+      const deficit = 1 - b.tokens;
+      await sleep((deficit * 1000) / 20);
+      continue;
+    }
+    b.tokens -= 1;
+    buckets.set(region, b);
+
+    const res = await fetch(url, {
+      headers: { "X-Riot-Token": key },
+      cache: "no-store",
+    });
+
+    if (res.ok) return (await res.json()) as T;
+
+    if (res.status === 429) {
+      const retry = Number(res.headers.get("retry-after") ?? "1");
+      await sleep((retry + Math.random()) * 1000);
+      continue;
+    }
+    if (res.status >= 500) {
+      await sleep(2 ** attempt * 1000 + Math.random() * 500);
+      continue;
+    }
+    throw new RiotError(res.status, await res.text());
+  }
+  throw new Error("rate limit / reintentos agotados: " + url);
+}
+
+// Producción: respetar 20/s y 100/2min. Además, un semáforo serializado
+// (por proceso) evita que dos jobs del worker se pisen.
+
+9.2 Resolver Riot ID -> puuid (cachear para siempre)
+--------------------------------------------------------------------------------
+function clusterFor(platform: string) {
+  if (["na1","br1","la1","la2"].includes(platform)) return "americas";
+  if (["kr","jp1"].includes(platform)) return "asia";
+  if (["euw1","eun1","tr1","ru","me1"].includes(platform)) return "europe";
+  return "sea"; // oc1, ph2, sg2, th2, vn2
+}
+
+async function resolveRiotId(gameName: string, tagLine: string, platform: string) {
+  const c = clusterFor(platform);
+  const url = `https://${c}.api.riotgames.com/riot/account/v1/accounts/by-riot-id/` +
+              `${encodeURIComponent(gameName)}/${encodeURIComponent(tagLine)}`;
+  return riotFetch<{ puuid: string; gameName: string; tagLine: string }>(url, c);
+}
+
+9.3 Últimas 20 partidas
+--------------------------------------------------------------------------------
+async function lastMatches(puuid: string, cluster: string, count = 20) {
+  const ids = await riotFetch<string[]>(
+    `https://${cluster}.api.riotgames.com/lol/match/v5/matches/by-puuid/${puuid}/ids` +
+    `?start=0&count=${count}`, cluster);
+  const matches = [];
+  for (const id of ids) {            // secuencial: no paralelizar > 2-3
+    matches.push(await riotFetch<MatchDto>(
+      `https://${cluster}.api.riotgames.com/lol/match/v5/matches/${id}`, cluster));
+  }
+  return matches;
+}
+
+9.4 Agregado por campeón (el corazón del producto)
+--------------------------------------------------------------------------------
+type ChampAgg = { championId: number; championName: string; games: number; wins: number };
+
+function aggregateByChampion(matches: MatchDto[], puuid: string): ChampAgg[] {
+  const map = new Map<string, ChampAgg>();
+  for (const m of matches) {
+    const p = m.info.participants.find((x) => x.puuid === puuid);
+    if (!p) continue;
+    // excluir customs: riesgo legal (ver 13) y ruido de stats
+    if (m.info.queueId === 0) continue;
+
+    // Clave de agrupación: championName SIEMPRE.
+    // Riot recomienda championName y avisa que championId es inválido en
+    // partidas < 11.4. Además championName == DDragon.data[*].id.
+    const k = p.championName;
+
+    const cur = map.get(k) ?? {
+      championId: p.championId, championName: p.championName, games: 0, wins: 0,
+    };
+    cur.games += 1;
+    if (p.win) cur.wins += 1;
+    map.set(k, cur);
+  }
+  return [...map.values()]
+    .map((a) => ({ ...a, winrate: a.wins / a.games }))
+    .sort((a, b) => b.games - a.games);
+}
+
+// "Campeón más jugado" = aggregateByChampion(...)[0]
+// "Filtrar por campeón" = el mismo array, buscado por championName.
+
+9.5 Backfill paginado (worker, nunca en un request de usuario)
+--------------------------------------------------------------------------------
+async function backfill(puuid: string, cluster: string, maxPages = 10) {
+  // 10 páginas x 100 = 1.000 = el tope real de Riot
+  for (let page = 0; page < maxPages; page++) {
+    const ids = await riotFetch<string[]>(
+      `https://${cluster}.api.riotgames.com/lol/match/v5/matches/by-puuid/${puuid}/ids` +
+      `?start=${page * 100}&count=100`, cluster);
+    if (ids.length === 0) break;               // fin del historial disponible
+    for (const id of ids) {
+      if (await existsInDb(id)) continue;      // idempotente
+      const m = await riotFetch<MatchDto>(
+        `https://${cluster}.api.riotgames.com/lol/match/v5/matches/${id}`, cluster);
+      await saveMatch(m);                      // guarda + upsert de agregados
+    }
+    await updateSyncCursor(puuid, page);
+  }
+}
+
+// Guardá el progreso (puuid_sync.backfill_state) para poder reanudar y para
+// mostrar en la UI "analizando 320/1.000…".
+
+================================================================================
+10. ARQUITECTURA DE CACHÉ RECOMENDADA
+================================================================================
+Regla de oro: NINGÚN page view le pega a Riot. El web tier lee SOLO de tu caché
+/ base. El ingest corre en un worker.
+
+Tres capas:
+
+  (1) CDN / render cache  — la página
+      - HTML cacheado 30-300s por URL (perfil/puuid), swr.
+      - Partidas individuales son inmutables: cache "max".
+
+  (2) Caché de Riot — Redis / KV  (lo que evita quemar el rate limit)
+      riotId  -> puuid                    TTL: permanente
+      matchId -> match JSON completo      TTL: permanente (inmutable)
+      puuid   -> agregado por campeón     TTL: 10-30 min
+      lock    -> SET NX PX por puuid      colapsa N visitas concurrentes en 1 sync
+
+  (3) Base de datos — Postgres (Neon/Supabase free)  (historia propia)
+      matches(match_id TEXT PRIMARY KEY, platform_id TEXT, cluster TEXT,
+              queue_id INT, game_version TEXT, game_start_ts BIGINT,
+              game_duration_s INT, payload JSONB, fetched_at TIMESTAMPTZ)
+      puuid_matches(puuid TEXT, match_id TEXT, PRIMARY KEY (puuid, match_id))
+      champion_stats(puuid TEXT, champion_id INT, champion_name TEXT,
+                     games INT, wins INT, PRIMARY KEY (puuid, champion_id))
+      puuid_sync(puuid TEXT PRIMARY KEY, cluster TEXT, last_synced_at TIMESTAMPTZ,
+                 oldest_match_ts BIGINT,
+                 backfill_state TEXT CHECK (backfill_state IN
+                   ('none','running','done','partial')),
+                 ids_cursor INT DEFAULT 0)
+
+TTLs sugeridos:
+  match detail        : ∞ (inmutable)
+  puuid_matches       : ∞
+  agregado por campeón: 30 min (soft)
+  ids página 0        : 5-15 min
+  account -> puuid    : ∞
+
+Refresh incremental (lo ÚNICO que puede tocar un page view, y solo si no hay caché):
+  si puuid_sync.last_synced_at > now() - 30min -> devolver agregado cacheado (0 calls)
+  si no -> pedir ids de la página 0 (count=20) -> diff con puuid_matches
+           -> bajar solo los nuevos (k calls, secuencial) -> upsert -> devolver
+
+Por qué el worker y no la función serverless:
+  El token bucket tiene que vivir en un proceso que persiste y que atiende todo
+  el tráfico de Riot. En serverless cada invocación es un proceso nuevo: no hay
+  bucket compartido y te comés 429. Opciones de worker gratis:
+    - GitHub Actions schedule: mínimo 5 min, se auto-desactiva a los 60 días sin
+      actividad en repos públicos (chequear y reactivar).
+    - Un proceso Node en Fly.io / Railway (o VPS chico).
+    - Vercel Cron en Hobby: mínimo 1 vez por día (demasiado grueso para esto).
+
+Aplicar la production key: el sitio público la necesita. Sin ella, el proyecto
+solo puede ser privado/demo.
+
+================================================================================
+11. COSTO EN REQUESTS
+================================================================================
+  | Escenario                                | Cold (calls)         |
+  |------------------------------------------|----------------------|
+  | Riot ID -> puuid                         | 1                    |
+  | Perfil "últimas 20" (ids + 20 detalles)  | 1 + 1 + 20 = 22      |
+  | Refresh incremental con 3 partidas nuevas| 1 + 3 = 4            |
+  | Backfill completo (10 páginas + 1000)    | 1 + 10 + 1000 = 1011 |
+  | Segundo usuario abre el mismo perfil     | 1 + 0 (ya cacheadas) |
+
+  Throughput:
+  - dev/personal: 20/1s + 100/2min = 0,83 rps sostenidos.
+      22 calls ≈ 26s  |  backfill 1011 ≈ 20 min  -> inviable por usuario.
+  - producción   : 50 rps sostenidos.
+      22 calls ≈ 0,5s |  backfill 1011 ≈ 20s.
+  Conclusión: con caché, un sitio chico vive cómodo con producción; dev sirve
+  solo para desarrollar (y el backfill se corre en background, nunca en el
+  request del usuario).
+
+================================================================================
+12. CÓDIGOS DE ERROR Y TROUBLESHOOTING
+================================================================================
+  400  sintaxis/parámetro inválido (count>100, startTime>endTime, tipo mal)
+  401  falta la key o está vacía
+       -> {"status":{"message":"Cannot process request apikey or authorization
+           header is empty","status_code":401}}          [OK] verificado
+  403  key inválida / expirada (dev key >24h) / blacklisted
+       TAMBIÉN: host equivocado (plataforma vs regional) o path inexistente
+       -> si el resto anda y una ruta da 403, sospechá del host/path primero
+  404  recurso no encontrado (puuid sin partidas, matchId inexistente)
+  415  Content-Type incorrecto (solo en POST)
+  429  rate limit -> leer Retry-After + X-Rate-Limit-Type
+  500  error interno de Riot -> backoff y reintentar
+  503  servicio no disponible -> backoff; revisar lol-status-v4
+  405/502/504  aparecen listados en algunas páginas de servicio
+
+  El cuerpo de un error NO está garantizado como JSON: ramificá por status.
+  Checklist de "no me anda":
+    1. ¿La key tiene menos de 24h (dev)? -> regenerar.
+    2. ¿Host correcto? account/match = regional; summoner/league/mastery = plataforma.
+    3. ¿count <= 100?  4. ¿URL-encodeaste gameName?  5. ¿'#' fuera de la URL?
+    6. ¿El cluster corresponde a la plataforma? (7.1 y sección 5)
+
+================================================================================
+13. POLÍTICAS Y LEGAL (obligatorio si el sitio es público)
+================================================================================
+Fuentes: https://developer.riotgames.com/policies/general  (rev. 2025-05-29)
+         https://developer.riotgames.com/docs/lol#developer-api-policy
+         https://developer.riotgames.com/terms
+
+13.1 Registro y auditoría
+  Todo producto debe estar registrado y auditado en el Developer Portal. Cambios
+  o features nuevas también se auditan. Un sitio público con key personal/dev es
+  una violación de política, no una simple molestia de rate limit.
+
+13.2 Atribución obligatoria (texto visible en el sitio)
+  Incluir el boilerplate: "<Tu producto> isn't endorsed by Riot Games and doesn't
+  reflect the views or opinions of Riot Games or anyone officially involved in
+  producing or managing Riot Games properties. Riot Games, and all associated
+  properties are trademarks or registered trademarks of Riot Games, Inc."
+  (Traducirlo es riesgoso: dejalo en inglés y agregá una nota en español.)
+
+13.3 Prohibiciones que nos tocan
+  - No exponer tu propia API a terceros ("no apps serving as a data broker
+    between our API and another third-party company"). Nada de /api/public/*
+    que devuelva datos crudos de Riot.
+  - No crear múltiples apps para saltar rate limits. No compartir/vender la key.
+  - No revender ni licenciar Game Information sin aprobación escrita de Riot.
+    Publicidad común sí está permitida; cobrar por el acceso a los datos, no.
+  - Assets: solo Data Dragon, Press Kit y packs oficiales. No usar arte propio
+    de terceros.
+  - No mostrar historial de partidas de cola CUSTOM sin opt-in del jugador.
+  - No mostrar winrates de Augments ni de ítems de Arena.
+  - No hacer apps que imiten productos de Riot (cuidado con el branding).
+  - Si monetizás: el estado del producto debe ser "Approved or Acknowledged" y
+    tiene que existir un tier gratuito. Nada de apuestas.
+
+13.4 Privacidad / GDPR
+  Los datos de invocador son datos personales. Riot puede reenviarte pedidos de
+  borrado de usuarios finales. Necesitás:
+    - Privacy Policy publicada (además es requisito para la production key).
+    - Un mecanismo para borrar los datos de un puuid a pedido.
+    - No loguear puuids/nombres innecesariamente.
+
+13.5 Caché (recomendación oficial, no obligación)
+  [SECONDARY] Los TTL que circulan como "oficiales" (historial ~30 min, iconos y
+  nombres ~24 h, estáticos más) vienen de un espejo comunitario del texto que
+  Riot publicaba. Son razonables y los usamos, pero no son un requisito
+  contractual: lo que sí es obligatorio es no abusar del rate limit.
+
+13.6 Nombre del sitio
+  No uses "Riot", "League of Legends" ni logos como si fueras oficial. Un
+  "<algo> para LoL" con disclaimer alcanza. Evitá dominios tipo
+  riot-stats.com / leagueoflegends-tracker.com.
+
+================================================================================
+14. CHECKLIST DE IMPLEMENTACIÓN v1
+================================================================================
+  [ ] Cuenta en developer.riotgames.com + dev key guardada en .env.local
+  [ ] Cliente riotFetch con token bucket + manejo de 429 (sección 9.1)
+  [ ] Resolver Riot ID -> puuid, con cache permanente (9.2)
+  [ ] Últimas 20 partidas + render (9.3)
+  [ ] Agregado por campeón calculado desde las partidas guardadas (9.4)
+  [ ] Filtro por campeón (championName) con games + winrate
+  [ ] Texto "N partidas analizadas (máx. 1.000, límite de Riot)" + rango de fechas
+  [ ] Join con Data Dragon cacheado por patch, locale es_ES (7.7)
+  [ ] Iconos servidos desde el CDN de DDragon (sin proxy)
+  [ ] Excluir queueId 0 (customs) de las stats
+  [ ] TTLs de 10-30 min en agregados; partidas inmutables
+  [ ] Worker de backfill desacoplado del request (aunque sea un script manual)
+  [ ] Páginas /terms y /privacy + footer con el disclaimer de Riot
+  [ ] Deploy con dominio propio y aplicar production key
+  [ ] Manejo de estados: "analizando", "sin partidas", "cuenta no encontrada",
+      "servicio de Riot caído"
+
+================================================================================
+15. FUENTES
+================================================================================
+  Portal y keys        https://developer.riotgames.com/docs/portal
+  API LoL (routing)    https://developer.riotgames.com/docs/lol
+  FAQs                 https://developer.riotgames.com/docs/faqs
+  Políticas generales  https://developer.riotgames.com/policies/general
+  Términos             https://developer.riotgames.com/terms
+  Verificar sitio      https://developer.riotgames.com/how-to-verify-site.html
+  Referencia ACCOUNT   https://developer.riotgames.com/api-details/account-v1
+  Referencia MATCH     https://developer.riotgames.com/api-details/match-v5
+  Referencia LEAGUE    https://developer.riotgames.com/api-details/league-v4
+  Referencia MASTERY   https://developer.riotgames.com/api-details/champion-mastery-v4
+  Data Dragon          https://developer.riotgames.com/docs/lol#data-dragon
+  Colas (queueId)      https://static.developer.riotgames.com/docs/lol/queues.json
+  Retención de datos   https://www.riotgames.com/en/DevRel/match-history-retention-Change
+                       [OK] 200, título "Match History Retention Change", agosto
+                       2019: retención de 3 años -> 2 años (cadencia móvil).
+  Tope de 1000         https://github.com/RiotGames/developer-relations/issues/957#issuecomment-2227603951
+                       [SECONDARY] comentario de DevRel, 2024-07-15. No está en
+                       la doc oficial. Confirmar empíricamente (§18, curl 4).
+  Headers de rate limit https://hextechdocs.dev/rate-limiting/ (espejo de la doc oficial)
+  Riot ID FAQ          https://support.riotgames.com/league-of-legends/account/riot-id-faq
+  CommunityDragon      https://www.communitydragon.org/docs
+  Meraki CDN           https://cdn.merakianalytics.com/riot/lol/resources/latest/en-US/
+
+================================================================================
+16. DATOS NO VERIFICADOS (UNVERIFIED)
+================================================================================
+  - Rate limit exacto de las dev keys: no está publicado en el portal; se infiere
+    de los headers (20:1,100:120) y de los Términos viejos (10 calls/10s).
+    -> Logear X-App-Rate-Limit en la primera llamada real y ajustar.
+  - Rate limits POR METHOD en producción para MATCH-V5: Riot no los publica.
+    -> Leer X-Method-Rate-Limit de una respuesta 200.
+  - Si un challenge de LOL-CHALLENGES-V1 cuenta partidas totales.
+  - Si league-v4/entries/by-puuid y champion-mastery-v4/by-puuid responden 200
+    con una key real. La RUTA está confirmada en la referencia oficial; la
+    respuesta no se pudo probar sin key (§18).
+  - Si league-v4/entries/by-puuid devuelve [] o 404 para alguien sin rank.
+  - Si match-v5/ids devuelve 404 o [] para un puuid sin partidas.
+  - El tope exacto de páginas de by-puuid/ids (los 1000 son un comentario de
+    DevRel, no doc). Cerrar con §18, curl 4.
+  - Las fechas exactas de los patches 11.4 y 11.20 (irrelevante para el código:
+    la regla operativa es gameEndTimestamp).
+  - Si un PUUID es compartido entre distintos juegos de Riot.
+  - Período de retención de datos exigido al desarrollador (no publicado).
+  - APIs privadas/partner en U.GG, Mobalytics, LeagueOfGraphs, DeepLoL.
+
+================================================================================
+17. CHANGELOG
+================================================================================
+  2026-11-24  v1.0  Creación. Verificado contra docs oficiales de Riot y pruebas
+                    en vivo: /api/versions.json (16.23.1), champion.json es_ES
+                    (173 campeones), realms/{na,euw,kr,lan,las}.json,
+                    error 401 de Riot, referencia de league-v4 (entries/by-puuid)
+                    y el comentario con el tope de 1000 partidas.
+  2026-11-24  v1.1  Auditoría de evidencia aplicada:
+                    - Corregido BUG en §9.4 (agrupaba por championId en partidas
+                      viejas, justo el campo inválido) -> ahora siempre championName.
+                    - §3.1/§4.1: límites de dev key marcados [UNVERIFIED por doc].
+                    - §2: tope de 1000 rotulado [SECONDARY] + prueba empírica (§18).
+                    - §7.7: realms ya no se derivan de platformId; sin hardcodear
+                      el conteo de campeones.
+                    - §15: URL de retención verificada (200).
+                    - Nueva §18 con los curls que faltan cuando haya key.
+
+================================================================================
+18. VERIFICACIÓN EMPÍRICA PENDIENTE (requiere RIOT_API_KEY)
+================================================================================
+Ejecutar una vez con una dev key fresca y anotar el resultado en el changelog:
+
+  1) Forma de la respuesta de league y mastery (deben ser 200):
+     curl -i -H "X-Riot-Token: $KEY" \
+       https://la1.api.riotgames.com/lol/league/v4/entries/by-puuid/$PUUID
+     curl -i -H "X-Riot-Token: $KEY" \
+       https://la1.api.riotgames.com/lol/champion-mastery/v4/champion-masteries/by-puuid/$PUUID
+
+  2) Límite de count (101 debe dar 400; 0 debe dar []):
+     curl -i -H "X-Riot-Token: $KEY" \
+       "https://americas.api.riotgames.com/lol/match/v5/matches/by-puuid/$PUUID/ids?start=0&count=101"
+
+  3) Tope real de historial (esto reemplaza al issue de GitHub como evidencia):
+     curl -s -H "X-Riot-Token: $KEY" \
+       "https://americas.api.riotgames.com/lol/match/v5/matches/by-puuid/$PUUID/ids?start=900&count=100" | head -c 200
+     curl -s -H "X-Riot-Token: $KEY" \
+       "https://americas.api.riotgames.com/lol/match/v5/matches/by-puuid/$PUUID/ids?start=1200&count=100"
+
+  4) Headers reales de rate limit (anotar X-App-Rate-Limit y X-Method-Rate-Limit):
+     curl -i -H "X-Riot-Token: $KEY" \
+       https://la1.api.riotgames.com/lol/summoner/v4/summoners/by-puuid/$PUUID
+
+  5) Estáticos (no necesitan key, ya verificados el 2026-11-24):
+     curl -s https://ddragon.leagueoflegends.com/api/versions.json | head -c 80
+     curl -s -o /dev/null -w "%{http_code}\n" https://ddragon.leagueoflegends.com/realms/la1.json   # 403
+     curl -s -o /dev/null -w "%{http_code}\n" https://ddragon.leagueoflegends.com/realms/lan.json  # 200
+     curl -s https://ddragon.leagueoflegends.com/cdn/languages.json | head -c 120
+     curl -s https://ddragon.leagueoflegends.com/cdn/16.23.1/data/es_ES/champion.json \
+       | python -c "import sys,json;print(len(json.load(sys.stdin)['data']))"
+================================================================================

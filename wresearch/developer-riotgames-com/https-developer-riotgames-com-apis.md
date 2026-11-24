@@ -1,0 +1,66 @@
+Toggle navigation [ Developer ](https://developer.riotgames.com/)
+  * [APIs](https://developer.riotgames.com/apis)
+  * Docs
+    * [Developer Portal](https://developer.riotgames.com/docs/portal)
+    * [League of Legends](https://developer.riotgames.com/docs/lol)
+    * [Legends of Runeterra](https://developer.riotgames.com/docs/lor)
+    * [Teamfight Tactics](https://developer.riotgames.com/docs/tft)
+    * [Valorant](https://developer.riotgames.com/docs/valorant)
+    * [Riftbound](https://developer.riotgames.com/docs/riftbound)
+    * [2KXO](https://developer.riotgames.com/docs/2xko)
+  * Policies
+    * [General](https://developer.riotgames.com/policies/general)
+    * [Game Specific](https://developer.riotgames.com/policies/game-specific)
+    * [Riftbound](https://developer.riotgames.com/policies/riftbound)
+  * [Faqs](https://developer.riotgames.com/docs/faqs)
+  * Channels
+    * [Blog](https://www.riotgames.com/en/DevRel)
+    * [Twitter](https://twitter.com/RiotGamesDevRel)
+    * [Discord](https://discord.gg/riotgamesdevrel)
+    * [Issue Tracker](https://github.com/RiotGames/developer-relations/issues)
+  * [Support](https://support-developer.riotgames.com)
+
+
+  * ### [Login ](https://developer.riotgames.com/login)
+
+
+  * [ account-v1 Riftbound RSO ](https://developer.riotgames.com/apis#account-v1)
+  * [ champion-mastery-v4 League of Legends ](https://developer.riotgames.com/apis#champion-mastery-v4)
+  * [ champion-v3 League of Legends ](https://developer.riotgames.com/apis#champion-v3)
+  * [ clash-v1 League of Legends ](https://developer.riotgames.com/apis#clash-v1)
+  * [ league-exp-v4 League of Legends ](https://developer.riotgames.com/apis#league-exp-v4)
+  * [ league-v4 League of Legends ](https://developer.riotgames.com/apis#league-v4)
+  * [ lol-challenges-v1 League of Legends ](https://developer.riotgames.com/apis#lol-challenges-v1)
+  * [ lol-rso-match-v1 League of Legends RSO ](https://developer.riotgames.com/apis#lol-rso-match-v1)
+  * [ lol-status-v4 League of Legends ](https://developer.riotgames.com/apis#lol-status-v4)
+  * [ lor-deck-v1 Legends of Runeterra RSO ](https://developer.riotgames.com/apis#lor-deck-v1)
+  * [ lor-inventory-v1 Legends of Runeterra RSO ](https://developer.riotgames.com/apis#lor-inventory-v1)
+  * [ lor-match-v1 Legends of Runeterra ](https://developer.riotgames.com/apis#lor-match-v1)
+  * [ lor-ranked-v1 Legends of Runeterra ](https://developer.riotgames.com/apis#lor-ranked-v1)
+  * [ lor-status-v1 Legends of Runeterra ](https://developer.riotgames.com/apis#lor-status-v1)
+  * [ match-v5 League of Legends ](https://developer.riotgames.com/apis#match-v5)
+  * [ riftbound-content-v1 Riftbound ](https://developer.riotgames.com/apis#riftbound-content-v1)
+  * [ spectator-tft-v5 Teamfight Tactics ](https://developer.riotgames.com/apis#spectator-tft-v5)
+  * [ spectator-v5 League of Legends ](https://developer.riotgames.com/apis#spectator-v5)
+  * [ summoner-v4 League of Legends ](https://developer.riotgames.com/apis#summoner-v4)
+  * [ tft-league-v1 Teamfight Tactics ](https://developer.riotgames.com/apis#tft-league-v1)
+  * [ tft-match-v1 Teamfight Tactics ](https://developer.riotgames.com/apis#tft-match-v1)
+  * [ tft-status-v1 Teamfight Tactics ](https://developer.riotgames.com/apis#tft-status-v1)
+  * [ tft-summoner-v1 Teamfight Tactics RSO ](https://developer.riotgames.com/apis#tft-summoner-v1)
+  * [ tournament-stub-v5 League of Legends ](https://developer.riotgames.com/apis#tournament-stub-v5)
+  * [ tournament-v5 League of Legends Tournaments ](https://developer.riotgames.com/apis#tournament-v5)
+  * [ val-accolades-v1 VALORANT ](https://developer.riotgames.com/apis#val-accolades-v1)
+  * [ val-console-match-v1 VALORANT ](https://developer.riotgames.com/apis#val-console-match-v1)
+  * [ val-console-ranked-v1 VALORANT ](https://developer.riotgames.com/apis#val-console-ranked-v1)
+  * [ val-content-v1 VALORANT ](https://developer.riotgames.com/apis#val-content-v1)
+  * [ val-match-v1 VALORANT ](https://developer.riotgames.com/apis#val-match-v1)
+  * [ val-ranked-v1 VALORANT ](https://developer.riotgames.com/apis#val-ranked-v1)
+  * [ val-status-v1 VALORANT ](https://developer.riotgames.com/apis#val-status-v1)
+
+
+© 2021 Riot Games, Inc. All rights reserved. League of Legends and Riot Games are trademarks, service marks, and registered trademarks of Riot Games, Inc.
+  * [API Terms](https://developer.riotgames.com/terms)
+  * [Getting Started](https://developer.riotgames.com/getting-started.html)
+  * [Privacy Notice](https://www.riotgames.com/en/privacy-notice)
+
+

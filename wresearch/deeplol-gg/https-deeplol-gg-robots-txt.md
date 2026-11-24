@@ -1,0 +1,9 @@
+
+```
+# https://www.robotstxt.org/robotstxt.html
+
+User-agent: *
+Allow: /
+Sitemap: https://www.deeplol.gg/sitemap.xml
+```
+

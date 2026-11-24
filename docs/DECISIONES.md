@@ -1,0 +1,181 @@
+# DECISIONES — league-page
+
+Registro de decisiones técnicas (ADR liviano). Cada decisión: contexto → opciones
+evaluadas → elección → consecuencias / cuándo revisarla.
+
+Fecha de la investigación: **2026-11-24**. Fuentes crudas en `research/`.
+
+---
+
+## ADR-001 — Fuente de datos: Riot Games API oficial + Data Dragon
+
+**Estado:** aceptada · **Fecha:** 2026-11-24
+
+### Opciones evaluadas
+
+| Fuente | ¿Oficial? | Costo | Key | Partidas | Stats por campeón | Veredicto |
+|---|---|---|---|---|---|---|
+| **Riot API** | ✅ | gratis (rate-limited) | `X-Riot-Token` | match-v5 ids + detalle | se calculan (trivial) | **CORE** |
+| Data Dragon | ✅ | gratis, sin límite | no | — | id/nombre/icono/localización | **USAR** |
+| CommunityDragon | ⚠️ espejo del cliente | gratis | no | — | assets extra | opcional |
+| Meraki CDN | ⚠️ no oficial | gratis | no | — | meta global (`championrates`) | futuro |
+| OP.GG | ⚠️ sitio | sin API pública | key interna por sesión | scrape | scrape | descartar |
+| U.GG | ⚠️ sitio | sin API | — | scrape | scrape | descartar (Cloudflare + robots `/*?*`) |
+| DeepLoL | ⚠️ sitio | sin API (`api.deeplol.gg` NXDOMAIN) | — | scrape | scrape | descartar |
+| Mobalytics | ⚠️ sitio | solo widgets | — | — | — | descartar |
+| LeagueOfGraphs | ⚠️ sitio | sin API | — | `Disallow: /api/*` | — | descartar |
+| LoLalytics | ⚠️ sitio | sin API | — | scrape frágil | — | descartar |
+| LoL Esports API | ✅ Riot | gratis, key pública | sí | solo pro play | — | futuro tab de esports |
+| Leaguepedia Cargo | ⚠️ wiki | gratis | bot password | solo pro play | — | futuro |
+| RapidAPI (proxies) | ❌ revendedores | pago por request | sí | varía | varía | descartar (política de reenvío) |
+
+### Decisión
+Riot API es **toda** la capa de datos, llamada solo desde el backend. Data Dragon
+para estáticos. Cero dependencias de terceros.
+
+### Consecuencias
+- Todas las keys son gratis; el recurso escaso es el **rate limit**, no el dinero.
+- Para publicar hace falta **production key** (sitio verificado + ToS + Privacy).
+- Hay que construir y mantener nuestra propia caché/DB. Ver ADR-004.
+
+### Cuándo revisar
+Si Riot cambia precios/políticas, o si aparece una API de terceros seria y libre
+(hoy no existe ninguna para datos por jugador).
+
+---
+
+## ADR-002 — "Campeón más jugado de toda la cuenta" se redefine
+
+**Estado:** aceptada (condiciona el producto) · **Fecha:** 2026-11-24
+
+### Contexto
+Riot **no** expone "todas las partidas de la cuenta". El historial recuperable
+está topeado en las últimas **~1000 partidas** (y 2 años de retención), según un
+dev de Riot en `RiotGames/developer-relations` #957 (2024-07-15). No figura en la
+documentación oficial. No existe endpoint de "partidas totales jugadas".
+
+### Decisión
+El feature pasa a ser: **"campeón más jugado en las últimas N partidas
+recuperables (máx. ~1.000)"**, siempre mostrando en la UI la base del cálculo:
+cantidad de partidas analizadas y rango de fechas.
+
+### Consecuencias
+- Nuestra DB se vuelve más valiosa que la ventana de Riot con el tiempo:
+  guardamos append-only desde el día 1 → acumulamos historia propia.
+- Nunca prometer "todas las partidas" en copy, SEO ni títulos.
+- Los agregados se calculan sobre `puuid_matches` (nuestra tabla), no en vivo.
+
+### Cuándo revisar
+Si Riot publica un endpoint de stats agregadas por jugador.
+
+---
+
+## ADR-003 — Framework: Next.js 16.4 (App Router + Cache Components)
+
+**Estado:** aceptada · **Fecha:** 2026-11-24
+
+### Opciones evaluadas (estado nov-2026)
+
+| Framework | Versión | Caché compartida | UI de filtros | Free tier | DX | Extensible | Nota |
+|---|---|---|---|---|---|---|---|
+| **Next.js** | 16.4 | ⭐ `'use cache'`, `cacheLife`, `cacheTag`, `cacheHandlers` | `searchParams` + RSC | Vercel Hobby (CPU activa) | ⭐ | ⭐ | RSC tiene costo mental |
+| Astro | 7.4 | route caching estable (5 meses), providers CDN experimentales | ⭐ formularios GET, 0 JS | ⭐ el más barato | 8 | 7 | ideal para "páginas y tablas" |
+| Nuxt 4 | 4.7 | ⭐ `defineCachedFunction` con SWR | 7 | 8 | 7 | 9 | mejor caché no-Next |
+| SvelteKit | 3.0 | ❌ sin caché compartida nativa | 7 | 9 | 7 | 8 | remote functions aún experimentales |
+| TanStack Start | 1.0 | ❌ (TanStack Query + lo tuyo) | 7 | 8 | 7 | 8 | recién estabilizado |
+| React Router 7 | 7.18 | ❌ (Cache-Control al CDN) | 7 | 7 | 7 | 8 | RSC inestable |
+
+Puntaje ponderado (caché 25 / filtros 20 / free tier 20 / DX 15 / extensible 10 /
+perf 10): **Next.js 8.4 · Astro 8.4 · Nuxt 8.1 · SvelteKit 7.4 · TanStack 7.1 ·
+React Router 6.8**.
+
+### Decisión
+**Next.js 16.4 App Router** con `cacheComponents: true`, desplegado en Vercel
+Hobby. Desempate frente a Astro por:
+1. caché por tags probada en producción y compartida entre instancias
+   (`cacheHandlers` → Redis), que es exactamente el problema de una API con
+   rate limit;
+2. ecosistema shadcn/ui + Tailwind 4 + Recharts v3 para tablas y gráficos;
+3. un único runtime Node donde el token bucket y el coalescing son
+   implementables (en Cloudflare Workers el límite de 10 ms de CPU lo impide).
+
+**Alternativa real:** Astro 7.4 si el sitio queda en "páginas + tablas + un
+gráfico" y se prioriza costo/CPU. El operador ya conoce Next y Astro, así que el
+riesgo de adopción es bajo en ambos casos.
+
+### Consecuencias
+- Hay que respetar el modelo de RSC: caché en el módulo de datos, no en el
+  componente; `searchParams` es Promise en 16.
+- Los minors de 16.x cambian firmas: pinear versión y actualizar con cuidado.
+- Si el CPU de Vercel Hobby aprieta, escape hatch a Fly.io (~USD 3,69/mes).
+
+### Cuándo revisar
+Si aparece interacción cliente pesada (filtros instantáneos, comparador de
+jugadores, live refresh) o si el CPU del Hobby se queda corto.
+
+---
+
+## ADR-004 — Topología de datos: Postgres + Redis + worker
+
+**Estado:** aceptada · **Fecha:** 2026-11-24
+
+### Contexto
+El ingest de Riot no puede correr en el request del usuario: el token bucket
+necesita un proceso persistente, y un perfil "cold" cuesta ~22 requests (hasta
+1011 con backfill).
+
+### Decisión
+Tres capas:
+1. **CDN/render cache** (Vercel): HTML 30–300 s, partidas inmutables `max`.
+2. **Redis (Upstash free)**: `riotId→puuid` (∞), `matchId→JSON` (∞),
+   `puuid→agregado` (10–30 min), locks `SET NX PX` por puuid.
+3. **Postgres (Neon free)**: `matches`, `puuid_matches`, `champion_stats`,
+   `puuid_sync`. Append-only, permite recalcular cualquier agregado futuro.
+
+Ingest en un **worker separado** (GitHub Actions cron cada ~10 min o proceso Node
+en Fly.io). Nunca desde un page view.
+
+### Consecuencias
+- Costo: USD 0/mes con los free tiers actuales.
+- Cada feature futura (runas, split por cola, dúos) es una tabla de agregados
+  nueva sobre el mismo almacén inmutable de partidas.
+- Riesgo: free tiers que se pausan por inactividad (Supabase) → preferir Neon.
+
+### Cuándo revisar
+Si el volumen de puuids crece (Neon 1 GB) o si se necesita ingesta casi real-time.
+
+---
+
+## ADR-005 — Idioma y convenciones
+
+**Estado:** aceptada · **Fecha:** 2026-11-24
+
+UI y documentación en **español**; identificadores, endpoints y nombres de campos
+en inglés. Nombres de campeones localizados con `es_ES` desde Data Dragon
+(`data/es_ES/champion.json`), no hardcodeados.
+
+---
+
+## Registro de auditoría
+
+**2026-11-24 — auditoría de `docs/API-LOL.txt` v1.0.** Un `evidence-auditor` sin
+acceso web revisó el documento contra los briefs y detectó un **bug real de código**:
+el agregador (§9.4) agrupaba por `championId` justo en las partidas donde Riot dice
+que ese campo es inválido (pre-11.4). Corregido: se agrupa siempre por
+`championName`. También se corrigieron las etiquetas de certeza (límites de dev key,
+tope de 1000 partidas, TTLs de caché) y se agregó §18 con los `curl` que faltan
+verificar con una key real. La conclusión de arquitectura no cambió.
+
+---
+
+## Pendientes (no decididos todavía)
+
+- [ ] Correr los `curl` de §18 de `docs/API-LOL.txt` con una dev key y anotar los
+      resultados en el changelog (cierra los `[UNVERIFIED]`).
+
+- [ ] Autenticación de usuarios (¿"login con Riot" RSO? Requiere production key).
+- [ ] Buscador con autocompletado (requiere un endpoint propio de sugerencias por
+      prefijo de campeón, no de invocador — Riot no tiene search de invocadores).
+- [ ] Páginas de comparación / ranking global (necesitaría Meraki `championrates`).
+- [ ] Gráficos (Recharts candidato).
+- [ ] Tests: unitarios del agregador + smoke test contra API real con mock de fixtures.
