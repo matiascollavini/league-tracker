@@ -149,7 +149,7 @@ export default async function ProfilePage({
           }
         />
         <StatCard
-          label="Winrate"
+          label="Winrate (analizadas)"
           value={percent(summary.winrate)}
           hint={`${summary.wins}V · ${summary.losses}D`}
           accent={summary.winrate >= 0.5 ? "win" : "loss"}
