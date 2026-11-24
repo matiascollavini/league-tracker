@@ -33,6 +33,21 @@ type SyncPayload = {
   requests?: number;
   retryAfterMs?: number;
   error?: string;
+  /** Qué estaba haciendo el server cuando cortó la vuelta. */
+  phase?: "ids" | "details" | "done" | "locked" | "throttled";
+  elapsedMs?: number;
+  skipped?: boolean;
+  /** Si otro proceso tiene el lock: cuánto le queda (ms). */
+  lockForMs?: number;
+  /** Partidas que Riot ya no tiene y se descartaron en esta vuelta. */
+  unavailable?: number;
+};
+
+const PHASE_LABEL: Record<string, string> = {
+  ids: "descubriendo partidas",
+  details: "bajando detalles",
+  locked: "esperando a otro proceso",
+  throttled: "rate limit de Riot",
 };
 
 type State = {
@@ -46,6 +61,10 @@ type State = {
   done: boolean;
   round: number;
   requests: number;
+  /** Qué estaba haciendo el server en la última vuelta. */
+  phase: "ids" | "details" | "done" | "locked" | "throttled" | null;
+  /** Partidas que Riot ya no tiene y se sacaron de la cola. */
+  unavailable: number;
   startedAt: number | null;
   /** Último momento en que el contador de partidas se movió. */
   lastProgressAt: number | null;
@@ -112,6 +131,8 @@ export function SyncButton({
     done: false,
     round: 0,
     requests: 0,
+    phase: null,
+    unavailable: 0,
     startedAt: null,
     lastProgressAt: null,
     now: 0,
@@ -142,6 +163,8 @@ export function SyncButton({
     let lastProgressAt = startedAt;
     let notice: string | null = null;
     let roundsDone = 0;
+    let phase: State["phase"] = null;
+    let unavailable = 0;
 
     const publish = (extra: Partial<State> = {}) =>
       setState({
@@ -153,6 +176,8 @@ export function SyncButton({
         done: false,
         round: roundsDone,
         requests,
+        phase,
+        unavailable,
         startedAt,
         lastProgressAt,
         now: Date.now(),
@@ -170,6 +195,8 @@ export function SyncButton({
         known: currentKnown,
         round: roundsDone,
         requests,
+        phase,
+        unavailable,
         startedAt,
         lastProgressAt,
         now: Date.now(),
@@ -216,6 +243,10 @@ export function SyncButton({
         currentDetailed = payload.detailed;
       }
       if (typeof payload.known === "number") currentKnown = payload.known;
+      if (payload.phase) phase = payload.phase;
+      if (typeof payload.unavailable === "number") {
+        unavailable += payload.unavailable;
+      }
 
       // Cualquier respuesta que no sea 200 ni el 429 (que se reintenta).
       if (status !== 200 && status !== 429) {
@@ -232,16 +263,21 @@ export function SyncButton({
       }
 
       const retryMs = Math.min(
-        15_000,
+        30_000,
         typeof payload.retryAfterMs === "number" ? payload.retryAfterMs : 600,
       );
 
       // Explicamos por qué no avanzó, en vez de reintentar en silencio.
       if (payload.error) {
         notice = `${payload.error} Reintento en ${formatElapsed(retryMs)}.`;
-      } else if ((payload.requests ?? 0) === 0) {
-        notice =
-          "Otro proceso (el worker u otra pestaña) está sincronizando esta cuenta. Espero y reintento.";
+      } else if (payload.phase === "throttled") {
+        notice = `Riot nos está frenando (rate limit): espero ${formatElapsed(retryMs)} y sigo.`;
+      } else if (payload.skipped || (payload.requests ?? 0) === 0) {
+        const left =
+          payload.lockForMs && payload.lockForMs > 0
+            ? ` El lock vence en ~${formatElapsed(payload.lockForMs)}.`
+            : "";
+        notice = `Otro proceso (el worker u otra pestaña) está sincronizando esta cuenta.${left} Espero y reintento.`;
       } else {
         notice = null;
       }
@@ -278,6 +314,7 @@ export function SyncButton({
   const sinceProgressMs =
     state.lastProgressAt === null ? 0 : state.now - state.lastProgressAt;
   const stalled = running && !error && sinceProgressMs >= STALL_MS;
+  const phaseLabel = state.phase ? PHASE_LABEL[state.phase] : null;
 
   if (done) {
     return (
@@ -317,7 +354,7 @@ export function SyncButton({
           {state.detailed} de {state.known} partidas
           {state.known > 0 ? ` · ${pct}%` : ""}
           {running
-            ? ` · ${formatElapsed(elapsedMs)} · vuelta ${round}${requests > 0 ? ` · ${requests} req` : ""}`
+            ? ` · ${formatElapsed(elapsedMs)} · vuelta ${round}${phaseLabel ? ` · ${phaseLabel}` : ""}${requests > 0 ? ` · ${requests} req` : ""}`
             : ""}
         </span>
       </div>
@@ -350,6 +387,14 @@ export function SyncButton({
         ) : null}
 
         {notice && !error ? <p className="text-muted">{notice}</p> : null}
+
+        {!running && !error && !notice && state.unavailable > 0 ? (
+          <p className="text-muted">
+            {state.unavailable === 1
+              ? "Se descartó 1 partida que Riot ya no tiene."
+              : `Se descartaron ${state.unavailable} partidas que Riot ya no tiene.`}
+          </p>
+        ) : null}
 
         {!running && !error && !notice ? (
           <p className="text-muted">
