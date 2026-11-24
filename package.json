@@ -10,9 +10,12 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "verify:riot": "node scripts/verify-riot.mjs"
+    "verify:riot": "node scripts/verify-riot.mjs",
+    "ingest": "tsx scripts/ingest.ts",
+    "db:stats": "tsx scripts/db-stats.ts"
   },
   "dependencies": {
+    "@libsql/client": "^0.18.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^1.78.0",
@@ -30,6 +33,7 @@
     "eslint": "^9.39.0",
     "eslint-config-next": "16.4.6",
     "tailwindcss": "^4.3.5",
+    "tsx": "^4.23.15",
     "typescript": "^6.0.3",
     "vitest": "^5.1.1"
   }

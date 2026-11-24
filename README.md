@@ -52,8 +52,45 @@ ventana real de historial) e imprime los headers de rate limit de tu key.
 | `npm run lint` | ESLint (config de Next 16) |
 | `npm test` | tests unitarios del agregador y del routing (Vitest) |
 | `npm run verify:riot -- "Nombre#TAG" la2` | verificación empírica contra la API real |
+| `npm run ingest -- "Nombre#TAG" la2 --budget=120` | baja partidas a la base (worker) |
+| `npm run db:stats` | qué hay guardado y cuánto ocupa |
 
 ---
+
+## La base de datos (gratis)
+
+La app guarda cada partida **una sola vez** y la reusa. Sin esto, analizar 1.000
+partidas costaría ~1.011 requests por visita.
+
+- **Local:** un archivo, `data/league.db` (SQLite). No hay que instalar nada más.
+- **Producción:** [Turso](https://turso.tech) (SQLite replicado), plan free de
+  **5 GB**. Solo cambia `DATABASE_URL` en las variables de entorno.
+
+```
+tablas
+  matches             una fila por partida (inmutable)
+  match_participants  los 10 jugadores de cada partida (campeón, K/D/A, oro, CS…)
+  puuid_matches       qué partidas le corresponden a cada jugador (incluye pendientes)
+  puuid_sync          cursor del backfill + lock para no duplicar trabajo
+```
+
+**Tamaño real medido:** 39 partidas = 0,12 MB → **3 KB por partida**.
+Una cuenta completa (~1.000 partidas) ≈ 3 MB. Con 5 GB entran ~1.500 cuentas.
+
+### Cargar historial
+
+```bash
+npm run ingest -- "Nombre#TAG" la2 --budget=120 --pages=3
+npm run db:stats
+```
+
+`--budget` son requests permitidos y `--pages`, páginas de 100 IDs a recorrer.
+Es **resumible**: si cortás, la próxima corrida sigue donde quedó. Con dev key
+(100 requests / 2 min) un backfill completo tarda ~20 minutos; con production
+key, ~20 segundos.
+
+Mientras tanto, cada visita al perfil analiza un poco (25 requests) si el
+jugador es nuevo, y muestra una barra de progreso.
 
 ## Cómo está armado
 
@@ -73,6 +110,9 @@ src/
     │   ├── aggregate.ts   agregación por campeón (funciones puras, testeadas)
     │   ├── fixtures.ts    cuenta de demo
     │   └── types.ts       esquemas zod de las respuestas
+    ├── db/                    SQLite/Turso: schema, partidas, progreso, lock
+    ├── ingest.ts              backfill resumible (IDs + detalles)
+    ├── profile.ts             lectura: base → sync acotado → vía directa
     └── ddragon/champions.ts   catálogo es_ES, iconos, versiones
 ```
 

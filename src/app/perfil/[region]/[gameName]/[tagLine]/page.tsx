@@ -12,7 +12,7 @@ import {
   summarize,
   toMatchSummaries,
 } from "@/lib/riot/aggregate";
-import { getLeagueEntries, getSummoner, resolveAccount } from "@/lib/riot/account";
+import { loadProfile } from "@/lib/profile";
 import {
   isPlatform,
   isQueueFilter,
@@ -22,8 +22,8 @@ import {
   type QueueFilterId,
 } from "@/lib/riot/config";
 import { getChampionCatalog } from "@/lib/ddragon/champions";
-import { isMockMode, MissingApiKeyError, RiotApiError } from "@/lib/riot/http";
-import { analyzeCount, getRecentMatches } from "@/lib/riot/matches";
+import { MissingApiKeyError, RiotApiError } from "@/lib/riot/http";
+import { analyzeCount } from "@/lib/riot/matches";
 import { profileHref } from "@/lib/links";
 import { decodeParam } from "@/lib/params";
 import { cn } from "@/lib/utils";
@@ -73,25 +73,19 @@ export default async function ProfilePage({
     : "all";
   const championParam = first(sp.champion);
 
-  let account;
-  let matches;
-  let summoner;
-  let league;
-
+  let profile;
   try {
-    account = await resolveAccount(platform, gameName, tagLine);
-    [matches, summoner, league] = await Promise.all([
-      getRecentMatches(account.puuid, platform),
-      getSummoner(account.puuid, platform),
-      getLeagueEntries(account.puuid, platform),
-    ]);
+    profile = await loadProfile(platform, gameName, tagLine);
   } catch (error) {
     if (error instanceof RiotApiError && error.status === 404) notFound();
     return <DataError error={error} />;
   }
 
+  const { account, matches, summoner, league, progress, source, partial } =
+    profile;
+
   const catalog = await getChampionCatalog();
-  const demo = isMockMode();
+  const demo = source === "demo";
   // championName de Riot -> nombre localizado ("Kaisa" -> "Kai'Sa", "Nunu" -> "Nunu y Willump")
   const names: Record<string, string> = Object.fromEntries(
     catalog.all.map((champion) => [champion.id, champion.name]),
@@ -143,9 +137,11 @@ export default async function ProfilePage({
           label="Partidas analizadas"
           value={String(summary.matches)}
           hint={
-            summary.from && summary.to
-              ? `${formatDate(summary.from)} — ${formatDate(summary.to)}`
-              : "sin partidas"
+            partial
+              ? `de ${progress.known} conocidas · sigue en curso`
+              : summary.from && summary.to
+                ? `${formatDate(summary.from)} — ${formatDate(summary.to)}`
+                : "sin partidas"
           }
         />
         <StatCard
@@ -170,6 +166,49 @@ export default async function ProfilePage({
           accent="gold"
         />
       </section>
+
+      {partial && progress.known > 0 ? (
+        <section
+          className="rounded-xl border border-line bg-ink-900/60 p-4"
+          aria-label="Progreso del análisis"
+        >
+          <div className="flex items-baseline justify-between gap-3">
+            <p className="text-xs text-muted">
+              Analizando el historial:{" "}
+              <strong className="text-gold-300">
+                {progress.detailed} de {progress.known}
+              </strong>{" "}
+              partidas conocidas
+            </p>
+            <span className="tabular text-[11px] text-muted">
+              {Math.round((progress.detailed / progress.known) * 100)}%
+            </span>
+          </div>
+          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-ink-800">
+            <div
+              className="h-full rounded-full bg-gold-500"
+              style={{
+                width: `${Math.max(2, Math.round((progress.detailed / progress.known) * 100))}%`,
+              }}
+            />
+          </div>
+          <p className="mt-2 text-[11px] leading-relaxed text-muted">
+            Se completa solo con cada visita (o con{" "}
+            <code className="text-gold-400">npm run ingest</code>). Riot limita el
+            historial recuperable a ~1.000 partidas por jugador.
+          </p>
+        </section>
+      ) : null}
+
+      {source === "live" ? (
+        <p className="rounded-lg border border-gold-600/40 bg-gold-600/10 px-4 py-3 text-xs leading-relaxed text-gold-300">
+          Este jugador todavía no está en la base: se muestran las últimas{" "}
+          {matches.length} partidas pedidas en vivo. Corré{" "}
+          <code className="text-gold-400">npm run ingest -- &quot;
+          {account.gameName}#{account.tagLine}&quot; {platform}</code> para
+          analizar el historial completo.
+        </p>
+      ) : null}
 
       <nav aria-label="Filtrar por cola" className="flex flex-wrap gap-2">
         {QUEUE_FILTERS.map((filter) => {
@@ -263,7 +302,9 @@ export default async function ProfilePage({
                   <strong className="text-gold-300">
                     {`${summary.matches} partidas${baseSuffix}.`}
                   </strong>{" "}
-                  Analizamos las últimas {analyzeCount()} partidas de la cuenta.
+                  {source === "db"
+                    ? `Salen de la base local (${progress.known} partidas conocidas de esta cuenta).`
+                    : `Pedidas en vivo a Riot (${analyzeCount()} por visita).`}
                 </p>
                 <p>
                   Riot limita el historial recuperable a ~1.000 partidas por

@@ -188,6 +188,53 @@ en inglés. Nombres de campeones localizados con `es_ES` desde Data Dragon
 
 ---
 
+## ADR-007 — Persistencia: SQLite (local) / Turso (nube), sin Redis
+
+**Estado:** aceptada · **Fecha:** 2026-11-24
+
+### Contexto
+Analizar 1.000 partidas por visita es imposible: son ~1.011 requests y con dev
+key son ~20 minutos. Hay que guardar cada partida una vez y reusarla.
+
+### Decisión
+1. **SQLite** como única base. En local es un archivo (`data/league.db`) y en
+   producción **Turso** (SQLite replicado). Mismo SQL y mismo código: solo
+   cambia `DATABASE_URL` (`file:` vs `libsql://`).
+2. **Sin Redis por ahora.** La caché de `fetch` de Next cubre los datos
+   calientes y el lock de sincronización se hace con un `UPDATE ... WHERE` en
+   la propia tabla `puuid_sync`. Menos cuentas que crear, menos cosas que se
+   caigan. Si algún día hace falta, se agrega sin cambiar el modelo.
+3. **Guardamos los 10 participantes por partida** (~3 KB con índices): una
+   partida es inmutable y sirve para cualquier jugador que haya estado en ella.
+4. **No guardamos el payload completo de Riot.** Solo los campos que usamos
+   (campeón, K/D/A, cola, duración, oro, CS, visión, daño). Si una feature
+   futura necesita más, se puede volver a pedir por `matchId` (Riot lo permite
+   por 2 años). Así una cuenta entera entra en ~3 MB.
+5. **`champion_stats` no se materializa**: se calcula con `GROUP BY` sobre los
+   participantes. Con ≤1.000 filas por jugador tarda milisegundos y no hay
+   riesgo de agregados desactualizados.
+
+### Costo real (todo gratis)
+| Pieza | Plan free | Para qué alcanza |
+| --- | --- | --- |
+| SQLite local | ilimitado | desarrollo |
+| Turso | 5 GB, 500M lecturas/mes, 10M escrituras/mes | ~1.500 cuentas analizadas completas |
+| Vercel Hobby | 1M invocaciones, 100 GB | el sitio |
+| GitHub Actions | 2.000 min/mes en repos públicos | el worker de ingesta |
+
+Medición real: 39 partidas con 390 participantes = **0,12 MB** (3 KB/partida).
+117 partidas con detalle tardaron 89 s y 80 requests con dev key.
+
+### Consecuencias
+- El perfil lee de la base: **0 requests a Riot** y ~0,25 s de render (contra
+  3,3 s de la vía directa).
+- La ingesta es resumible (`ids_cursor` + `backfill_state`) y tiene lock por
+  jugador para que dos visitas simultáneas no dupliquen trabajo.
+- Queda pendiente mover el worker a un cron (GitHub Actions) para que el
+  historial se complete solo; hoy se corre con `npm run ingest`.
+
+---
+
 ## Registro de auditoría
 
 **2026-11-24 — auditoría de `docs/API-LOL.txt` v1.0.** Un `evidence-auditor` sin
@@ -210,8 +257,9 @@ test propio para que no vuelva a pasar.
 
 ## Pendientes (no decididos todavía)
 
-- [ ] Postgres + Redis + worker de backfill (fase 2): pasar de 24 a ~1.000
-      partidas analizadas y acumular historia propia.
+- [x] Persistencia + ingesta (fase 2): SQLite/Turso con backfill resumible.
+- [ ] Mover la ingesta a un cron (GitHub Actions) para que se complete sola.
+- [ ] Medir cuánto tarda un backfill completo de ~1.000 partidas con dev key.
 - [x] Correr `npm run verify:riot` con una dev key. Hecho el 2026-11-24: límites
       reales confirmados (100/2min + 20/1s), paginación medida (~519 partidas en
       una cuenta de prueba) y endpoints de liga/maestría validados.

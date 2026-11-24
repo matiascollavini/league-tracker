@@ -10,6 +10,30 @@ export function analyzeCount(): number {
   return Math.min(100, Math.max(1, value));
 }
 
+/** Una página de IDs (count 0..100). Host REGIONAL. */
+export async function getMatchIdsPage(
+  puuid: string,
+  platform: Platform,
+  start = 0,
+  count = 100,
+): Promise<string[]> {
+  if (isMockMode()) {
+    return mockMatches()
+      .slice(start, start + count)
+      .map((match) => match.metadata.matchId);
+  }
+
+  return riotFetch(
+    `/lol/match/v5/matches/by-puuid/${puuid}/ids?start=${start}&count=${count}`,
+    // MATCH-V5 vive en el host REGIONAL.
+    { cluster: clusterFor(platform), revalidate: 120, schema: MatchIdsSchema },
+  ).catch((error: unknown) => {
+    // 404 = el jugador no tiene partidas. No es un error de la página.
+    if (error instanceof RiotApiError && error.status === 404) return [];
+    throw error;
+  });
+}
+
 /**
  * MATCH-V5. Host REGIONAL (no plataforma). count va de 0 a 100.
  * Cache corto: la lista de IDs cambia con cada partida nueva.

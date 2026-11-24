@@ -92,9 +92,9 @@ _(Detalle y justificación en `docs/DECISIONES.md`.)_
 | Framework | **Next.js 16.4 App Router** (`cacheComponents: true`) | decidido |
 | UI | Tailwind 4 + shadcn/ui (gráficos: Recharts v3) | decidido |
 | Hosting | Vercel Hobby (escape hatch: Fly.io) | decidido |
-| Caché caliente | Upstash Redis free (puuid/matches/locks) | decidido |
-| Persistencia | Neon Postgres free (`matches`, `puuid_matches`, `champion_stats`, `puuid_sync`) | decidido |
-| Ingest | Worker separado (GitHub Actions cron ~10 min o Node en Fly) | pendiente (fase 2) |
+| Caché caliente | `fetch` de Next (sin Redis: la DB hace de caché y de lock) | decidido |
+| Persistencia | **SQLite** local / **Turso** free en prod (ADR-007) | implementado |
+| Ingest | `npm run ingest` (backfill resumible); cron pendiente | implementado |
 | Estado del código | v1 funcionando con **datos reales** (dev key en `.env.local`) | implementado |
 
 ### Regla de producto derivada del ADR-002
