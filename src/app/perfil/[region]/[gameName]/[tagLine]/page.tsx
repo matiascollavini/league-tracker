@@ -8,6 +8,7 @@ import { MatchList } from "@/components/match-list";
 import { ProfileCard } from "@/components/profile-header";
 import { RoleStrip } from "@/components/role-strip";
 import { StatCard } from "@/components/stat-card";
+import { SyncButton } from "@/components/sync-button";
 import { WinrateBar } from "@/components/winrate-bar";
 import {
   formatDate,
@@ -247,48 +248,38 @@ export default async function ProfilePage({
           </p>
         ) : null}
 
-        {partial && progress.known > 0 ? (
-          <section
-            className="rounded-xl border border-line bg-ink-900/60 p-4"
-            aria-label="Progreso del análisis"
-          >
-            <div className="flex items-baseline justify-between gap-3">
-              <p className="text-xs text-muted">
-                Analizando el historial:{" "}
-                <strong className="text-gold-300">
-                  {progress.detailed} de {progress.known}
-                </strong>{" "}
-                partidas conocidas
-              </p>
-              <span className="tabular text-[11px] text-muted">
-                {Math.round((progress.detailed / progress.known) * 100)}%
-              </span>
-            </div>
-            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-ink-800">
-              <div
-                className="h-full rounded-full bg-gold-500"
-                style={{
-                  width: `${Math.max(2, Math.round((progress.detailed / progress.known) * 100))}%`,
-                }}
-              />
-            </div>
-            <p className="mt-2 text-[11px] leading-relaxed text-muted">
-              Se completa solo con cada visita (o con{" "}
-              <code className="text-gold-400">npm run ingest</code>). Riot limita
-              el historial recuperable a ~1.000 partidas por jugador.
+        <section
+          className="rounded-xl border border-line bg-ink-900/60 p-4"
+          aria-label="Progreso del análisis"
+        >
+          <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
+            <p className="text-xs text-muted">
+              Historial analizado:{" "}
+              <strong className="text-gold-300">
+                {progress.detailed} de {progress.known}
+              </strong>{" "}
+              partidas
             </p>
-          </section>
-        ) : null}
+            <span className="text-[11px] text-muted">
+              Riot permite hasta ~1.000 por jugador
+            </span>
+          </div>
+
+          <SyncButton
+            platform={effectivePlatform}
+            gameName={account.gameName ?? gameName}
+            tagLine={account.tagLine ?? tagLine}
+            known={progress.known}
+            detailed={progress.detailed}
+          />
+        </section>
 
         {source === "live" ? (
           <p className="rounded-lg border border-gold-600/40 bg-gold-600/10 px-4 py-3 text-xs leading-relaxed text-gold-300">
             Este jugador todavía no está en la base: se muestran las últimas{" "}
-            {matches.length} partidas pedidas en vivo. Corré{" "}
-            <code className="text-gold-400">
-              npm run ingest -- &quot;{account.gameName}#{account.tagLine}&quot;{" "}
-              {effectivePlatform}
-            </code>{" "}
-            para analizar el historial completo.
+            {matches.length} partidas pedidas en vivo. Usá{" "}
+            <strong>Cargar todo el historial</strong> para analizar los últimos
+            dos años.
           </p>
         ) : null}
 

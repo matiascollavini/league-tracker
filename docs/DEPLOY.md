@@ -78,6 +78,7 @@ npm run worker -- --prod --minutes=8 --budget=250
 | `DD_LOCALE` | `es_ES` |
 | `RIOT_ANALYZE_COUNT` | `24` |
 | `RIOT_ONDEMAND_BUDGET` | `25` con dev key · `300`–`400` con production key |
+| `RIOT_SYNC_CHUNK` | requests por tanda del botón "Cargar todo": `40` con personal key · `300` con production key |
 | `TURSO` | no hace falta en Vercel (solo para los scripts locales) |
 
 **Qué significa `RIOT_ONDEMAND_BUDGET`:** cuántos requests puede gastar la
@@ -172,6 +173,21 @@ barra de progreso; a los ~10 minutos la barra avanza sin que hagas nada.
 | Presupuesto por corrida (`--budget`, `--minutes`) | nunca se pasa del rate limit ni del timeout |
 | Lock por jugador en la base | dos visitas simultáneas no duplican trabajo |
 | `fetch` cache + ISR | una visita repetida no toca la base ni Riot |
+
+## Cuánto tarda completar una cuenta
+
+| Partidas de la cuenta | Requests | Personal key | Production key |
+| --- | --- | --- | --- |
+| 300 | ~310 | ~6 min | ~10 s |
+| 600 | ~610 | ~12 min | ~15 s |
+| 1.000 | ~1.011 | ~20 min | ~25 s |
+
+Se paga **una sola vez** por cuenta. Después, actualizarla cuesta 1 request
+(página 0). El botón **"Cargar todo el historial"** del perfil hace esto mismo
+desde la web, en tandas, con barra de progreso y sin bloquear la página.
+
+El tope real de cuentas es Turso: 10M escrituras/mes ÷ 12 por partida ≈ **830
+cuentas completas por mes** (y 5 GB dan para ~1.900).
 
 ## Problemas típicos
 

@@ -101,8 +101,10 @@ Es **resumible**: si cortás, la próxima corrida sigue donde quedó. Con dev ke
 (100 requests / 2 min) un backfill completo tarda ~20 minutos; con production
 key, ~20 segundos.
 
-Mientras tanto, cada visita al perfil analiza un poco (25 requests) si el
-jugador es nuevo, y muestra una barra de progreso.
+El perfil tiene un botón **"Cargar todo el historial"** que completa los últimos
+2 años en tandas, con barra de progreso y sin bloquear la página (se puede cerrar
+y se retoma donde quedó). Con personal key tarda ~20 min para 1.000 partidas;
+con production key, ~25 segundos.
 
 **Producción:** `docs/DEPLOY.md` (Turso + Vercel + worker en GitHub Actions,
 todo gratis). Para verificar a qué base está conectado el deploy:
