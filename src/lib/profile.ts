@@ -45,6 +45,11 @@ export type ProfileData = {
   source: ProfileSource;
   /** El historial todavía se está bajando (detailed < known). */
   partial: boolean;
+  /**
+   * No queda nada por analizar Y el backfill ya recorrió todo el historial de
+   * Riot: el botón de "cargar todo" no tiene nada que hacer y se esconde.
+   */
+  complete: boolean;
 };
 
 /**
@@ -104,6 +109,8 @@ export async function loadProfile(
       league: leagueApi,
       source: "demo",
       partial: false,
+      // Sin key no hay nada que sincronizar: el aviso de "cargar" no aplica.
+      complete: true,
     };
   }
 
@@ -120,7 +127,7 @@ export async function loadProfile(
   ];
 
   // Una sola consulta trae partidas + progreso + si está en la cola.
-  let { matches, progress, queued } =
+  let { matches, progress, queued, backfillState } =
     await getPlayerMatchesWithProgress(playerPuuids);
 
   // Fallback: si summoner-v4 falla, el icono y el nivel salen de la última
@@ -161,9 +168,10 @@ export async function loadProfile(
         deadlineMs: 30_000,
       });
       puuid = result.puuid;
-      ({ matches, progress, queued } = await getPlayerMatchesWithProgress(
-        [...new Set([puuid, ...playerPuuids])],
-      ));
+      ({ matches, progress, queued, backfillState } =
+        await getPlayerMatchesWithProgress([
+          ...new Set([puuid, ...playerPuuids]),
+        ]));
     } catch (error) {
       // 429 o 5xx: no rompemos la página, seguimos con lo que haya.
       console.warn(
@@ -194,5 +202,11 @@ export async function loadProfile(
     league,
     source,
     partial: progress.detailed < progress.known,
+    // Solo cuenta como completo si los datos salen de la base: la vía directa
+    // (24 partidas en vivo) siempre tiene algo más para traer.
+    complete:
+      source === "db" &&
+      backfillState === "done" &&
+      progress.detailed >= progress.known,
   };
 }
