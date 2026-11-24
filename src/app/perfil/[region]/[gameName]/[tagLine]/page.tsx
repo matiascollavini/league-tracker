@@ -19,6 +19,7 @@ import { loadProfile } from "@/lib/profile";
 import {
   isPlatform,
   isQueueFilter,
+  PLATFORM_LABEL,
   queuesFor,
   QUEUE_FILTERS,
   type Platform,
@@ -87,8 +88,18 @@ export default async function ProfilePage({
     return <DataError error={error} />;
   }
 
-  const { account, puuid, matches, summoner, league, progress, source, partial } =
-    profile;
+  const {
+    account,
+    puuid,
+    platform: effectivePlatform,
+    platformMismatch,
+    matches,
+    summoner,
+    league,
+    progress,
+    source,
+    partial,
+  } = profile;
 
   const catalog = await getChampionCatalog();
   const demo = source === "demo";
@@ -142,7 +153,7 @@ export default async function ProfilePage({
         <ProfileCard
           gameName={account.gameName ?? gameName}
           tagLine={account.tagLine ?? tagLine}
-          platform={platform}
+          platform={effectivePlatform}
           level={summoner?.summonerLevel ?? null}
           iconId={summoner?.profileIconId ?? null}
           version={catalog.version}
@@ -177,7 +188,7 @@ export default async function ProfilePage({
           <WinrateBar value={summary.winrate} className="mt-3" />
 
           <Link
-            href={`/comparar?a=${platform}/${encodeURIComponent(account.gameName ?? gameName)}/${encodeURIComponent(account.tagLine ?? tagLine)}`}
+            href={`/comparar?a=${effectivePlatform}/${encodeURIComponent(account.gameName ?? gameName)}/${encodeURIComponent(account.tagLine ?? tagLine)}`}
             className="mt-3 inline-flex items-center gap-1.5 text-[11px] text-muted hover:text-gold-300"
           >
             <ArrowLeftRight className="size-3" aria-hidden />
@@ -223,6 +234,17 @@ export default async function ProfilePage({
           />
         </section>
 
+        {platformMismatch ? (
+          <p className="rounded-lg border border-gold-600/40 bg-gold-600/10 px-4 py-3 text-xs leading-relaxed text-gold-300">
+            Esta cuenta está guardada en{" "}
+            <strong className="font-semibold">
+              {PLATFORM_LABEL[effectivePlatform]}
+            </strong>
+            . La buscaste en {PLATFORM_LABEL[platform]}, así que te muestro los
+            datos de su región real.
+          </p>
+        ) : null}
+
         {partial && progress.known > 0 ? (
           <section
             className="rounded-xl border border-line bg-ink-900/60 p-4"
@@ -262,7 +284,7 @@ export default async function ProfilePage({
             {matches.length} partidas pedidas en vivo. Corré{" "}
             <code className="text-gold-400">
               npm run ingest -- &quot;{account.gameName}#{account.tagLine}&quot;{" "}
-              {platform}
+              {effectivePlatform}
             </code>{" "}
             para analizar el historial completo.
           </p>

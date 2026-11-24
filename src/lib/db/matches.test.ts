@@ -8,6 +8,8 @@ process.env.DATABASE_URL = `file:${TEST_DB}`;
 import { closeDb, ensureSchema } from "./client";
 import {
   filterKnownMatchIds,
+  findSyncForPuuid,
+  findSyncedPuuid,
   getPlayerMatches,
   getProgress,
   pendingMatchIds,
@@ -152,6 +154,44 @@ describe("progreso del historial", () => {
     await saveMatch(makeMatch({ matchId: "a" }), "la1");
     const known = await filterKnownMatchIds(["a", "b"]);
     expect(known).toEqual(["a"]);
+  });
+});
+
+describe("búsqueda de datos guardados", () => {
+  it("encuentra al jugador por puuid aunque la plataforma sea otra", async () => {
+    await saveMatch(makeMatch({ matchId: "LA2_1" }), "la2");
+    await registerMatchIds(PUUID, ["LA2_1"]);
+    const { touchSyncState } = await import("./matches");
+    await touchSyncState(PUUID, "la2", {
+      gameName: "Carlos",
+      tagLine: "RHLMC",
+      backfillState: "done",
+    });
+
+    const owner = await findSyncForPuuid(PUUID);
+    expect(owner?.platform).toBe("la2");
+    expect(owner?.gameName).toBe("Carlos");
+  });
+
+  it("encuentra al jugador por Riot ID sin importar la región", async () => {
+    await saveMatch(makeMatch({ matchId: "LA2_2" }), "la2");
+    await registerMatchIds(PUUID, ["LA2_2"]);
+    const { touchSyncState } = await import("./matches");
+    await touchSyncState(PUUID, "la2", {
+      gameName: "Carlos",
+      tagLine: "RHLMC",
+      backfillState: "done",
+    });
+
+    // se busca como si el usuario hubiera elegido LAN
+    const owner = await findSyncedPuuid("Carlos", "RHLMC");
+    expect(owner?.puuid).toBe(PUUID);
+    expect(owner?.platform).toBe("la2");
+  });
+
+  it("no devuelve nada si no hay partidas guardadas", async () => {
+    expect(await findSyncForPuuid(PUUID)).toBeNull();
+    expect(await findSyncedPuuid("Nadie", "XXXX")).toBeNull();
   });
 });
 

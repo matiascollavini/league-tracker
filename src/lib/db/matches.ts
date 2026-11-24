@@ -441,6 +441,48 @@ export async function unlockSync(puuid: string, token: string): Promise<void> {
   });
 }
 
+export type SyncOwner = {
+  puuid: string;
+  platform: Platform;
+  gameName: string | null;
+  tagLine: string | null;
+};
+
+/**
+ * ¿Ya conocemos este puuid? El puuid es la identidad; la plataforma es solo
+ * metadata. Así, buscar una cuenta de LAS eligiendo LAN igual encuentra los
+ * datos guardados.
+ */
+export async function findSyncForPuuid(
+  puuid: string,
+): Promise<SyncOwner | null> {
+  await ensureSchema();
+  const result = await db().execute({
+    sql: `SELECT ps.puuid, ps.platform_id, ps.game_name, ps.tag_line
+            FROM puuid_sync ps
+           WHERE ps.puuid = ?
+             AND EXISTS (
+               SELECT 1
+                 FROM puuid_matches pm
+                 JOIN match_participants p
+                   ON p.match_id = pm.match_id AND p.puuid = pm.puuid
+                WHERE pm.puuid = ps.puuid
+             )
+           LIMIT 1`,
+    args: [puuid],
+  });
+  const row = result.rows[0];
+  if (!row) return null;
+  const platform = str(row.platform_id);
+  if (!isPlatform(platform)) return null;
+  return {
+    puuid: str(row.puuid),
+    platform,
+    gameName: row.game_name == null ? null : str(row.game_name),
+    tagLine: row.tag_line == null ? null : str(row.tag_line),
+  };
+}
+
 /**
  * Busca el puuid que YA tiene datos para un Riot ID.
  *
@@ -449,16 +491,14 @@ export async function unlockSync(puuid: string, token: string): Promise<void> {
  * mostrar la vía directa y perder las ~1.000 partidas analizadas.
  */
 export async function findSyncedPuuid(
-  platform: Platform,
   gameName: string,
   tagLine: string,
-): Promise<string | null> {
+): Promise<SyncOwner | null> {
   await ensureSchema();
   const result = await db().execute({
-    sql: `SELECT ps.puuid
+    sql: `SELECT ps.puuid, ps.platform_id, ps.game_name, ps.tag_line
             FROM puuid_sync ps
-           WHERE ps.platform_id = ?
-             AND ps.game_name = ? COLLATE NOCASE
+           WHERE ps.game_name = ? COLLATE NOCASE
              AND ps.tag_line = ? COLLATE NOCASE
              AND EXISTS (
                SELECT 1
@@ -469,10 +509,18 @@ export async function findSyncedPuuid(
              )
            ORDER BY COALESCE(ps.last_synced_at, 0) DESC
            LIMIT 1`,
-    args: [platform, gameName, tagLine],
+    args: [gameName, tagLine],
   });
   const row = result.rows[0];
-  return row ? str(row.puuid) : null;
+  if (!row) return null;
+  const platform = str(row.platform_id);
+  if (!isPlatform(platform)) return null;
+  return {
+    puuid: str(row.puuid),
+    platform,
+    gameName: row.game_name == null ? null : str(row.game_name),
+    tagLine: row.tag_line == null ? null : str(row.tag_line),
+  };
 }
 
 export type PendingPlayer = {

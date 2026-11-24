@@ -4,6 +4,7 @@ import { getRecentMatches } from "@/lib/riot/matches";
 import { isMockMode } from "@/lib/riot/http";
 import {
   findSyncedPuuid,
+  findSyncForPuuid,
   getPlayerMatchesWithProgress,
   type Progress,
 } from "@/lib/db/matches";
@@ -26,6 +27,10 @@ export type ProfileData = {
   account: Account;
   /** Puuid efectivo: el resuelto o el que ya tenía datos. */
   puuid: string;
+  /** Plataforma efectiva: la de la URL o la que tiene los datos guardados. */
+  platform: Platform;
+  /** true si la plataforma de la URL no era la de la cuenta. */
+  platformMismatch: boolean;
   matches: Match[];
   progress: Progress;
   summoner: Summoner | null;
@@ -56,16 +61,34 @@ export async function loadProfile(
 ): Promise<ProfileData> {
   const account = await resolveAccount(platform, gameName, tagLine);
 
+  // El puuid es la identidad; la plataforma es metadata. Si la cuenta ya está
+  // guardada bajo otra región (ej. buscás en LAN una cuenta de LAS), usamos esa.
+  let puuid = account.puuid;
+  let effectivePlatform = platform;
+
+  if (!isMockMode()) {
+    const owner =
+      (await findSyncForPuuid(puuid)) ??
+      (await findSyncedPuuid(gameName, tagLine));
+
+    if (owner) {
+      puuid = owner.puuid;
+      effectivePlatform = owner.platform;
+    }
+  }
+
   const [summoner, league] = await Promise.all([
-    getSummoner(account.puuid, platform),
-    getLeagueEntries(account.puuid, platform),
+    getSummoner(puuid, effectivePlatform),
+    getLeagueEntries(puuid, effectivePlatform),
   ]);
 
   if (isMockMode()) {
-    const matches = await getRecentMatches(account.puuid, platform);
+    const matches = await getRecentMatches(puuid, effectivePlatform);
     return {
       account,
-      puuid: account.puuid,
+      puuid,
+      platform: effectivePlatform,
+      platformMismatch: effectivePlatform !== platform,
       matches,
       progress: { known: matches.length, detailed: matches.length },
       summoner,
@@ -76,26 +99,11 @@ export async function loadProfile(
   }
 
   // Una sola consulta trae partidas + progreso.
-  let puuid = account.puuid;
   let { matches, progress } = await getPlayerMatchesWithProgress(puuid);
-
-  // Red de seguridad: si el puuid resuelto no tiene datos, probamos con el que
-  // ya guardamos para ese mismo Riot ID (Riot a veces devuelve otro puuid).
-  if (matches.length === 0) {
-    const stored = await findSyncedPuuid(platform, gameName, tagLine);
-    if (stored && stored !== puuid) {
-      const alternative = await getPlayerMatchesWithProgress(stored);
-      if (alternative.matches.length > 0) {
-        puuid = stored;
-        matches = alternative.matches;
-        progress = alternative.progress;
-      }
-    }
-  }
 
   if (progress.detailed < MIN_TO_ANALYZE) {
     try {
-      const result = await syncAccount(platform, gameName, tagLine, {
+      const result = await syncAccount(effectivePlatform, gameName, tagLine, {
         budget: onDemandBudget(),
         maxPages: 4,
       });
@@ -121,6 +129,8 @@ export async function loadProfile(
   return {
     account,
     puuid,
+    platform: effectivePlatform,
+    platformMismatch: effectivePlatform !== platform,
     matches,
     progress,
     summoner,

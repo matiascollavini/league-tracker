@@ -48,7 +48,7 @@ async function loadSide(
   return {
     name: profile.account.gameName ?? side.gameName,
     tag: profile.account.tagLine ?? side.tagLine,
-    platform: side.platform,
+    platform: profile.platform,
     summary,
     rank: solo?.tier
       ? `${solo.tier} ${solo.rank ?? ""} · ${solo.leaguePoints ?? 0} LP`
