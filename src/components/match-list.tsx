@@ -10,9 +10,11 @@ import { cn } from "@/lib/utils";
 type Props = {
   matches: MatchSummary[];
   version: string;
+  /** championName de Riot -> nombre localizado de Data Dragon. */
+  names: Record<string, string>;
 };
 
-export function MatchList({ matches, version }: Props) {
+export function MatchList({ matches, version, names }: Props) {
   if (matches.length === 0) {
     return (
       <p className="p-4 text-sm text-muted">
@@ -52,7 +54,7 @@ export function MatchList({ matches, version }: Props) {
 
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium text-gold-200">
-              {match.championName}
+              {names[match.championName] ?? match.championName}
               <span className="ml-2 text-[11px] font-normal text-muted">
                 {match.position}
               </span>

@@ -291,10 +291,16 @@ GET https://{cluster}.api.riotgames.com/riot/account/v1/accounts/by-riot-id/{gam
 
   Variantes:
   GET /riot/account/v1/accounts/by-puuid/{puuid}                  -> mismo objeto
-  GET /riot/account/v1/active-shards/by-game/lol/by-puuid/{puuid} -> shard activo
-      (útil si no sabés en qué plataforma jugó: { "active": true, "game": "lol",
-       "region": "na1" })
-  GET /riot/account/v1/region/by-game/lol/by-puuid/{puuid}
+
+  [GOTCHA 2026-11-24] active-shards/by-game NO acepta "lol":
+    GET /riot/account/v1/active-shards/by-game/lol/by-puuid/{puuid}
+    400 {"status":{"message":"Bad Request - invalid parameter value lol,
+         must be one of [val,lor,2xko]"}}
+  O sea: sirve para Valorant, LoR y 2XKO, no para League.
+  ¿Cómo saber la plataforma de un jugador entonces? Pedí 1 match id y mirá el
+  prefijo (LA2_..., KR_..., EUW1_...); ese prefijo ES el platformId:
+    GET https://americas.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?count=1
+    -> ["LA2_1639441889"]  => plataforma la2
 
   Notas:
   - Se puede consultar cualquier cuenta desde cualquier cluster: la data de
@@ -969,6 +975,12 @@ Fuentes: https://developer.riotgames.com/policies/general  (rev. 2025-05-29)
                       el conteo de campeones.
                     - §15: URL de retención verificada (200).
                     - Nueva §18 con los curls que faltan cuando haya key.
+  2026-11-24  v1.3  Más hallazgos con key real:
+                    - active-shards/by-game/lol -> 400 (solo val/lor/2xko). Para
+                      League, la plataforma se deduce del prefijo del matchId.
+                    - Los nombres localizados salen de Data Dragon por `id`, porque
+                      Riot manda el id interno ("Kaisa", "Nunu", "MonkeyKing") y no
+                      el nombre visible ("Kai'Sa", "Nunu y Willump", "Wukong").
   2026-11-24  v1.2  Verificación con una dev key real:
                     - x-app-rate-limit = 100:120,20:1 (confirma 100/2min + 20/1s).
                     - x-method-rate-limit = 2000:60 en summoner-v4.

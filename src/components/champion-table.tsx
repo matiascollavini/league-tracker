@@ -8,6 +8,8 @@ import { cn } from "@/lib/utils";
 type Props = {
   champions: ChampionStat[];
   version: string;
+  /** championName de Riot -> nombre localizado de Data Dragon ("Kaisa" -> "Kai'Sa"). */
+  names: Record<string, string>;
   selected?: string;
   totalMatches: number;
   hrefFor: (championName?: string) => string;
@@ -16,6 +18,7 @@ type Props = {
 export function ChampionTable({
   champions,
   version,
+  names,
   selected,
   totalMatches,
   hrefFor,
@@ -61,7 +64,7 @@ export function ChampionTable({
                   />
                   <span className="min-w-0">
                     <span className="block truncate text-sm text-gold-200">
-                      {champion.championName}
+                      {names[champion.championName] ?? champion.championName}
                     </span>
                     <span className="block text-[11px] text-muted">
                       {champion.wins}V {champion.losses}D

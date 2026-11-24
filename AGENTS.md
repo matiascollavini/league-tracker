@@ -131,6 +131,8 @@ scripts/        verify-riot.mjs (verificación contra la API real)
 - Regla dura: `account-v1` y `match-v5` van al host **regional**; `summoner`,
   `league` y `mastery` al host de **plataforma**. El tipo `RiotTarget` lo hace
   imposible de confundir.
+- Los nombres visibles de campeones salen de **Data Dragon** (`catalog.all`),
+  no de Riot: Riot manda el id interno (`Kaisa`, `Nunu`, `MonkeyKing`).
 - Siguiente: Postgres + Redis + worker de backfill (fase 2).
 
 ---

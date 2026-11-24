@@ -92,6 +92,10 @@ export default async function ProfilePage({
 
   const catalog = await getChampionCatalog();
   const demo = isMockMode();
+  // championName de Riot -> nombre localizado ("Kaisa" -> "Kai'Sa", "Nunu" -> "Nunu y Willump")
+  const names: Record<string, string> = Object.fromEntries(
+    catalog.all.map((champion) => [champion.id, champion.name]),
+  );
 
   const queueIds = queuesFor(queueFilter);
   const inQueue =
@@ -157,7 +161,9 @@ export default async function ProfilePage({
         />
         <StatCard
           label="Más jugado"
-          value={top?.championName ?? "—"}
+          value={
+            top ? (names[top.championName] ?? top.championName) : "—"
+          }
           hint={
             top ? `${top.games} partidas · ${percent(top.winrate)} WR` : undefined
           }
@@ -203,6 +209,7 @@ export default async function ProfilePage({
             <ChampionTable
               champions={summary.champions}
               version={catalog.version}
+              names={names}
               selected={selected?.championName}
               totalMatches={summary.matches}
               hrefFor={(championName) => hrefFor({ champion: championName })}
@@ -217,7 +224,7 @@ export default async function ProfilePage({
                 Campeón seleccionado
               </p>
               <p className="mt-1 text-xl font-semibold text-gold-200">
-                {selected.championName}
+                {names[selected.championName] ?? selected.championName}
               </p>
               <dl className="mt-3 grid grid-cols-3 gap-2 text-center">
                 <div className="rounded-lg bg-ink-900/70 p-2">
@@ -281,11 +288,11 @@ export default async function ProfilePage({
           </h2>
           <span className="text-[11px] text-muted">
             {selected
-              ? `${visible.length} con ${selected.championName}`
+              ? `${visible.length} con ${names[selected.championName] ?? selected.championName}`
               : `${visible.length} de ${summary.matches} analizadas`}
           </span>
         </div>
-        <MatchList matches={visible} version={catalog.version} />
+        <MatchList matches={visible} version={catalog.version} names={names} />
       </section>
     </div>
   );
