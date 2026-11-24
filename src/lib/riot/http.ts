@@ -9,6 +9,11 @@ import { clusterFor, type Cluster, type Platform } from "./config";
  *  - Token bucket por proceso con las dos ventanas de la key personal/dev
  *    (20 req/s y 100 req/2min). Configurable por env para production key.
  *  - Reintento con Retry-After en 429 y backoff en 5xx.
+ *  - Timeout por request (`RIOT_REQUEST_TIMEOUT_MS`, 15 s) para que un socket
+ *    colgado no se coma la vuelta entera.
+ *  - Deadline opcional de la corrida (`options.deadline`): si esperar el turno
+ *    o el Retry-After nos deja fuera de tiempo, se corta con
+ *    `RiotDeadlineError` en vez de dormir y pasarse de `maxDuration`.
  *  - Validación con zod de cada respuesta.
  *  - Caché de Next (Data Cache) vía `next.revalidate`.
  */
@@ -21,6 +26,22 @@ export class RiotApiError extends Error {
   ) {
     super(message);
     this.name = "RiotApiError";
+  }
+}
+
+/**
+ * Se lanzó sin llegar a hacer el request: no queda presupuesto de tiempo en la
+ * corrida. NO es un error de Riot: la vuelta se corta ordenadamente y devuelve
+ * lo que ya hizo (ver `syncPuuid`).
+ */
+export class RiotDeadlineError extends Error {
+  constructor(
+    readonly path: string,
+    /** Cuánto habría que esperar para tener turno (0 = venció el tiempo). */
+    readonly retryAfterMs = 0,
+  ) {
+    super(`Se acabó el tiempo de esta corrida antes de ${path}`);
+    this.name = "RiotDeadlineError";
   }
 }
 
@@ -71,7 +92,13 @@ class SlidingWindowLimiter {
 
   constructor(private readonly windows: LimitWindow[]) {}
 
-  async acquire(): Promise<void> {
+  /**
+   * Pide un turno. Devuelve 0 si lo consiguió o, si no, los ms que habría que
+   * esperar. Con `deadline` (epoch ms) no espera cuando el turno no entra en el
+   * tiempo que le queda a la corrida: dormir 2 min haría que la función se pase
+   * de `maxDuration` y muera sin soltar el lock.
+   */
+  async acquire(deadline?: number): Promise<number> {
     for (;;) {
       const now = Date.now();
       const maxMs = Math.max(...this.windows.map((w) => w.ms));
@@ -90,8 +117,9 @@ class SlidingWindowLimiter {
 
       if (waitMs <= 0) {
         this.stamps.push(now);
-        return;
+        return 0;
       }
+      if (deadline !== undefined && now + waitMs > deadline) return waitMs;
       await sleep(waitMs);
     }
   }
@@ -116,7 +144,18 @@ type RiotRequestOptions<T> = RiotTarget & {
   tags?: string[];
   /** Esquema de validación de la respuesta. */
   schema: z.ZodType<T>;
+  /**
+   * Epoch ms. Si el token bucket no puede darnos turno antes de esa hora, se
+   * corta con `RiotDeadlineError` en vez de esperar los 2 minutos completos.
+   */
+  deadline?: number;
 };
+
+/** Corte por request: Riot responde en <1 s, pero un socket colgado no puede
+ *  comerse la vuelta entera (undici espera hasta 300 s por defecto). */
+function requestTimeoutMs(): number {
+  return intFromEnv("RIOT_REQUEST_TIMEOUT_MS", 15_000);
+}
 
 /** Host base según el destino. Exportado para poder testearlo. */
 export function riotHost(target: RiotTarget): string {
@@ -151,13 +190,34 @@ export async function riotFetch<T>(
   let lastError: unknown;
 
   for (let attempt = 0; attempt < 3; attempt++) {
-    await limiter.acquire();
+    // El turno del bucket primero: si no entra en el presupuesto, cortamos acá.
+    const waitForSlot = await limiter.acquire(options.deadline);
+    if (waitForSlot > 0) throw new RiotDeadlineError(path, waitForSlot);
 
-    const res = await fetch(url, {
-      headers: { "X-Riot-Token": key },
-      next: revalidate > 0 ? { revalidate, tags } : undefined,
-      cache: revalidate > 0 ? undefined : "no-store",
-    });
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        headers: { "X-Riot-Token": key },
+        // Si el socket se cuelga, el request muere solo (no bloquea la vuelta).
+        signal: AbortSignal.timeout(requestTimeoutMs()),
+        next: revalidate > 0 ? { revalidate, tags } : undefined,
+        cache: revalidate > 0 ? undefined : "no-store",
+      });
+    } catch {
+      // Timeout o corte de red: se reintenta como si fuera un 5xx.
+      lastError = new RiotApiError(
+        504,
+        `Riot no respondió en ${requestTimeoutMs()} ms (${path})`,
+        path,
+      );
+      const backoff = 400 * 2 ** attempt + Math.random() * 300;
+      // Si el backoff no entra en el presupuesto, la vuelta se corta acá.
+      if (options.deadline !== undefined && Date.now() + backoff > options.deadline) {
+        throw new RiotDeadlineError(path, backoff);
+      }
+      await sleep(backoff);
+      continue;
+    }
 
     if (res.ok) {
       const json: unknown = await res.json();
@@ -179,7 +239,12 @@ export async function riotFetch<T>(
       const retryAfter = Number(res.headers.get("retry-after") ?? "1");
       const seconds = Number.isFinite(retryAfter) ? retryAfter : 1;
       lastError = new RiotApiError(429, `Rate limit de Riot (${path})`, path);
-      await sleep((seconds + Math.random()) * 1_000);
+      const wait = (seconds + Math.random()) * 1_000;
+      // Esperar el Retry-After nos dejaría fuera de la corrida: cortamos.
+      if (options.deadline !== undefined && Date.now() + wait > options.deadline) {
+        throw new RiotDeadlineError(path, wait);
+      }
+      await sleep(wait);
       continue;
     }
 
@@ -189,7 +254,12 @@ export async function riotFetch<T>(
         await errorMessage(res, path),
         path,
       );
-      await sleep(600 * 2 ** attempt + Math.random() * 300);
+      const backoff = 600 * 2 ** attempt + Math.random() * 300;
+      // Si el backoff no entra en el presupuesto, la vuelta se corta acá.
+      if (options.deadline !== undefined && Date.now() + backoff > options.deadline) {
+        throw new RiotDeadlineError(path, backoff);
+      }
+      await sleep(backoff);
       continue;
     }
 

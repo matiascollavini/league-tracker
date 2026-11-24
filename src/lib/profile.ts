@@ -136,6 +136,8 @@ export async function loadProfile(
       const result = await syncAccount(effectivePlatform, gameName, tagLine, {
         budget: onDemandBudget(),
         maxPages: 4,
+        // La visita tampoco puede colgarse: si no entra, el worker sigue.
+        deadlineMs: 30_000,
       });
       puuid = result.puuid;
       ({ matches, progress } = await getPlayerMatchesWithProgress(puuid));

@@ -129,6 +129,25 @@ export async function filterKnownMatchIds(
   return result.rows.map((row) => str(row.match_id));
 }
 
+/**
+ * Saca una partida de la cola de un jugador.
+ *
+ * Se usa cuando Riot devuelve 404/400 para esa partida (la retención la borró o
+ * el ID está roto): si no, `pendingMatchIds` la devuelve siempre primera y
+ * ninguna corrida vuelve a avanzar. No borra la partida ni los vínculos de
+ * otros jugadores, solo el de este puuid.
+ */
+export async function forgetMatchId(
+  puuid: string,
+  matchId: string,
+): Promise<void> {
+  await ensureSchema();
+  await db().execute({
+    sql: "DELETE FROM puuid_matches WHERE puuid = ? AND match_id = ?",
+    args: [puuid, matchId],
+  });
+}
+
 /** IDs pendientes de detalle, más nuevos primero. */
 export async function pendingMatchIds(
   puuid: string,

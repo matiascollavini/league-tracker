@@ -24,6 +24,7 @@ export async function getMatchIdsPage(
   start = 0,
   count = 100,
   sinceSeconds?: number,
+  deadline?: number,
 ): Promise<string[]> {
   if (isMockMode()) {
     return mockMatches()
@@ -35,7 +36,7 @@ export async function getMatchIdsPage(
   return riotFetch(
     `/lol/match/v5/matches/by-puuid/${puuid}/ids?start=${start}&count=${count}${since}`,
     // MATCH-V5 vive en el host REGIONAL.
-    { cluster: clusterFor(platform), revalidate: 120, schema: MatchIdsSchema },
+    { cluster: clusterFor(platform), revalidate: 120, schema: MatchIdsSchema, deadline },
   ).catch((error: unknown) => {
     // 404 = el jugador no tiene partidas. No es un error de la página.
     if (error instanceof RiotApiError && error.status === 404) return [];
@@ -89,6 +90,7 @@ export async function getRecentMatches(
 export async function getMatch(
   matchId: string,
   platform: Platform,
+  deadline?: number,
 ): Promise<Match> {
   if (isMockMode()) {
     const found = mockMatches().find((m) => m.metadata.matchId === matchId);
@@ -99,5 +101,6 @@ export async function getMatch(
     cluster: clusterFor(platform),
     revalidate: 2_592_000,
     schema: MatchSchema,
+    deadline,
   });
 }

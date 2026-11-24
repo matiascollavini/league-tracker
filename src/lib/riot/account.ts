@@ -21,6 +21,7 @@ export async function resolveAccount(
   platform: Platform,
   gameName: string,
   tagLine: string,
+  deadline?: number,
 ): Promise<Account> {
   if (isMockMode()) {
     return { ...mockAccount, gameName, tagLine };
@@ -28,7 +29,12 @@ export async function resolveAccount(
   return riotFetch(
     `/riot/account/v1/accounts/by-riot-id/${enc(gameName)}/${enc(tagLine)}`,
     // ACCOUNT-V1 vive en el host REGIONAL, no en el de plataforma.
-    { cluster: clusterFor(platform), revalidate: 604_800, schema: AccountSchema },
+    {
+      cluster: clusterFor(platform),
+      revalidate: 604_800,
+      schema: AccountSchema,
+      deadline,
+    },
   );
 }
 

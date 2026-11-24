@@ -279,6 +279,59 @@ production key (20 s) conviene atarlo a una visita.
 
 ---
 
+## ADR-009 — Ingesta acotada por tiempo (y no por suerte)
+
+**Estado:** aceptada · **Fecha:** 2026-11-24
+
+### Contexto
+El botón "Cargar todo el historial" pide tandas de `RIOT_SYNC_CHUNK` requests.
+Medido contra una cuenta con ~500 partidas: la tanda 1 tardó 17,8 s, la 2 50,6 s
+y la 3 **60,5 s**, porque el bucket de la dev key (100/2min) se satura y el
+cliente duerme esperando turno. Con `maxDuration = 60` eso significa que la
+función puede morir a mitad de tanda; entonces el `finally` no corre, el lock
+queda tomado **10 minutos** (`tryLockSync(..., 600)`) y todas las llamadas
+siguientes devuelven `skipped: true`. El loader giraba en silencio: la cuenta
+quedaba "trabada" sin ningún mensaje.
+
+### Decisión
+1. **Deadline absoluto** (`IngestOptions.deadlineAt`) que comparten resolver el
+   Riot ID y bajar partidas: una sola hora límite por vuelta, no una por etapa.
+   El route usa 40 s (`RIOT_SYNC_DEADLINE_MS`), por debajo de los 60 s.
+2. **El token bucket no espera más allá del deadline**: `acquire(deadline)`
+   devuelve cuánto habría que esperar y `riotFetch` corta con
+   `RiotDeadlineError` (que además lleva ese `retryAfterMs` para que el cliente
+   sepa cuánto dormir). Sin esto, la tanda podía dormir 2 minutos y pasar el
+   límite igual.
+3. **Cortar no es fallar**: `syncPuuid` atrapa `RiotDeadlineError`, guarda el
+   cursor y el progreso, y devuelve `done: false` con `phase` y `elapsedMs`.
+   El lock se libera siempre.
+4. **Timeout por request** (`RIOT_REQUEST_TIMEOUT_MS`, 15 s) con
+   `AbortSignal.timeout`: un socket colgado ya no bloquea la tanda.
+5. **El lock dura lo que dura la tanda** (`deadline + 30 s`, no 600 s): si la
+   función muere igual, la cuenta se destraba en un minuto y medio.
+6. **Una partida que Riot ya no tiene (404/400) sale de la cola**
+   (`forgetMatchId`). Antes abortaba la tanda entera y, como `pendingMatchIds`
+   la devolvía siempre primera, el backfill no avanzaba nunca más. Un 5xx o un
+   timeout **sí** se reintenta: no se descarta nada por un error transitorio.
+7. **Un backfill terminado no vuelve a "partial"**: cuando el estado ya es
+   `done` solo se lee la página 0, que viene llena, así que `reachedEnd` es
+   falso por definición. Antes eso pisaba el estado en cada vuelta y la cuenta
+   volvía a la cola del worker (y el `done` del botón parpadeaba).
+
+### Consecuencias
+- Ninguna vuelta puede pasarse de `maxDuration`: el peor caso es ~40 s de
+  requests + DB.
+- El cliente recibe siempre un motivo (`phase`: `ids` / `details` / `locked` /
+  `throttled` / `done`) y, cuando corresponde, cuánto esperar.
+- Una tanda puede devolver 0 requests y `phase: "throttled"`: es el bucket
+  saturado, no un error. El cliente duerme y reintenta; no cuesta requests.
+- Se pierden a propósito las partidas que Riot borró: quedan fuera de `known`,
+  así "X de Y" sigue siendo honesto y la cola no se traba.
+- El CLI y el worker siguen sin deadline propio (ya tienen el suyo por fuera,
+  `--minutes`): no cambian.
+
+---
+
 ## Registro de auditoría
 
 **2026-11-24 — auditoría de `docs/API-LOL.txt` v1.0.** Un `evidence-auditor` sin

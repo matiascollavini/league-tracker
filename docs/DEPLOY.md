@@ -78,8 +78,16 @@ npm run worker -- --prod --minutes=8 --budget=250
 | `DD_LOCALE` | `es_ES` |
 | `RIOT_ANALYZE_COUNT` | `24` |
 | `RIOT_ONDEMAND_BUDGET` | `25` con dev key · `300`–`400` con production key |
-| `RIOT_SYNC_CHUNK` | requests por tanda del botón "Cargar todo": `40` con personal key · `300` con production key |
+| `RIOT_SYNC_CHUNK` | requests por tanda del botón "Cargar todo": `30` con personal key · `300` con production key |
+| `RIOT_SYNC_DEADLINE_MS` | tope de tiempo por tanda: `40000` (deja margen bajo el `maxDuration` de 60 s) |
+| `RIOT_REQUEST_TIMEOUT_MS` | corte por request a Riot: `15000` |
 | `TURSO` | no hace falta en Vercel (solo para los scripts locales) |
+
+**Por qué el chunk es 30 y no 40:** con dev key el límite es 100 requests cada
+2 minutos (~0,83 por segundo). 30 requests son ~36 s; 40 se acercaban a los 60 s
+de `maxDuration` y, si la función moría a mitad de tanda, el lock quedaba tomado
+10 minutos. Ahora, además, cada tanda corta sola a los 40 s (`RIOT_SYNC_DEADLINE_MS`)
+y devuelve lo que alcanzó a hacer.
 
 **Qué significa `RIOT_ONDEMAND_BUDGET`:** cuántos requests puede gastar la
 primera búsqueda de una cuenta nueva. Con `25`, el usuario ve las últimas ~24

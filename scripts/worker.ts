@@ -70,7 +70,9 @@ async function main() {
       const label = `${player.gameName ?? player.puuid.slice(0, 8)}${player.tagLine ? `#${player.tagLine}` : ""}`;
       console.log(
         `  · ${label.padEnd(22)} ${result.progress.detailed}/${result.progress.known}` +
-          `${result.done ? " ✔" : ""}${result.skipped ? " (lock)" : ""} · ${result.requests} req`,
+          `${result.done ? " ✔" : ""}${result.skipped ? " (lock)" : ""}` +
+          `${result.unavailable > 0 ? ` (${result.unavailable} ya no están en Riot)` : ""}` +
+          ` · ${result.requests} req`,
       );
     }
   }
