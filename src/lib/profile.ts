@@ -5,6 +5,7 @@ import { isMockMode } from "@/lib/riot/http";
 import {
   findSyncedPuuid,
   findSyncForPuuid,
+  getAliasPuuids,
   getLeagueSnapshot,
   getPlayerMatchesWithProgress,
   saveLeagueSnapshot,
@@ -103,8 +104,15 @@ export async function loadProfile(
     };
   }
 
+  // Un jugador puede tener varios puuids (Riot los reasigna): se lee el conjunto.
+  // Incluye el que devolvió Riot en esta visita, que puede no tener fila todavía.
+  const playerPuuids = [
+    ...new Set([account.puuid, ...(await getAliasPuuids(puuid))]),
+  ];
+
   // Una sola consulta trae partidas + progreso + si está en la cola.
-  let { matches, progress, queued } = await getPlayerMatchesWithProgress(puuid);
+  let { matches, progress, queued } =
+    await getPlayerMatchesWithProgress(playerPuuids);
 
   // Fallback: si summoner-v4 falla, el icono y el nivel salen de la última
   // partida guardada (los mandó Riot en el payload del match).
@@ -144,7 +152,9 @@ export async function loadProfile(
         deadlineMs: 30_000,
       });
       puuid = result.puuid;
-      ({ matches, progress, queued } = await getPlayerMatchesWithProgress(puuid));
+      ({ matches, progress, queued } = await getPlayerMatchesWithProgress(
+        [...new Set([puuid, ...playerPuuids])],
+      ));
     } catch (error) {
       // 429 o 5xx: no rompemos la página, seguimos con lo que haya.
       console.warn(

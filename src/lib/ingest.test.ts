@@ -30,6 +30,7 @@ const PUUID_404 = "u".repeat(78);
 const PUUID_LOCK = "l".repeat(78);
 const PUUID_COMPLETE = "c".repeat(78);
 const PUUID_THROTTLE = "t".repeat(78);
+const PUUID_DESMENTIDO = "z".repeat(78);
 
 const participant = (puuid: string): Participant => ({
   puuid,
@@ -207,6 +208,25 @@ describe("syncPuuid — cuentas ya completas", () => {
     expect(third.progress).toEqual({ known: 100, detailed: 100 });
     expect(third.done).toBe(true);
     expect(third.phase).toBe("done");
+  });
+});
+
+describe("syncPuuid — links que Riot desmiente", () => {
+  it("si el payload no lista al jugador, descarta el link y el progreso cierra", async () => {
+    vi.mocked(getMatchIdsPage).mockResolvedValue(["Z1"]);
+    // Riot devuelve la partida, pero el jugador no está adentro.
+    vi.mocked(getMatch).mockResolvedValue(makeMatch("Z1", "o".repeat(78)));
+
+    const result = await syncPuuid(PUUID_DESMENTIDO, "la2", {
+      budget: 10,
+      maxPages: 1,
+      deadlineMs: 5_000,
+    });
+
+    expect(result.unavailable).toBe(1);
+    expect(result.progress).toEqual({ known: 0, detailed: 0 });
+    expect(result.done).toBe(true);
+    expect(await pendingMatchIds(PUUID_DESMENTIDO, 10)).toEqual([]);
   });
 });
 

@@ -332,6 +332,51 @@ quedaba "trabada" sin ningún mensaje.
 
 ---
 
+## ADR-010 — Un jugador puede tener varios puuids
+
+**Estado:** aceptada · **Fecha:** 2026-11-24
+
+### Contexto
+`keke#6seve` tiene **dos** puuids: `077q-0aRX…` (el que devuelve `account-v1`
+hoy) y `lWjGSvL6…`, que Riot ya ni puede descifrar ("Bad Request - Exception
+decrypting") pero que sigue apareciendo como participante en las partidas
+viejas. Su historial quedó partido: 714 partidas con el viejo y 42 con el nuevo.
+
+El perfil mostraba **714 de 756** y, al recargar, volvía a 714 aunque el botón
+hubiese llegado a 756. No era un contador roto: había **tres definiciones** de
+"partida analizada":
+
+1. `getProgress` (lo que reporta el botón): link + fila en `matches` → 756.
+2. El perfil: link + fila en `matches` **+ fila de participante de ese puuid**
+   → 714, porque 42 partidas listan al jugador con el puuid nuevo.
+3. El `done` del ingest, calculado con (1) → 756, "terminado".
+
+### Decisión
+1. **Las lecturas aceptan un conjunto de puuids** (`string | readonly string[]`):
+   `getProgress`, `pendingMatchIds` y `getPlayerMatchesWithProgress`.
+2. **`getAliasPuuids(puuid)`** une por Riot ID: todos los `puuid_sync` que
+   comparten `game_name`/`tag_line` son la misma persona. El perfil además suma
+   el puuid que devolvió Riot en esa visita (puede no tener fila todavía).
+3. **Una partida cuenta como analizada solo si el jugador aparece de verdad en
+   ella** (fila de participante de cualquiera de sus puuids). Es la misma
+   definición para el botón, para la página y para el `done`.
+4. **Un link que Riot desmiente se descarta**: si el payload de la partida no
+   lista al jugador, `forgetMatchId` borra el link. Antes ese link quedaba
+   pendiente para siempre (o invisibile) y el progreso no cerraba nunca.
+5. **`GROUP BY match_id`** en la lectura del perfil: la misma partida puede
+   estar linkeada con los dos puuids y se mostraría dos veces.
+
+### Consecuencias
+- keke: 756 de 756, una sola vez cada partida, `done` de verdad.
+- El ingest sigue escribiendo bajo el puuid que resuelve Riot; los alias son de
+  lectura, no hace falta migrar ni reescribir datos.
+- `getAliasPuuids` son 2 queries por vuelta (estado + nombres) y 1 por render de
+  perfil: aceptable frente a tener números que no cierran.
+- Un `puuid_sync` con nombre repetido y puuid inválido ya no rompe nada: se suma
+  como alias y sus partidas se siguen mostrando.
+
+---
+
 ## Registro de auditoría
 
 **2026-11-24 — auditoría de `docs/API-LOL.txt` v1.0.** Un `evidence-auditor` sin

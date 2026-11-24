@@ -12,6 +12,37 @@ import type { Match } from "@/lib/riot/types";
  * participantes) porque solo escribimos los campos que usamos.
  */
 
+/**
+ * Un jugador puede tener VARIOS puuids: Riot los reasigna (keke#6seve tiene
+ * partidas con dos). Las lecturas aceptan uno o varios y suman como si fueran
+ * el mismo: si no, el perfil muestra un subconjunto y el progreso nunca cierra.
+ */
+type PuuidArg = string | readonly string[];
+
+function puuidList(value: PuuidArg): string[] {
+  return typeof value === "string" ? [value] : [...value];
+}
+
+const inClause = (count: number): string =>
+  Array.from({ length: count }, () => "?").join(",");
+
+/**
+ * Todos los puuids que son la misma persona: los que comparten Riot ID en
+ * `puuid_sync`. Barato (1 query) y solo cuando hay nombre guardado.
+ */
+export async function getAliasPuuids(puuid: string): Promise<string[]> {
+  const state = await getSyncState(puuid);
+  if (!state?.gameName || !state.tagLine) return [puuid];
+
+  const result = await db().execute({
+    sql: `SELECT puuid FROM puuid_sync
+           WHERE game_name = ? COLLATE NOCASE AND tag_line = ? COLLATE NOCASE`,
+    args: [state.gameName, state.tagLine],
+  });
+
+  return [...new Set([puuid, ...result.rows.map((row) => str(row.puuid))])];
+}
+
 const num = (value: unknown): number => {
   const n = Number(value ?? 0);
   return Number.isFinite(n) ? n : 0;
@@ -150,33 +181,49 @@ export async function forgetMatchId(
 
 /** IDs pendientes de detalle, más nuevos primero. */
 export async function pendingMatchIds(
-  puuid: string,
+  puuid: PuuidArg,
   limit: number,
 ): Promise<string[]> {
   if (limit <= 0) return [];
   await ensureSchema();
+  const ids = puuidList(puuid);
+  const inSql = inClause(ids.length);
   const result = await db().execute({
-    sql: `SELECT pm.match_id
+    sql: `SELECT DISTINCT pm.match_id
             FROM puuid_matches pm
-            LEFT JOIN matches m ON m.match_id = pm.match_id
-           WHERE pm.puuid = ? AND m.match_id IS NULL
+           WHERE pm.puuid IN (${inSql})
+             AND NOT EXISTS (
+                   SELECT 1
+                     FROM matches m
+                     JOIN match_participants p
+                       ON p.match_id = m.match_id AND p.puuid IN (${inSql})
+                    WHERE m.match_id = pm.match_id
+                 )
            ORDER BY pm.match_id DESC
            LIMIT ?`,
-    args: [puuid, limit],
+    // Un link cuenta como "con detalle" solo si el jugador aparece de verdad en
+    // la partida guardada; si no, se vuelve a pedir (y si Riot tampoco lo trae,
+    // el ingest descarta el link para no trabar la cola).
+    args: [...ids, ...ids, limit],
   });
   return result.rows.map((row) => str(row.match_id));
 }
 
-export async function getProgress(puuid: string): Promise<Progress> {
+export async function getProgress(puuid: PuuidArg): Promise<Progress> {
   await ensureSchema();
+  const ids = puuidList(puuid);
+  const inSql = inClause(ids.length);
   const result = await db().execute({
     sql: `SELECT
-            (SELECT COUNT(*) FROM puuid_matches WHERE puuid = ?) AS known,
-            (SELECT COUNT(*)
+            (SELECT COUNT(DISTINCT match_id) FROM puuid_matches
+              WHERE puuid IN (${inSql})) AS known,
+            (SELECT COUNT(DISTINCT pm.match_id)
                FROM puuid_matches pm
                JOIN matches m ON m.match_id = pm.match_id
-              WHERE pm.puuid = ?) AS detailed`,
-    args: [puuid, puuid],
+               JOIN match_participants p
+                 ON p.match_id = pm.match_id AND p.puuid IN (${inSql})
+              WHERE pm.puuid IN (${inSql})) AS detailed`,
+    args: [...ids, ...ids, ...ids],
   });
   const row = result.rows[0];
   return { known: num(row?.known), detailed: num(row?.detailed) };
@@ -233,29 +280,35 @@ export function rowToMatch(row: PlayerMatchRow): Match {
  * un viaje de red). Devuelve también cuántas partidas conocidas hay en total.
  */
 export async function getPlayerMatchesWithProgress(
-  puuid: string,
+  puuid: PuuidArg,
   limit = 1_000,
 ): Promise<{ matches: Match[]; progress: Progress; queued: boolean }> {
   await ensureSchema();
+  const ids = puuidList(puuid);
+  const inSql = inClause(ids.length);
   const result = await db().execute({
-    sql: `SELECT pm.puuid, m.match_id, m.queue_id, m.game_mode, m.game_version,
+    // El participante se busca por CUALQUIERA de los puuids del jugador y se
+    // agrupa por partida: la misma partida puede estar linkeada con dos puuids
+    // suyos (Riot los reasigna) y se mostraría dos veces.
+    sql: `SELECT p.puuid, m.match_id, m.queue_id, m.game_mode, m.game_version,
                  m.game_start_ts, m.game_duration_s,
                  p.champion_id, p.champion_name, p.team_id, p.team_position,
                  p.win, p.kills, p.deaths, p.assists,
                  p.cs, p.gold_earned, p.vision_score, p.damage,
                  p.profile_icon, p.summoner_level,
-                 (SELECT COUNT(*) FROM puuid_matches pm2
-                   WHERE pm2.puuid = pm.puuid) AS known_total,
+                 (SELECT COUNT(DISTINCT pm2.match_id) FROM puuid_matches pm2
+                   WHERE pm2.puuid IN (${inSql})) AS known_total,
                  EXISTS (SELECT 1 FROM puuid_sync ps
-                          WHERE ps.puuid = pm.puuid) AS queued
+                          WHERE ps.puuid IN (${inSql})) AS queued
             FROM puuid_matches pm
             JOIN matches m ON m.match_id = pm.match_id
             JOIN match_participants p
-              ON p.match_id = pm.match_id AND p.puuid = pm.puuid
-           WHERE pm.puuid = ?
+              ON p.match_id = pm.match_id AND p.puuid IN (${inSql})
+           WHERE pm.puuid IN (${inSql})
+           GROUP BY pm.match_id
            ORDER BY m.game_start_ts DESC
            LIMIT ?`,
-    args: [puuid, limit],
+    args: [...ids, ...ids, ...ids, ...ids, limit],
   });
 
   const matches: Match[] = [];
@@ -350,6 +403,9 @@ export async function getMatchById(matchId: string): Promise<Match | null> {
 export type SyncState = {
   puuid: string;
   platformId: string;
+  /** Riot ID con el que se guardó este puuid (sirve para unir alias). */
+  gameName: string | null;
+  tagLine: string | null;
   lastSyncedAt: number | null;
   idsCursor: number;
   backfillState: "none" | "running" | "done" | "partial";
@@ -369,6 +425,8 @@ export async function getSyncState(
   return {
     puuid: str(row.puuid),
     platformId: str(row.platform_id),
+    gameName: row.game_name == null ? null : str(row.game_name),
+    tagLine: row.tag_line == null ? null : str(row.tag_line),
     lastSyncedAt: row.last_synced_at == null ? null : num(row.last_synced_at),
     idsCursor: num(row.ids_cursor),
     backfillState: (str(row.backfill_state) || "none") as SyncState["backfillState"],

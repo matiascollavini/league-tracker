@@ -6,6 +6,7 @@ import type { Account, Match } from "@/lib/riot/types";
 import {
   filterKnownMatchIds,
   forgetMatchId,
+  getAliasPuuids,
   getProgress,
   getSyncState,
   pendingMatchIds,
@@ -145,7 +146,7 @@ export async function syncPuuid(
     const state = await getSyncState(puuid);
     return {
       puuid,
-      progress: await getProgress(puuid),
+      progress: await getProgress(await getAliasPuuids(puuid)),
       requests: 0,
       done: false,
       skipped: true,
@@ -162,6 +163,8 @@ export async function syncPuuid(
   let phase: IngestPhase = "ids";
   let reachedEnd = false;
   let unavailable = 0;
+  // Se completa adentro del try; el catch (deadline) también necesita el progreso.
+  let puuids: string[] = [puuid];
 
   try {
     await touchSyncState(puuid, platform, {
@@ -169,6 +172,10 @@ export async function syncPuuid(
       tagLine: options.tagLine,
       backfillState: "running",
     });
+
+    // Todos los puuids de la misma persona (Riot los reasigna): el progreso y
+    // la cola de detalles se calculan sobre el conjunto, no sobre uno solo.
+    puuids = await getAliasPuuids(puuid);
 
     let cursor = previous?.idsCursor ?? 0;
 
@@ -218,7 +225,7 @@ export async function syncPuuid(
       if (deadline !== undefined && Date.now() >= deadline) break;
       phase = "details";
 
-      const pending = await pendingMatchIds(puuid, Math.min(remaining, 20));
+      const pending = await pendingMatchIds(puuids, Math.min(remaining, 20));
       if (pending.length === 0) break;
 
       const known = new Set(await filterKnownMatchIds(pending));
@@ -248,6 +255,17 @@ export async function syncPuuid(
           throw error;
         }
 
+        // ¿La partida lo lista de verdad? Si Riot nos devolvió el ID pero el
+        // payload no lo incluye (puuid viejo, partida de otra persona), el link
+        // no sirve: se descarta para que el progreso cierre.
+        if (!match.info.participants.some((p) => puuids.includes(p.puuid))) {
+          await forgetMatchId(puuid, matchId);
+          unavailable += 1;
+          touched += 1;
+          options.onProgress?.(`descartada ${matchId} (Riot no lo lista)`);
+          continue;
+        }
+
         remaining -= 1;
         await saveMatch(match, platform);
         touched += 1;
@@ -260,7 +278,7 @@ export async function syncPuuid(
 
     await touchSyncState(puuid, platform, { lastSyncedAt: Date.now() });
 
-    const progress = await getProgress(puuid);
+    const progress = await getProgress(puuids);
     const complete = (reachedEnd || done) && progress.detailed >= progress.known;
 
     return {
@@ -278,7 +296,7 @@ export async function syncPuuid(
     if (!(error instanceof RiotDeadlineError)) throw error;
 
     await touchSyncState(puuid, platform, { lastSyncedAt: Date.now() });
-    const progress = await getProgress(puuid);
+    const progress = await getProgress(puuids);
     options.onProgress?.(
       "se acabó el tiempo: lo que falta sigue en la próxima vuelta",
     );

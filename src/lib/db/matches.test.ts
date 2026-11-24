@@ -8,6 +8,7 @@ process.env.DATABASE_URL = `file:${TEST_DB}`;
 import { closeDb, ensureSchema } from "./client";
 import {
   filterKnownMatchIds,
+  getAliasPuuids,
   getPlayerMatchesWithProgress,
   touchSyncState,
   findSyncForPuuid,
@@ -150,6 +151,55 @@ describe("progreso del historial", () => {
     const pending = await pendingMatchIds(PUUID, 10);
     expect(pending.sort()).toEqual(["a", "c"]);
     expect(await pendingMatchIds(PUUID, 0)).toEqual([]);
+  });
+
+  it("junta los datos de los dos puuids del mismo jugador (Riot los reasigna)", async () => {
+    const VIEJO = "v".repeat(78);
+    const NUEVO = "n".repeat(78);
+    const OTRO = "o".repeat(78);
+    // Nombre compartido en puuid_sync: son la misma persona.
+    await touchSyncState(VIEJO, "la2", { gameName: "keke", tagLine: "6seve" });
+    await touchSyncState(NUEVO, "la2", { gameName: "keke", tagLine: "6seve" });
+
+    // m1: partida guardada con el puuid VIEJO.
+    const conViejo: Match = {
+      ...makeMatch({ matchId: "m1" }),
+      info: {
+        ...makeMatch({ matchId: "m1" }).info,
+        participants: [
+          { puuid: VIEJO, championId: 103, championName: "Ahri", win: true },
+        ],
+      },
+    };
+    await saveMatch(conViejo, "la2");
+
+    // m2: Riot la devuelve para el puuid VIEJO, pero el payload lista al jugador
+    // con el puuid NUEVO (esto es literalmente lo que pasa con keke).
+    const conNuevo: Match = {
+      ...makeMatch({ matchId: "m2" }),
+      info: {
+        ...makeMatch({ matchId: "m2" }).info,
+        participants: [
+          { puuid: NUEVO, championId: 103, championName: "Ahri", win: true },
+          { puuid: OTRO, championId: 222, championName: "Jinx", win: false },
+        ],
+      },
+    };
+    await saveMatch(conNuevo, "la2");
+    await registerMatchIds(VIEJO, ["m2"]);
+    await registerMatchIds(NUEVO, ["m2"]);
+
+    // Visto por separado, el puuid viejo "pierde" m2: de ahí el 714 de 756.
+    expect(await getProgress(VIEJO)).toEqual({ known: 2, detailed: 1 });
+
+    // Juntos, el progreso cierra y la partida se ve una sola vez.
+    const both = await getPlayerMatchesWithProgress([VIEJO, NUEVO]);
+    expect(both.progress).toEqual({ known: 2, detailed: 2 });
+    expect(both.matches.map((m) => m.metadata.matchId).sort()).toEqual(["m1", "m2"]);
+    expect(await getAliasPuuids(VIEJO)).toEqual(
+      expect.arrayContaining([VIEJO, NUEVO]),
+    );
+    expect(await pendingMatchIds([VIEJO, NUEVO], 10)).toEqual([]);
   });
 
   it("avisa si el jugador está en la cola (participante de partidas ajenas = no)", async () => {
