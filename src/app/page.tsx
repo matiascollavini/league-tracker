@@ -1,4 +1,5 @@
-import { Swords, Trophy, UserSearch } from "lucide-react";
+import Link from "next/link";
+import { ArrowLeftRight, Swords, Trophy, UserSearch } from "lucide-react";
 import { SearchForm } from "@/components/search-form";
 import { Card } from "@/components/ui/card";
 import { isMockMode } from "@/lib/riot/http";
@@ -28,6 +29,16 @@ export default function HomePage() {
         <div className="mx-auto max-w-2xl">
           <SearchForm defaultPlatform={platformFromEnv()} />
         </div>
+
+        <p className="pt-1">
+          <Link
+            href="/comparar"
+            className="inline-flex items-center gap-1.5 text-xs text-muted underline decoration-line hover:text-gold-300"
+          >
+            <ArrowLeftRight className="size-3" aria-hidden />
+            O compará dos jugadores
+          </Link>
+        </p>
 
         {demo ? (
           <p className="mx-auto max-w-2xl rounded-lg border border-gold-600/40 bg-gold-600/10 px-4 py-3 text-xs leading-relaxed text-gold-300">

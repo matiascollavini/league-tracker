@@ -54,9 +54,6 @@ const SCHEMA = [
      match_id TEXT NOT NULL,
      PRIMARY KEY (puuid, match_id)
    )`,
-  // Migraciones para bases creadas con un esquema anterior.
-  `ALTER TABLE match_participants ADD COLUMN riot_id TEXT`,
-  `ALTER TABLE puuid_sync ADD COLUMN locked_by TEXT`,
   `CREATE TABLE IF NOT EXISTS puuid_sync (
      puuid           TEXT PRIMARY KEY,
      platform_id     TEXT NOT NULL,
@@ -70,6 +67,15 @@ const SCHEMA = [
      locked_until    INTEGER,
      locked_by       TEXT
    )`,
+];
+
+/**
+ * Migraciones para bases creadas con un esquema anterior. Corren DESPUÉS de los
+ * CREATE TABLE y se ignoran si la columna ya existe.
+ */
+const MIGRATIONS = [
+  `ALTER TABLE match_participants ADD COLUMN riot_id TEXT`,
+  `ALTER TABLE puuid_sync ADD COLUMN locked_by TEXT`,
 ];
 
 function databaseUrl(): string {
@@ -97,12 +103,15 @@ export async function ensureSchema(): Promise<void> {
   ready ??= (async () => {
     const c = db();
     for (const statement of SCHEMA) {
+      await c.execute(statement);
+    }
+    for (const statement of MIGRATIONS) {
       try {
         await c.execute(statement);
       } catch (error) {
-        // ALTER TABLE repetido en una base que ya tiene la columna: se ignora.
+        // La columna ya existe: es lo esperado en cada arranque.
         const message = error instanceof Error ? error.message : "";
-        if (!/duplicate column|already exists/i.test(message)) throw error;
+        if (!/duplicate column/i.test(message)) throw error;
       }
     }
   })();

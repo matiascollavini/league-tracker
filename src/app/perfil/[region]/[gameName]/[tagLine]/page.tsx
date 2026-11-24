@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AlertTriangle, Info } from "lucide-react";
+import { AlertTriangle, ArrowLeftRight, Info } from "lucide-react";
 import { ChampionPool } from "@/components/champion-pool";
 import { ChampionTable } from "@/components/champion-table";
 import { MatchList } from "@/components/match-list";
@@ -173,6 +173,14 @@ export default async function ProfilePage({
           </div>
 
           <WinrateBar value={summary.winrate} className="mt-3" />
+
+          <Link
+            href={`/comparar?a=${platform}/${encodeURIComponent(account.gameName ?? gameName)}/${encodeURIComponent(account.tagLine ?? tagLine)}`}
+            className="mt-3 inline-flex items-center gap-1.5 text-[11px] text-muted hover:text-gold-300"
+          >
+            <ArrowLeftRight className="size-3" aria-hidden />
+            Comparar con otro jugador
+          </Link>
         </div>
       </aside>
 
