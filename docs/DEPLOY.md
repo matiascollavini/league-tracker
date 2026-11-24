@@ -61,6 +61,12 @@ Debe imprimir las 4 tablas y `✔ esquema listo`.
 | `RIOT_DEFAULT_PLATFORM` | `la2` (o `la1`, `na1`, ...) |
 | `DD_LOCALE` | `es_ES` |
 | `RIOT_ANALYZE_COUNT` | `24` |
+| `RIOT_ONDEMAND_BUDGET` | `25` con dev key · `300`–`400` con production key |
+
+**Qué significa `RIOT_ONDEMAND_BUDGET`:** cuántos requests puede gastar la
+primera búsqueda de una cuenta nueva. Con `25`, el usuario ve las últimas ~24
+partidas al instante y el resto llega por el worker. Con `400` y production key,
+la cuenta queda casi completa en esa misma visita (~15 s).
 
 5. **Deploy**. La primera búsqueda va a sincronizar ~24 partidas en el momento
    y el resto queda en cola para el worker.

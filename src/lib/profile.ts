@@ -29,8 +29,17 @@ export type ProfileData = {
   partial: boolean;
 };
 
-/** Requests que se permiten gastar durante la visita de un usuario. */
-const ON_DEMAND_BUDGET = 25;
+/**
+ * Requests que se permiten gastar durante la visita de un usuario.
+ * Con dev key dejalo bajo (25): a ~1 rps, 25 requests son ~30 s.
+ * Con production key se puede subir a 300-400 y el perfil queda completo en la
+ * primera búsqueda (~10-20 s), sin esperar al worker.
+ */
+function onDemandBudget(): number {
+  const raw = Number(process.env.RIOT_ONDEMAND_BUDGET ?? 25);
+  if (!Number.isFinite(raw)) return 25;
+  return Math.min(600, Math.max(0, Math.floor(raw)));
+}
 /** Si hay menos partidas que esto en la base, vale la pena sincronizar. */
 const MIN_TO_ANALYZE = 20;
 
@@ -64,8 +73,8 @@ export async function loadProfile(
   if (progress.detailed < MIN_TO_ANALYZE) {
     try {
       const result = await syncAccount(platform, gameName, tagLine, {
-        budget: ON_DEMAND_BUDGET,
-        maxPages: 1,
+        budget: onDemandBudget(),
+        maxPages: 4,
       });
       progress = result.progress;
     } catch (error) {
