@@ -5,6 +5,7 @@ import { AlertTriangle, ArrowLeftRight, CheckCircle2, Info } from "lucide-react"
 import { ChampionPool } from "@/components/champion-pool";
 import { ChampionTable } from "@/components/champion-table";
 import { MatchList } from "@/components/match-list";
+import { Pagination } from "@/components/pagination";
 import { ProfileCard } from "@/components/profile-header";
 import { RoleStrip } from "@/components/role-strip";
 import { StatCard } from "@/components/stat-card";
@@ -35,6 +36,9 @@ import { cn } from "@/lib/utils";
 
 type RouteParams = { region: string; gameName: string; tagLine: string };
 type SearchParams = Record<string, string | string[] | undefined>;
+
+/** Partidas por página de la lista de abajo. */
+const PAGE_SIZE = 20;
 
 export const revalidate = 120;
 // En Vercel el render puede sincronizar un poco contra Riot.
@@ -80,6 +84,9 @@ export default async function ProfilePage({
     : "all";
   const championParam = first(sp.champion);
   const showAllChampions = first(sp.all) === "1";
+  const pageParam = Number(first(sp.page) ?? "1");
+  const requestedPage =
+    Number.isFinite(pageParam) && pageParam >= 1 ? Math.floor(pageParam) : 1;
 
   let profile;
   try {
@@ -127,11 +134,15 @@ export default async function ProfilePage({
     ? summary.champions.find((c) => c.championName === championParam)
     : undefined;
 
-  const visible = (
-    selected
-      ? rows.filter((row) => row.championName === selected.championName)
-      : rows
-  ).slice(0, 20);
+  const filtered = selected
+    ? rows.filter((row) => row.championName === selected.championName)
+    : rows;
+  // Si la página pedida ya no existe (cambió el filtro o se achicó el historial)
+  // mostramos la última en vez de una lista vacía.
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const page = Math.min(requestedPage, totalPages);
+  const pageStart = (page - 1) * PAGE_SIZE;
+  const visible = filtered.slice(pageStart, pageStart + PAGE_SIZE);
 
   const top = summary.champions[0];
   const recent = rows.slice(0, 20);
@@ -144,12 +155,21 @@ export default async function ProfilePage({
   const baseSuffix = queueLabelText + (demo ? ", cuenta de demostración" : "");
 
   const hrefFor = (
-    options: { champion?: string; queue?: QueueFilterId; all?: boolean } = {},
+    options: {
+      /** `null` quita el filtro de campeón; `undefined` lo mantiene. */
+      champion?: string | null;
+      queue?: QueueFilterId;
+      all?: boolean;
+      page?: number;
+    } = {},
   ) =>
     profileHref(platform, gameName, tagLine, {
       queue: options.queue ?? queueFilter,
-      champion: options.champion ?? championParam,
+      champion:
+        options.champion === null ? undefined : (options.champion ?? championParam),
       all: options.all ?? showAllChampions,
+      // Los cambios de filtro no arrastran la página: vuelven al principio.
+      page: options.page,
     });
 
   return (
@@ -323,7 +343,9 @@ export default async function ProfilePage({
             names={names}
             version={catalog.version}
             selected={selected?.championName}
-            hrefFor={(championName) => hrefFor({ champion: championName })}
+            hrefFor={(championName) =>
+              hrefFor({ champion: championName ?? null })
+            }
           />
         </section>
 
@@ -372,7 +394,7 @@ export default async function ProfilePage({
                 KDA {selected.kda.toFixed(2)}
               </span>
               <Link
-                href={hrefFor({})}
+                href={hrefFor({ champion: null })}
                 className="ml-auto text-[11px] text-muted underline decoration-line hover:text-gold-300"
               >
                 quitar filtro
@@ -397,7 +419,9 @@ export default async function ProfilePage({
               names={names}
               selected={selected?.championName}
               totalMatches={summary.matches}
-              hrefFor={(championName) => hrefFor({ champion: championName })}
+              hrefFor={(championName) =>
+                hrefFor({ champion: championName ?? null })
+              }
               showAll={showAllChampions}
               allHref={hrefFor({ all: true })}
               lessHref={hrefFor({ all: false })}
@@ -415,8 +439,11 @@ export default async function ProfilePage({
             </h2>
             <span className="text-[11px] text-muted">
               {selected
-                ? `${visible.length} con ${names[selected.championName] ?? selected.championName}`
-                : `${visible.length} de ${summary.matches} analizadas`}
+                ? `${filtered.length} con ${names[selected.championName] ?? selected.championName}`
+                : `${filtered.length} de ${summary.matches} analizadas`}
+              {totalPages > 1
+                ? ` · mostrando ${pageStart + 1}–${pageStart + visible.length}`
+                : ""}
             </span>
           </div>
           <MatchList
@@ -425,6 +452,14 @@ export default async function ProfilePage({
             names={names}
             puuid={puuid}
           />
+          {totalPages > 1 ? (
+            <Pagination
+              page={page}
+              totalPages={totalPages}
+              hrefFor={(target) => hrefFor({ page: target })}
+              className="border-t border-line px-4 py-3"
+            />
+          ) : null}
         </section>
 
         <div className="rounded-xl border border-line bg-ink-900/60 p-4">
