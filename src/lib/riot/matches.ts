@@ -1,4 +1,4 @@
-import type { Platform } from "./config";
+import { clusterFor, type Platform } from "./config";
 import { isMockMode, mapLimit, riotFetch, RiotApiError } from "./http";
 import { mockMatches } from "./fixtures";
 import { MatchIdsSchema, MatchSchema, type Match } from "./types";
@@ -25,7 +25,8 @@ export async function getRecentMatches(
 
   const ids = await riotFetch(
     `/lol/match/v5/matches/by-puuid/${puuid}/ids?start=0&count=${count}`,
-    { platform, revalidate: 120, schema: MatchIdsSchema },
+    // MATCH-V5 vive en el host REGIONAL.
+    { cluster: clusterFor(platform), revalidate: 120, schema: MatchIdsSchema },
   ).catch((error: unknown) => {
     // 404 = el jugador no tiene partidas. No es un error de la página.
     if (error instanceof RiotApiError && error.status === 404) return [];
@@ -35,7 +36,7 @@ export async function getRecentMatches(
   const details = await mapLimit(ids, 4, async (matchId) => {
     try {
       return await riotFetch(`/lol/match/v5/matches/${matchId}`, {
-        platform,
+        cluster: clusterFor(platform),
         // Una partida terminada es inmutable: cache larga.
         revalidate: 2_592_000,
         schema: MatchSchema,
@@ -62,7 +63,7 @@ export async function getMatch(
     return found;
   }
   return riotFetch(`/lol/match/v5/matches/${matchId}`, {
-    platform,
+    cluster: clusterFor(platform),
     revalidate: 2_592_000,
     schema: MatchSchema,
   });

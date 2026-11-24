@@ -95,7 +95,7 @@ _(Detalle y justificación en `docs/DECISIONES.md`.)_
 | Caché caliente | Upstash Redis free (puuid/matches/locks) | decidido |
 | Persistencia | Neon Postgres free (`matches`, `puuid_matches`, `champion_stats`, `puuid_sync`) | decidido |
 | Ingest | Worker separado (GitHub Actions cron ~10 min o Node en Fly) | pendiente (fase 2) |
-| Estado del código | v1 funcionando en modo demo; datos reales al cargar la key | implementado |
+| Estado del código | v1 funcionando con **datos reales** (dev key en `.env.local`) | implementado |
 
 ### Regla de producto derivada del ADR-002
 El historial de Riot está topado en **~1.000 partidas por jugador** (2 años de
@@ -126,9 +126,11 @@ scripts/        verify-riot.mjs (verificación contra la API real)
 - Código: **v1 implementada** — landing + buscador, perfil con últimas partidas,
   agregado por campeón, filtros por campeón y por cola, páginas legales.
   Corre en modo demo sin key (`npm run dev`).
-- Bloqueante: falta la **dev key** de Riot en `.env.local` para probar contra la
-  API real y correr `npm run verify:riot` (cierra los `[UNVERIFIED]` de
-  `docs/API-LOL.txt` §18).
+- Datos reales: **verificado** el 2026-11-24 (`npm run verify:riot`). La dev key
+  se vence cada 24 h: si aparece 401/403, regenerarla en el portal.
+- Regla dura: `account-v1` y `match-v5` van al host **regional**; `summoner`,
+  `league` y `mastery` al host de **plataforma**. El tipo `RiotTarget` lo hace
+  imposible de confundir.
 - Siguiente: Postgres + Redis + worker de backfill (fase 2).
 
 ---

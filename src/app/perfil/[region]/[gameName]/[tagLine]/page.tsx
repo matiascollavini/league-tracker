@@ -25,6 +25,7 @@ import { getChampionCatalog } from "@/lib/ddragon/champions";
 import { isMockMode, MissingApiKeyError, RiotApiError } from "@/lib/riot/http";
 import { analyzeCount, getRecentMatches } from "@/lib/riot/matches";
 import { profileHref } from "@/lib/links";
+import { decodeParam } from "@/lib/params";
 import { cn } from "@/lib/utils";
 
 type RouteParams = { region: string; gameName: string; tagLine: string };
@@ -42,9 +43,11 @@ export async function generateMetadata({
   params: Promise<RouteParams>;
 }): Promise<Metadata> {
   const { gameName, tagLine } = await params;
+  const name = decodeParam(gameName);
+  const tag = decodeParam(tagLine);
   return {
-    title: `${gameName}#${tagLine}`,
-    description: `Partidas, campeón más jugado y winrate de ${gameName}#${tagLine}.`,
+    title: `${name}#${tag}`,
+    description: `Partidas, campeón más jugado y winrate de ${name}#${tag}.`,
   };
 }
 
@@ -55,9 +58,13 @@ export default async function ProfilePage({
   params: Promise<RouteParams>;
   searchParams: Promise<SearchParams>;
 }) {
-  const { region, gameName, tagLine } = await params;
+  const { region, gameName: rawGameName, tagLine: rawTagLine } = await params;
   if (!isPlatform(region)) notFound();
   const platform: Platform = region;
+
+  // Next 16 entrega los params codificados: decodificamos una vez acá.
+  const gameName = decodeParam(rawGameName);
+  const tagLine = decodeParam(rawTagLine);
 
   const sp = await searchParams;
   const queueParam = first(sp.queue);
@@ -101,6 +108,12 @@ export default async function ProfilePage({
 
   const visible = (selected ? rows.filter((r) => r.championName === selected.championName) : rows).slice(0, 20);
   const top = summary.champions[0];
+
+  const queueLabelText =
+    queueFilter === "all"
+      ? ""
+      : ` en ${QUEUE_FILTERS.find((f) => f.id === queueFilter)?.label ?? "esta cola"}`;
+  const baseSuffix = queueLabelText + (demo ? ", cuenta de demostración" : "");
 
   const hrefFor = (options: { champion?: string; queue?: QueueFilterId } = {}) =>
     profileHref(platform, gameName, tagLine, {
@@ -241,13 +254,9 @@ export default async function ProfilePage({
                 <p>
                   Base del cálculo:{" "}
                   <strong className="text-gold-300">
-                    {summary.matches} partidas
-                  </strong>
-                  {queueFilter !== "all"
-                    ? ` en ${QUEUE_FILTERS.find((f) => f.id === queueFilter)?.label ?? "esta cola"}`
-                    : ""}
-                  {demo ? ", cuenta de demostración" : ""}. Analizamos las
-                  últimas {analyzeCount()} partidas de la cuenta.
+                    {`${summary.matches} partidas${baseSuffix}.`}
+                  </strong>{" "}
+                  Analizamos las últimas {analyzeCount()} partidas de la cuenta.
                 </p>
                 <p>
                   Riot limita el historial recuperable a ~1.000 partidas por

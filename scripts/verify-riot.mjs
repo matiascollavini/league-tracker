@@ -30,12 +30,17 @@ function loadEnv() {
   }
 }
 
+const green = (s) => `\x1b[32m${s}\x1b[0m`;
+const red = (s) => `\x1b[31m${s}\x1b[0m`;
+const cyan = (s) => `\x1b[36m${s}\x1b[0m`;
+const bold = (s) => `\x1b[1m${s}\x1b[0m`;
+
 const ok = (label, detail = "") =>
-  console.log(`  \x1b[32m✔\x1b[0m ${label}${detail ? ` — ${detail}` : ""}`);
+  console.log(`  ${green("✔")} ${label}${detail ? ` — ${detail}` : ""}`);
 const bad = (label, detail = "") =>
-  console.log(`  \x1b[31m✘\x1b[0m ${label}${detail ? ` — ${detail}` : ""}`);
+  console.log(`  ${red("✘")} ${label}${detail ? ` — ${detail}` : ""}`);
 const info = (label, detail = "") =>
-  console.log(`  \x1b[36m·\x1b[0m ${label}${detail ? ` — ${detail}` : ""}`);
+  console.log(`  ${cyan("·")} ${label}${detail ? ` — ${detail}` : ""}`);
 
 async function call(url, key) {
   const res = await fetch(url, { headers: { "X-Riot-Token": key } });
@@ -53,7 +58,11 @@ async function main() {
 
   const key = process.env.RIOT_API_KEY?.trim();
   const riotId = process.argv[2] ?? process.env.RIOT_VERIFY_ID;
-  const platform = (process.argv[3] ?? process.env.RIOT_DEFAULT_PLATFORM ?? "la2").toLowerCase();
+  const platform = (
+    process.argv[3] ??
+    process.env.RIOT_DEFAULT_PLATFORM ??
+    "la2"
+  ).toLowerCase();
 
   if (!key) {
     console.error(
@@ -76,7 +85,9 @@ async function main() {
   const [gameName, tagLine] = riotId.split("#");
   const enc = encodeURIComponent;
 
-  console.log(`\nVerificando Riot API — ${gameName}#${tagLine} en ${platform} (${cluster})\n`);
+  console.log(
+    `\nVerificando Riot API — ${gameName}#${tagLine} en ${platform} (${cluster})\n`,
+  );
 
   // 1) ACCOUNT-V1
   const accountUrl = `https://${cluster}.api.riotgames.com/riot/account/v1/accounts/by-riot-id/${enc(gameName)}/${enc(tagLine)}`;
@@ -106,7 +117,8 @@ async function main() {
   const league = await call(leagueUrl, key);
   if (league.res.ok) {
     const queues = Array.isArray(league.body)
-      ? league.body.map((e) => `${e.queueType}:${e.tier} ${e.rank}`).join(", ") || "sin rank"
+      ? league.body.map((e) => `${e.queueType}:${e.tier} ${e.rank}`).join(", ") ||
+        "sin rank"
       : "respuesta inesperada";
     ok("league-v4 entries/by-puuid", queues);
   } else {
@@ -114,7 +126,7 @@ async function main() {
   }
 
   // 4) CHAMPION-MASTERY-V4
-  const masteryUrl = `https://${platform}.api.riotgames.com/lol/champion-mastery/v4/champion-masteries/by-puuid/${puucidSafe(puuid)}/top?count=3`;
+  const masteryUrl = `https://${platform}.api.riotgames.com/lol/champion-mastery/v4/champion-masteries/by-puuid/${enc(puuid)}/top?count=3`;
   const mastery = await call(masteryUrl, key);
   if (mastery.res.ok) {
     const top = (mastery.body ?? [])
@@ -125,7 +137,7 @@ async function main() {
     bad("champion-mastery-v4 by-puuid", String(mastery.res.status));
   }
 
-  // 5) MATCH-V5: validación de count (101 debe dar 400)
+  // 5) MATCH-V5: validación de count
   const idsBase = `https://${cluster}.api.riotgames.com/lol/match/v5/matches/by-puuid/${puuid}/ids`;
   const tooMany = await call(`${idsBase}?start=0&count=101`, key);
   if (tooMany.res.status === 400) {
@@ -141,26 +153,40 @@ async function main() {
     bad("match-v5 ids count=0", `dio ${zero.res.status}`);
   }
 
-  // 6) Top de historial: ¿cuántas partidas devuelve la ventana real?
-  const page900 = await call(`${idsBase}?start=900&count=100`, key);
-  const page1200 = await call(`${idsBase}?start=1200&count=100`, key);
-  const at900 = Array.isArray(page900.body) ? page900.body.length : 0;
-  const at1200 = Array.isArray(page1200.body) ? page1200.body.length : 0;
-  info("historial en start=900", `${at900} ids (status ${page900.res.status})`);
-  info("historial en start=1200", `${at1200} ids (status ${page1200.res.status})`);
+  // 6) Ventana real de historial: paginamos hasta que venga una página vacía.
+  let total = 0;
+  let pages = 0;
+  for (let start = 0; start <= 1000; start += 100) {
+    const page = await call(`${idsBase}?start=${start}&count=100`, key);
+    if (!page.res.ok) {
+      info(`página start=${start}`, `status ${page.res.status}`);
+      break;
+    }
+    const count = Array.isArray(page.body) ? page.body.length : 0;
+    pages += 1;
+    total += count;
+    if (count < 100) break;
+  }
 
-  // Ventana estimada: primera página vacía a partir de 900.
-  let window = 900 + at900;
-  if (at1200 > 0) window = 1200 + at1200;
-  console.log(
-    `\n\x1b[1mVentana de historial observada: ~${window} partidas.\x1b[0m` +
-      "\nSi ronda las 1.000, queda confirmado empíricamente el tope de Riot.\n" +
-      "\nAnotá en docs/API-LOL.txt §17 los valores de x-app-rate-limit y esta ventana.\n",
-  );
-}
+  info("historial observable", `~${total} partidas en ${pages} página(s)`);
+  if (total >= 900) {
+    ok("tope de ~1.000 partidas", "consistente con la ventana observable");
+  } else {
+    info(
+      "nota",
+      "esta cuenta tiene menos historial que el tope; para probar el límite hace falta una cuenta muy activa",
+    );
+  }
 
-function puucidSafe(puuid) {
-  return encodeURIComponent(puuid);
+  const summary = [
+    "",
+    bold("Resumen:"),
+    `  key válida · x-app-rate-limit=${appLimit ?? "?"} · x-method-rate-limit=${methodLimit ?? "?"} · historial ~${total}`,
+    "",
+    "Anotá estos valores en docs/API-LOL.txt §17 (changelog).",
+    "",
+  ].join("\n");
+  console.log(summary);
 }
 
 main().catch((error) => {

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { Platform } from "./config";
+import { clusterFor, type Platform } from "./config";
 import { isMockMode, riotFetch } from "./http";
 import { mockAccount, mockLeague, mockSummoner } from "./fixtures";
 import {
@@ -27,7 +27,8 @@ export async function resolveAccount(
   }
   return riotFetch(
     `/riot/account/v1/accounts/by-riot-id/${enc(gameName)}/${enc(tagLine)}`,
-    { platform, revalidate: 604_800, schema: AccountSchema },
+    // ACCOUNT-V1 vive en el host REGIONAL, no en el de plataforma.
+    { cluster: clusterFor(platform), revalidate: 604_800, schema: AccountSchema },
   );
 }
 

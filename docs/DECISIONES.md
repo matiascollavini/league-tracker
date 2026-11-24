@@ -198,14 +198,23 @@ que ese campo es inválido (pre-11.4). Corregido: se agrupa siempre por
 tope de 1000 partidas, TTLs de caché) y se agregó §18 con los `curl` que faltan
 verificar con una key real. La conclusión de arquitectura no cambió.
 
+**2026-11-24 — verificación con key real.** Aparecieron dos bugs que los tests
+ahora cubren: (a) los params de Next 16 llegan **codificados** y se estaban
+codificando dos veces (404 en cualquier nombre con espacio); (b) `summoner-v4` y
+`league-v4` pegaban al host **regional** en vez del de **plataforma** (mismo
+gotcha que documenta `API-LOL.txt` §5, implementado al revés). El cliente ahora
+usa un union discriminado (`{cluster}` vs `{platform}`) y `riotHost()` tiene
+test propio para que no vuelva a pasar.
+
 ---
 
 ## Pendientes (no decididos todavía)
 
 - [ ] Postgres + Redis + worker de backfill (fase 2): pasar de 24 a ~1.000
       partidas analizadas y acumular historia propia.
-- [ ] Correr `npm run verify:riot -- "Nombre#TAG"` con una dev key y anotar los
-      resultados en el changelog de `docs/API-LOL.txt`.
+- [x] Correr `npm run verify:riot` con una dev key. Hecho el 2026-11-24: límites
+      reales confirmados (100/2min + 20/1s), paginación medida (~519 partidas en
+      una cuenta de prueba) y endpoints de liga/maestría validados.
 
 - [ ] Autenticación de usuarios (¿"login con Riot" RSO? Requiere production key).
 - [ ] Buscador con autocompletado (requiere un endpoint propio de sugerencias por

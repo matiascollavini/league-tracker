@@ -94,8 +94,7 @@ La API de Riot devuelve, como máximo, las últimas ~1000 partidas del jugador
 
   [SECONDARY] Esto NO figura en la documentación oficial: sale de un comentario
   de un dev de Riot en el tracker público (RiotGames/developer-relations,
-  issue #957, 2024-07-15) y de la política de retención de 2019. Ver §18 para la
-  prueba empírica que lo cierra con evidencia propia.
+  issue #957, 2024-07-15) y de la política de retención de 2019.
   Texto exacto del comentario:
 
   "Match data is retained for 2 years, match timelines for 1 year. A player's
@@ -124,9 +123,12 @@ Consecuencias para league-page:
       LEAGUE-V4           -> wins/losses de la season actual, por cola.
       ACCOUNT-V1/SUMMONER -> nada.
       League Client (LCU) -> solo local, no soportado para terceros.
-  - "start" más allá del final devuelve 200 con []. Un puuid sin partidas
-    devuelve 404 "Data not found" [UNVERIFIED: comportamiento observado por la
-    comunidad, no documentado]. Manejo recomendado: tratá 404 y [] igual
+  - [OK 2026-11-24] Paginación medida con una cuenta real: 100 por página y,
+    cuando no quedan más, 200 con []. Esa cuenta tenía ~519 partidas
+    recuperables (6 páginas). No prueba el tope de 1.000, pero confirma cómo se
+    detecta el final: pedir páginas hasta que venga una vacía.
+  - Un puuid sin partidas devuelve 404 "Data not found" [UNVERIFIED: observado
+    por la comunidad, no documentado]. Manejo recomendado: tratá 404 y [] igual
     ("sin partidas").
   - Los detalles de partida se retienen 2 años; los timelines, 1 año.
 
@@ -146,10 +148,11 @@ Docs:   https://developer.riotgames.com/docs/portal
   - SE DESACTIVA CADA 24 HORAS. Hay que regenerarla a mano (botón "Regenerate")
     o vas a ver 403 "Forbidden" de un día para el otro.
   - Solo para prototipos. Prohibido usarla en un producto público.
-  - Rate limit real: ~20 req/1s + 100 req/2min por región (ver 4.1).
-    [UNVERIFIED por doc] El portal no publica el número de las dev keys. Los
-    Términos viejos (2013) dicen 10 requests cada 10s, que es MÁS estricto.
-    Diseñá a 1 rps y logueá X-App-Rate-Limit en la primera llamada real.
+  - Rate limit real [OK verificado 2026-11-24 con una dev key]:
+    X-App-Rate-Limit: 100:120,20:1  ->  100 req/2min y 20 req/1s por región.
+    El portal no publica el número, pero los headers lo confirman. Los Términos
+    viejos (2013) dicen 10 requests cada 10s (más estricto): no aplica en la
+    práctica, pero no conviene abusar con una dev key.
 
 3.2 Personal key (registrada, todavía NO pública)
   - Se pide en https://developer.riotgames.com/app-type con descripción del
@@ -183,6 +186,12 @@ Docs:   https://developer.riotgames.com/docs/portal
   Personal  : 20 requests / 1 segundo  Y  100 requests / 2 minutos
   Producción: 500 requests / 10 segundos  Y  30.000 requests / 10 minutos
   Los límites se aplican POR REGIÓN: el cupo de na1 es independiente del de euw1.
+
+  [OK] Observado en una dev key (2026-11-24):
+    x-app-rate-limit     : 100:120,20:1     (100/2min y 20/1s)
+    x-method-rate-limit  : 2000:60          (summoner-v4: 2.000 por minuto)
+  El límite por método es MUCHO más alto que el de la app: el que te frena
+  siempre va a ser el de la aplicación.
 
 4.2 Tres capas de límite (todas por región)
   - application: por key, todas las methods juntas.
@@ -408,9 +417,11 @@ GET https://{platform}.api.riotgames.com/lol/summoner/v4/summoners/by-puuid/{puu
 7.4 LEAGUE-V4                              (host de PLATAFORMA)
 --------------------------------------------------------------------------------
 GET https://{platform}.api.riotgames.com/lol/league/v4/entries/by-puuid/{puuid}
-  [OK] la referencia oficial de league-v4 lista "entries/by-puuid" (verificado
-  hoy por grep en developer.riotgames.com/api-details/league-v4).
-  [UNVERIFIED] no se pudo probar la respuesta con una key real (ver §18).
+  [OK] verificado con key real (2026-11-24). Respuesta real de un Master:
+    [{"queueType":"RANKED_SOLO_5x5","tier":"MASTER","rank":"I","puuid":"...",
+      "leaguePoints":456,"wins":448,"losses":371,"veteran":false,
+      "inactive":false,"freshBlood":false,"hotStreak":false}]
+  Ojo: viene también el campo puuid. Un jugador sin rank devuelve [].
 
   200 -> [
     {
@@ -433,8 +444,8 @@ GET https://{platform}.api.riotgames.com/lol/league/v4/entries/by-puuid/{puuid}
 7.5 CHAMPION-MASTERY-V4                    (host de PLATAFORMA)
 --------------------------------------------------------------------------------
 GET https://{platform}.api.riotgames.com/lol/champion-mastery/v4/champion-masteries/by-puuid/{puuid}
-  [OK] la referencia oficial de champion-mastery-v4 lista "by-puuid" (verificado
-  hoy por grep). [UNVERIFIED] respuesta con key real (ver §18).
+  [OK] verificado con key real (2026-11-24): devuelve la lista ordenada por
+  championPoints desc, con championId, championLevel, lastPlayTime, etc.
 
   200 -> [ { "championId": 103, "championLevel": 12, "championPoints": 245000,
              "lastPlayTime": 1763800000000, "chestGranted": true,
@@ -924,19 +935,17 @@ Fuentes: https://developer.riotgames.com/policies/general  (rev. 2025-05-29)
 ================================================================================
 16. DATOS NO VERIFICADOS (UNVERIFIED)
 ================================================================================
-  - Rate limit exacto de las dev keys: no está publicado en el portal; se infiere
-    de los headers (20:1,100:120) y de los Términos viejos (10 calls/10s).
-    -> Logear X-App-Rate-Limit en la primera llamada real y ajustar.
+  - Rate limit de las dev keys: [RESUELTO 2026-11-24] headers reales
+    x-app-rate-limit=100:120,20:1 y x-method-rate-limit=2000:60 (summoner-v4).
+    El de producción sigue sin medirse (necesita production key).
   - Rate limits POR METHOD en producción para MATCH-V5: Riot no los publica.
     -> Leer X-Method-Rate-Limit de una respuesta 200.
   - Si un challenge de LOL-CHALLENGES-V1 cuenta partidas totales.
-  - Si league-v4/entries/by-puuid y champion-mastery-v4/by-puuid responden 200
-    con una key real. La RUTA está confirmada en la referencia oficial; la
-    respuesta no se pudo probar sin key (§18).
-  - Si league-v4/entries/by-puuid devuelve [] o 404 para alguien sin rank.
+  - Si league-v4/entries/by-puuid devuelve [] o 404 para alguien sin rank
+    (con rank sí devuelve 200 y el array con la entrada).
   - Si match-v5/ids devuelve 404 o [] para un puuid sin partidas.
   - El tope exacto de páginas de by-puuid/ids (los 1000 son un comentario de
-    DevRel, no doc). Cerrar con §18, curl 4.
+    DevRel, no doc). Hace falta una cuenta con >1.000 partidas en 2 años.
   - Las fechas exactas de los patches 11.4 y 11.20 (irrelevante para el código:
     la regla operativa es gameEndTimestamp).
   - Si un PUUID es compartido entre distintos juegos de Riot.
@@ -960,11 +969,29 @@ Fuentes: https://developer.riotgames.com/policies/general  (rev. 2025-05-29)
                       el conteo de campeones.
                     - §15: URL de retención verificada (200).
                     - Nueva §18 con los curls que faltan cuando haya key.
+  2026-11-24  v1.2  Verificación con una dev key real:
+                    - x-app-rate-limit = 100:120,20:1 (confirma 100/2min + 20/1s).
+                    - x-method-rate-limit = 2000:60 en summoner-v4.
+                    - count=101 -> 400; count=0 -> [].
+                    - Paginación medida: ~519 partidas en 6 páginas en una cuenta
+                      de prueba; la página vacía marca el final del historial.
+                    - league-v4/entries/by-puuid y champion-mastery-v4/by-puuid
+                      devuelven 200 con datos reales (dejan de estar UNVERIFIED).
+                    - BUG de integración detectado y corregido: summoner/league/
+                      mastery deben pegar al host de PLATAFORMA (kr.api...), no al
+                      regional (asia.api...). Con el host equivocado Riot
+                      devuelve 200 sin datos útiles para el flujo.
 
 ================================================================================
-18. VERIFICACIÓN EMPÍRICA PENDIENTE (requiere RIOT_API_KEY)
+18. VERIFICACIÓN EMPÍRICA (ejecutada el 2026-11-24 con dev key)
 ================================================================================
-Ejecutar una vez con una dev key fresca y anotar el resultado en el changelog:
+Script: `npm run verify:riot -- "Nombre#TAG" la2`
+Resultado en una cuenta KR: key válida, x-app-rate-limit=100:120,20:1,
+x-method-rate-limit=2000:60, count=101 -> 400, count=0 -> [], historial ~519
+partidas en 6 páginas. league-v4 y champion-mastery-v4 responden 200.
+
+Queda pendiente para una cuenta con >1.000 partidas en 2 años: medir el tope
+exacto. Los comandos originales, por si hay que repetirlo:
 
   1) Forma de la respuesta de league y mastery (deben ser 200):
      curl -i -H "X-Riot-Token: $KEY" \

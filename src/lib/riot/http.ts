@@ -99,17 +99,30 @@ class SlidingWindowLimiter {
 
 const limiter = new SlidingWindowLimiter(limitWindows());
 
-type RiotRequestOptions<T> = {
-  /** Host regional: cuenta y partidas. */
-  cluster?: Cluster;
-  /** Host de plataforma: summoner, league, mastery. */
-  platform?: Platform;
+/**
+ * Destino del request. Es un union discriminado a propósito: Riot tiene DOS
+ * familias de hosts y confundirlas devuelve 403/404.
+ *   cluster  -> account-v1 y match-v5      (americas | asia | europe | sea)
+ *   platform -> summoner, league, mastery  (la1, la2, na1, kr, ...)
+ * Ver docs/API-LOL.txt §5.
+ */
+export type RiotTarget =
+  | { cluster: Cluster; platform?: never }
+  | { platform: Platform; cluster?: never };
+
+type RiotRequestOptions<T> = RiotTarget & {
   /** Segundos de caché de Next. 0 = no cachear. */
   revalidate?: number;
   tags?: string[];
   /** Esquema de validación de la respuesta. */
   schema: z.ZodType<T>;
 };
+
+/** Host base según el destino. Exportado para poder testearlo. */
+export function riotHost(target: RiotTarget): string {
+  const host = "cluster" in target ? target.cluster : target.platform;
+  return `${host}.api.riotgames.com`;
+}
 
 async function errorMessage(res: Response, path: string): Promise<string> {
   try {
@@ -128,15 +141,13 @@ async function errorMessage(res: Response, path: string): Promise<string> {
 
 export async function riotFetch<T>(
   path: string,
-  { cluster, platform, revalidate = 60, tags, schema }: RiotRequestOptions<T>,
+  options: RiotRequestOptions<T>,
 ): Promise<T> {
   const key = process.env.RIOT_API_KEY?.trim();
   if (!key) throw new MissingApiKeyError();
 
-  const host = cluster ?? (platform ? clusterFor(platform) : undefined);
-  if (!host) throw new Error("riotFetch necesita cluster o platform");
-
-  const url = `https://${host}.api.riotgames.com${path}`;
+  const { revalidate = 60, tags, schema } = options;
+  const url = `https://${riotHost(options)}${path}`;
   let lastError: unknown;
 
   for (let attempt = 0; attempt < 3; attempt++) {
