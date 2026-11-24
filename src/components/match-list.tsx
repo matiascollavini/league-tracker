@@ -31,7 +31,9 @@ export function MatchList({ matches, version, names, puuid }: Props) {
       {matches.map((match) => (
         <li key={match.matchId}>
           <Link
-            href={`/partida/${encodeURIComponent(match.matchId)}?player=${encodeURIComponent(puuid)}`}
+            // El puuid de la fila: sus partidas viejas y nuevas pueden estar
+            // guardadas con puuids distintos.
+            href={`/partida/${encodeURIComponent(match.matchId)}?player=${encodeURIComponent(match.puuid || puuid)}`}
             className={cn(
               "flex items-center gap-3 border-l-2 px-3 py-2.5 transition-colors hover:bg-ink-800/60 sm:px-4",
               match.win

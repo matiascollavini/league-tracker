@@ -30,6 +30,8 @@ export type ProfileData = {
   account: Account;
   /** Puuid efectivo: el resuelto o el que ya tenía datos. */
   puuid: string;
+  /** Todos los puuids del jugador (Riot los reasigna); se agrega sobre el conjunto. */
+  puuids: string[];
   /** Plataforma efectiva: la de la URL o la que tiene los datos guardados. */
   platform: Platform;
   /** true si la plataforma de la URL no era la de la cuenta. */
@@ -92,6 +94,7 @@ export async function loadProfile(
     return {
       account,
       puuid,
+      puuids: [puuid],
       platform: effectivePlatform,
       platformMismatch: effectivePlatform !== platform,
       rankStale: false,
@@ -181,6 +184,7 @@ export async function loadProfile(
   return {
     account,
     puuid,
+    puuids: [...new Set([puuid, ...playerPuuids])],
     platform: effectivePlatform,
     platformMismatch: effectivePlatform !== platform,
     rankStale,

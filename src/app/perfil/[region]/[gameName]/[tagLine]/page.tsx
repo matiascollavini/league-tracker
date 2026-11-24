@@ -92,6 +92,7 @@ export default async function ProfilePage({
   const {
     account,
     puuid,
+    puuids: playerPuuids,
     platform: effectivePlatform,
     platformMismatch,
     rankStale,
@@ -116,8 +117,10 @@ export default async function ProfilePage({
       ? matches
       : matches.filter((match) => queueIds.includes(match.info.queueId));
 
-  const summary = summarize(inQueue, puuid);
-  const rows = toMatchSummaries(inQueue, puuid);
+  // El agregado va sobre TODOS los puuids del jugador: sus partidas viejas y las
+  // nuevas están registradas con puuids distintos (Riot los reasigna).
+  const summary = summarize(inQueue, playerPuuids);
+  const rows = toMatchSummaries(inQueue, playerPuuids);
 
   const selected = championParam
     ? summary.champions.find((c) => c.championName === championParam)
@@ -178,7 +181,7 @@ export default async function ProfilePage({
             {recent.map((row) => (
               <Link
                 key={row.matchId}
-                href={`/partida/${encodeURIComponent(row.matchId)}?player=${encodeURIComponent(puuid)}`}
+                href={`/partida/${encodeURIComponent(row.matchId)}?player=${encodeURIComponent(row.puuid)}`}
                 title={`${names[row.championName] ?? row.championName} · ${row.win ? "Victoria" : "Derrota"}`}
                 className={cn(
                   "size-5 rounded-sm transition-transform hover:scale-110",

@@ -39,6 +39,8 @@ export type PlayerSummary = {
 
 export type MatchSummary = {
   matchId: string;
+  /** Puuid con el que el jugador aparece en ESTA partida (puede ser el viejo). */
+  puuid: string;
   playedAt: number;
   championId: number;
   championName: string;
@@ -64,11 +66,19 @@ export type MatchSummary = {
 
 const ZERO = 0;
 
+/** Un jugador puede tener varios puuids (Riot los reasigna): se busca en todos. */
+export type PuuidArg = string | readonly string[];
+
+function puuidList(value: PuuidArg): readonly string[] {
+  return typeof value === "string" ? [value] : value;
+}
+
 export function participantOf(
   match: Match,
-  puuid: string,
+  puuid: PuuidArg,
 ): Participant | undefined {
-  return match.info.participants.find((p) => p.puuid === puuid);
+  const ids = puuidList(puuid);
+  return match.info.participants.find((p) => ids.includes(p.puuid));
 }
 
 /**
@@ -96,7 +106,7 @@ export function kdaOf(kills: number, deaths: number, assists: number): number {
 
 export function summarize(
   matches: readonly Match[],
-  puuid: string,
+  puuid: PuuidArg,
   options: { excludeCustoms?: boolean } = {},
 ): PlayerSummary {
   const { excludeCustoms = true } = options;
@@ -181,7 +191,7 @@ export function summarize(
 
 export function toMatchSummaries(
   matches: readonly Match[],
-  puuid: string,
+  puuid: PuuidArg,
 ): MatchSummary[] {
   const out: MatchSummary[] = [];
 
@@ -195,6 +205,7 @@ export function toMatchSummaries(
 
     out.push({
       matchId: match.metadata.matchId,
+      puuid: participant.puuid,
       playedAt: match.info.gameStartTimestamp ?? match.info.gameCreation,
       championId: participant.championId,
       championName: participant.championName,

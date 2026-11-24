@@ -210,3 +210,39 @@ describe("rol", () => {
     expect(toMatchSummaries([aram], PUUID)[0]?.role).toBe("");
   });
 });
+
+describe("agregado con varios puuids", () => {
+  it("suma las partidas registradas con el puuid viejo y el nuevo", () => {
+    const viejo = "v".repeat(78);
+    const nuevo = "n".repeat(78);
+    const conViejo: Match = {
+      ...makeMatch({ matchId: "v1", win: true }),
+      info: {
+        ...makeMatch({ matchId: "v1" }).info,
+        participants: [
+          { puuid: viejo, championId: 103, championName: "Ahri", win: true },
+        ],
+      },
+    };
+    const conNuevo: Match = {
+      ...makeMatch({ matchId: "n1", win: false }),
+      info: {
+        ...makeMatch({ matchId: "n1" }).info,
+        participants: [
+          { puuid: nuevo, championId: 103, championName: "Ahri", win: false },
+        ],
+      },
+    };
+
+    expect(summarize([conViejo, conNuevo], viejo).matches).toBe(1);
+
+    const ambos = summarize([conViejo, conNuevo], [viejo, nuevo]);
+    expect(ambos.matches).toBe(2);
+    expect(ambos.wins).toBe(1);
+    expect(ambos.champions[0]?.games).toBe(2);
+
+    // Cada fila sabe con qué puuid aparece en su partida (para el link).
+    const rows = toMatchSummaries([conViejo, conNuevo], [viejo, nuevo]);
+    expect(rows.map((r) => r.puuid).sort()).toEqual([nuevo, viejo]);
+  });
+});
