@@ -93,8 +93,20 @@ export async function getChampionCatalog(): Promise<ChampionCatalog> {
   }
 }
 
+/**
+ * [GOTCHA] Riot manda en `championName` el id "de cliente" y Data Dragon nombra
+ * el archivo distinto en algunos casos. Con un nombre que no existe, DDragon no
+ * devuelve 404 sino **403**, así que el icono sale roto sin error visible.
+ * Verificado el 2026-11-24 contra los 173 campeones de la base: el único que
+ * difiere es FiddleSticks (`Fiddlesticks.png`).
+ */
+const ICON_ALIASES: Record<string, string> = {
+  FiddleSticks: "Fiddlesticks",
+};
+
 export function championIconUrl(version: string, championId: string): string {
-  return `${DD}/cdn/${version}/img/champion/${championId}.png`;
+  const file = ICON_ALIASES[championId] ?? championId;
+  return `${DD}/cdn/${version}/img/champion/${file}.png`;
 }
 
 export function profileIconUrl(version: string, iconId: number): string {
