@@ -13,6 +13,11 @@ type Props = {
   selected?: string;
   totalMatches: number;
   hrefFor: (championName?: string) => string;
+  /** Sin límite de filas. */
+  showAll?: boolean;
+  /** Links para alternar "ver todos". */
+  allHref?: string;
+  lessHref?: string;
 };
 
 export function ChampionTable({
@@ -22,6 +27,9 @@ export function ChampionTable({
   selected,
   totalMatches,
   hrefFor,
+  showAll = false,
+  allHref,
+  lessHref,
 }: Props) {
   if (champions.length === 0) {
     return (
@@ -29,6 +37,16 @@ export function ChampionTable({
         No hay partidas para agregar en esta selección.
       </p>
     );
+  }
+
+  // Como op.gg: top 8 por defecto, salvo que pidan "ver todos".
+  const LIMIT = 8;
+  const list = showAll ? champions : champions.slice(0, LIMIT);
+  if (!showAll && selected) {
+    const selectedStat = champions.find((c) => c.championName === selected);
+    if (selectedStat && !list.some((c) => c.championName === selected)) {
+      list.push(selectedStat);
+    }
   }
 
   return (
@@ -40,7 +58,7 @@ export function ChampionTable({
       </div>
 
       <ul className="space-y-1">
-        {champions.map((champion) => {
+        {list.map((champion) => {
           const isSelected = champion.championName === selected;
           return (
             <li key={champion.championName}>
@@ -97,6 +115,19 @@ export function ChampionTable({
           );
         })}
       </ul>
+
+      {champions.length > LIMIT && allHref && lessHref ? (
+        <div className="mt-3 px-1">
+          <Link
+            href={showAll ? lessHref : allHref}
+            className="text-xs text-gold-400 underline decoration-line hover:text-gold-300"
+          >
+            {showAll
+              ? "Ver menos"
+              : `Ver los ${champions.length} campeones`}
+          </Link>
+        </div>
+      ) : null}
 
       {selected ? (
         <div className="mt-3 px-1">

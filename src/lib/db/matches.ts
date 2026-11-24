@@ -193,6 +193,10 @@ export function rowToMatch(row: PlayerMatchRow): Match {
           kills: num(row.kills),
           deaths: num(row.deaths),
           assists: num(row.assists),
+          goldEarned: num(row.gold_earned),
+          totalMinionsKilled: num(row.cs),
+          visionScore: num(row.vision_score),
+          totalDamageDealtToChampions: num(row.damage),
         },
       ],
     },
@@ -209,7 +213,8 @@ export async function getPlayerMatches(
     sql: `SELECT pm.puuid, m.match_id, m.queue_id, m.game_mode, m.game_version,
                  m.game_start_ts, m.game_duration_s,
                  p.champion_id, p.champion_name, p.team_id, p.team_position,
-                 p.win, p.kills, p.deaths, p.assists
+                 p.win, p.kills, p.deaths, p.assists,
+                 p.cs, p.gold_earned, p.vision_score, p.damage
             FROM puuid_matches pm
             JOIN matches m ON m.match_id = pm.match_id
             JOIN match_participants p

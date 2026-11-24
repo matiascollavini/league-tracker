@@ -71,12 +71,26 @@ export function MatchList({ matches, version, names, puuid }: Props) {
             </p>
           </div>
 
-          <div className="text-right">
+          <div className="hidden w-14 text-right sm:block">
+            <p className="tabular text-sm text-muted">{match.cs}</p>
+            <p className="text-[10px] uppercase tracking-wide text-muted/60">
+              CS
+            </p>
+          </div>
+
+          <div className="hidden w-14 text-right sm:block">
+            <p className="tabular text-sm text-muted">{match.vision}</p>
+            <p className="text-[10px] uppercase tracking-wide text-muted/60">
+              Visión
+            </p>
+          </div>
+
+          <div className="w-20 text-right">
             <p className="tabular text-sm text-gold-300">
               {match.kills}/{match.deaths}/{match.assists}
             </p>
             <p className="tabular text-[11px] text-muted">
-              {match.kda.toFixed(2)} KDA · {formatDuration(match.durationSeconds)}
+              {match.kda.toFixed(2)} · {formatDuration(match.durationSeconds)}
             </p>
           </div>
           </Link>

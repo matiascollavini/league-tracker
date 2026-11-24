@@ -1,8 +1,9 @@
 import Image from "next/image";
-import { BadgeCheck, FlaskConical } from "lucide-react";
+import { FlaskConical } from "lucide-react";
 import { PLATFORM_LABEL, type Platform } from "@/lib/riot/config";
 import { profileIconUrl } from "@/lib/ddragon/champions";
 import type { LeagueEntry } from "@/lib/riot/types";
+import { WinrateBar } from "@/components/winrate-bar";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -29,12 +30,8 @@ const TIER_COLOR: Record<string, string> = {
   CHALLENGER: "text-gold-300",
 };
 
-const QUEUE_NAME: Record<string, string> = {
-  RANKED_SOLO_5x5: "Solo/Duo",
-  RANKED_FLEX_SR: "Flex",
-};
-
-export function ProfileHeader({
+/** Tarjeta de identidad + rango, pensada para la barra lateral (estilo op.gg). */
+export function ProfileCard({
   gameName,
   tagLine,
   platform,
@@ -48,52 +45,57 @@ export function ProfileHeader({
   const flex = league.find((entry) => entry.queueType === "RANKED_FLEX_SR");
 
   return (
-    <header className="flex flex-col gap-4 rounded-xl border border-line bg-ink-900/80 p-4 sm:flex-row sm:items-center sm:gap-5">
-      <div className="relative size-20 shrink-0 overflow-hidden rounded-xl border border-gold-600/50 bg-ink-800">
-        {iconId ? (
-          <Image
-            src={profileIconUrl(version, iconId)}
-            alt={`Icono de invocador de ${gameName}`}
-            width={80}
-            height={80}
-            className="size-full object-cover"
-            priority
-          />
-        ) : (
-          <span className="grid size-full place-items-center text-2xl font-bold text-gold-600">
-            {gameName.slice(0, 1).toUpperCase()}
-          </span>
-        )}
-      </div>
-
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <h1 className="truncate text-2xl font-semibold text-gold-200">
-            {gameName}
-            <span className="text-muted">#{tagLine}</span>
-          </h1>
-          {demo ? (
-            <span className="inline-flex items-center gap-1 rounded-full border border-gold-600/50 bg-gold-600/10 px-2 py-0.5 text-[11px] font-medium text-gold-400">
-              <FlaskConical className="size-3" aria-hidden /> demo
+    <div className="rounded-xl border border-line bg-ink-900/80 p-4">
+      <div className="flex items-center gap-3">
+        <div className="relative shrink-0">
+          <div className="size-16 overflow-hidden rounded-xl border border-gold-600/50 bg-ink-800">
+            {iconId ? (
+              <Image
+                src={profileIconUrl(version, iconId)}
+                alt={`Icono de invocador de ${gameName}`}
+                width={64}
+                height={64}
+                className="size-full object-cover"
+                priority
+              />
+            ) : (
+              <span className="grid size-full place-items-center text-xl font-bold text-gold-600">
+                {gameName.slice(0, 1).toUpperCase()}
+              </span>
+            )}
+          </div>
+          {level ? (
+            <span className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 rounded bg-ink-950 px-1.5 py-0.5 text-[10px] font-medium text-gold-400 ring-1 ring-line">
+              {level}
             </span>
           ) : null}
         </div>
 
-        <p className="mt-1 text-sm text-muted">
-          {PLATFORM_LABEL[platform]}
-          {level ? ` · Nivel ${level}` : ""}
-        </p>
-
-        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
-          <RankBadge label="Solo/Duo" entry={solo} />
-          <RankBadge label="Flex" entry={flex} />
+        <div className="min-w-0">
+          <h1 className="truncate text-lg font-semibold leading-tight text-gold-200">
+            {gameName}
+            <span className="text-muted">#{tagLine}</span>
+          </h1>
+          <p className="mt-0.5 truncate text-[11px] text-muted">
+            {PLATFORM_LABEL[platform]}
+          </p>
+          {demo ? (
+            <span className="mt-1 inline-flex items-center gap-1 rounded-full border border-gold-600/50 bg-gold-600/10 px-2 py-0.5 text-[10px] font-medium text-gold-400">
+              <FlaskConical className="size-3" aria-hidden /> demo
+            </span>
+          ) : null}
         </div>
       </div>
-    </header>
+
+      <div className="mt-4 space-y-2">
+        <RankCard label="Solo/Duo" entry={solo} />
+        <RankCard label="Flex" entry={flex} />
+      </div>
+    </div>
   );
 }
 
-function RankBadge({
+function RankCard({
   label,
   entry,
 }: {
@@ -102,34 +104,47 @@ function RankBadge({
 }) {
   if (!entry?.tier) {
     return (
-      <span className="text-xs text-muted">
-        {label}: <span className="text-muted/70">sin clasificar</span>
-      </span>
+      <div className="rounded-lg border border-line/70 bg-ink-850/70 px-3 py-2">
+        <p className="text-[10px] uppercase tracking-wider text-muted">{label}</p>
+        <p className="mt-0.5 text-xs text-muted/70">Sin clasificar</p>
+      </div>
     );
   }
 
   const wins = entry.wins ?? 0;
   const losses = entry.losses ?? 0;
   const total = wins + losses;
-  const winrate = total > 0 ? Math.round((wins / total) * 100) : 0;
+  const winrate = total > 0 ? wins / total : 0;
 
   return (
-    <span className="inline-flex items-center gap-2">
-      <BadgeCheck className="size-4 text-gold-600" aria-hidden />
-      <span className="text-xs uppercase tracking-wide text-muted">{label}</span>
-      <span
+    <div className="rounded-lg border border-line/70 bg-ink-850/70 px-3 py-2">
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="text-[10px] uppercase tracking-wider text-muted">
+          {label}
+        </span>
+        <span className="tabular text-[11px] text-muted">
+          {entry.leaguePoints ?? 0} LP
+        </span>
+      </div>
+
+      <p
         className={cn(
-          "text-sm font-semibold",
+          "mt-0.5 text-sm font-semibold",
           TIER_COLOR[entry.tier] ?? "text-gold-300",
         )}
       >
         {entry.tier} {entry.rank ?? ""}
-      </span>
-      <span className="tabular text-xs text-muted">
-        {entry.leaguePoints ?? 0} LP · {winrate}% ({wins}V {losses}D)
-      </span>
-    </span>
+      </p>
+
+      <WinrateBar value={winrate} size="sm" className="mt-1.5" />
+
+      <p className="mt-1 text-[11px] text-muted">
+        <span className="tabular text-win">{wins}V</span>{" "}
+        <span className="tabular text-loss">{losses}D</span>
+        <span className="tabular ml-1.5 text-gold-400">
+          {Math.round(winrate * 100)}%
+        </span>
+      </p>
+    </div>
   );
 }
-
-export { QUEUE_NAME };

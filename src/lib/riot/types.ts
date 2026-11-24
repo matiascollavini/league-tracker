@@ -54,6 +54,7 @@ const ParticipantSchema = z.object({
   totalMinionsKilled: z.number().optional(),
   neutralMinionsKilled: z.number().optional(),
   visionScore: z.number().optional(),
+  totalDamageDealtToChampions: z.number().optional(),
   timePlayed: z.number().optional(),
   riotIdGameName: z.string().optional(),
   riotIdTagline: z.string().optional(),

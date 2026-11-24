@@ -17,7 +17,11 @@ export type ChampionStat = {
   losses: number;
   /** 0..1 */
   winrate: number;
+  /** KDA promedio del campeón (totales, no el de la última partida). */
   kda: number;
+  kills: number;
+  deaths: number;
+  assists: number;
 };
 
 export type PlayerSummary = {
@@ -47,6 +51,11 @@ export type MatchSummary = {
   queueLabel: string;
   durationSeconds: number;
   position: string;
+  /** Rol crudo de Riot (TOP, JUNGLE, MIDDLE, BOTTOM, UTILITY). */
+  role: string;
+  cs: number;
+  gold: number;
+  vision: number;
 };
 
 const ZERO = 0;
@@ -126,18 +135,24 @@ export function summarize(
       losses: 0,
       winrate: 0,
       kda: 0,
+      kills: 0,
+      deaths: 0,
+      assists: 0,
     };
 
     current.games += 1;
     if (participant.win) current.wins += 1;
     current.losses = current.games - current.wins;
     current.winrate = current.wins / current.games;
-    current.kda = kdaOf(
-      participant.kills ?? ZERO,
-      participant.deaths ?? ZERO,
-      participant.assists ?? ZERO,
-    );
+    current.kills += participant.kills ?? ZERO;
+    current.deaths += participant.deaths ?? ZERO;
+    current.assists += participant.assists ?? ZERO;
     byChampion.set(key, current);
+  }
+
+  // KDA promedio se calcula con los totales de todas las partidas del campeón.
+  for (const champion of byChampion.values()) {
+    champion.kda = kdaOf(champion.kills, champion.deaths, champion.assists);
   }
 
   const champions = [...byChampion.values()].sort(
@@ -188,6 +203,13 @@ export function toMatchSummaries(
       queueLabel: queueLabel(match.info.queueId),
       durationSeconds: durationSeconds(match.info),
       position: normalizePosition(participant),
+      role: participant.teamPosition || participant.individualPosition || "",
+      cs:
+        (participant.totalMinionsKilled ?? ZERO) +
+        ((participant as { neutralMinionsKilled?: number }).neutralMinionsKilled ??
+          ZERO),
+      gold: participant.goldEarned ?? ZERO,
+      vision: participant.visionScore ?? ZERO,
     });
   }
 

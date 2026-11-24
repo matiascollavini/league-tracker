@@ -137,7 +137,7 @@ Instrucciones permanentes del proyecto: **[`AGENTS.md`](AGENTS.md)**.
 | Ruta | Qué muestra |
 | --- | --- |
 | `/` | buscador por Riot ID + región |
-| `/perfil/[region]/[nombre]/[tag]` | últimas partidas, campeón más jugado, filtros y forma reciente |
+| `/perfil/[region]/[nombre]/[tag]` | barra lateral con rango, "Tu pool", tabla por campeón (top 8 + ver todos), reparto por rol, últimas partidas y forma reciente |
 | `/partida/[matchId]?player=<puuid>` | tabla completa de los 10 jugadores de esa partida |
 | `/legal/{terminos,privacidad}` | páginas requeridas para la production key |
 

@@ -2,10 +2,13 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AlertTriangle, Info } from "lucide-react";
+import { ChampionPool } from "@/components/champion-pool";
 import { ChampionTable } from "@/components/champion-table";
 import { MatchList } from "@/components/match-list";
-import { ProfileHeader } from "@/components/profile-header";
+import { ProfileCard } from "@/components/profile-header";
+import { RoleStrip } from "@/components/role-strip";
 import { StatCard } from "@/components/stat-card";
+import { WinrateBar } from "@/components/winrate-bar";
 import {
   formatDate,
   percent,
@@ -72,6 +75,7 @@ export default async function ProfilePage({
     ? queueParam
     : "all";
   const championParam = first(sp.champion);
+  const showAllChampions = first(sp.all) === "1";
 
   let profile;
   try {
@@ -86,7 +90,7 @@ export default async function ProfilePage({
 
   const catalog = await getChampionCatalog();
   const demo = source === "demo";
-  // championName de Riot -> nombre localizado ("Kaisa" -> "Kai'Sa", "Nunu" -> "Nunu y Willump")
+  // championName de Riot -> nombre localizado ("Kaisa" -> "Kai'Sa")
   const names: Record<string, string> = Object.fromEntries(
     catalog.all.map((champion) => [champion.id, champion.name]),
   );
@@ -104,8 +108,15 @@ export default async function ProfilePage({
     ? summary.champions.find((c) => c.championName === championParam)
     : undefined;
 
-  const visible = (selected ? rows.filter((r) => r.championName === selected.championName) : rows).slice(0, 20);
+  const visible = (
+    selected
+      ? rows.filter((row) => row.championName === selected.championName)
+      : rows
+  ).slice(0, 20);
+
   const top = summary.champions[0];
+  const recent = rows.slice(0, 20);
+  const recentWins = recent.filter((row) => row.win).length;
 
   const queueLabelText =
     queueFilter === "all"
@@ -113,129 +124,214 @@ export default async function ProfilePage({
       : ` en ${QUEUE_FILTERS.find((f) => f.id === queueFilter)?.label ?? "esta cola"}`;
   const baseSuffix = queueLabelText + (demo ? ", cuenta de demostración" : "");
 
-  const hrefFor = (options: { champion?: string; queue?: QueueFilterId } = {}) =>
+  const hrefFor = (
+    options: { champion?: string; queue?: QueueFilterId; all?: boolean } = {},
+  ) =>
     profileHref(platform, gameName, tagLine, {
       queue: options.queue ?? queueFilter,
-      champion: options.champion ?? undefined,
+      champion: options.champion ?? championParam,
+      all: options.all ?? showAllChampions,
     });
 
   return (
-    <div className="space-y-6">
-      <ProfileHeader
-        gameName={account.gameName ?? gameName}
-        tagLine={account.tagLine ?? tagLine}
-        platform={platform}
-        level={summoner?.summonerLevel ?? null}
-        iconId={summoner?.profileIconId ?? null}
-        version={catalog.version}
-        league={league}
-        demo={demo}
-      />
+    <div className="grid gap-5 lg:grid-cols-[290px_minmax(0,1fr)]">
+      {/* ---------------- barra lateral ---------------- */}
+      <aside className="space-y-3 lg:sticky lg:top-20 lg:self-start">
+        <ProfileCard
+          gameName={account.gameName ?? gameName}
+          tagLine={account.tagLine ?? tagLine}
+          platform={platform}
+          level={summoner?.summonerLevel ?? null}
+          iconId={summoner?.profileIconId ?? null}
+          version={catalog.version}
+          league={league}
+          demo={demo}
+        />
 
-      <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatCard
-          label="Partidas analizadas"
-          value={String(summary.matches)}
-          hint={
-            partial
-              ? `de ${progress.known} conocidas · sigue en curso`
-              : summary.from && summary.to
-                ? `${formatDate(summary.from)} — ${formatDate(summary.to)}`
-                : "sin partidas"
-          }
-        />
-        <StatCard
-          label="Winrate (analizadas)"
-          value={percent(summary.winrate)}
-          hint={`${summary.wins}V · ${summary.losses}D`}
-          accent={summary.winrate >= 0.5 ? "win" : "loss"}
-        />
-        <StatCard
-          label="KDA promedio"
-          value={summary.kda.toFixed(2)}
-          hint="(K + A) / D"
-        />
-        <StatCard
-          label="Más jugado"
-          value={
-            top ? (names[top.championName] ?? top.championName) : "—"
-          }
-          hint={
-            top ? `${top.games} partidas · ${percent(top.winrate)} WR` : undefined
-          }
-          accent="gold"
-        />
-      </section>
-
-      {partial && progress.known > 0 ? (
-        <section
-          className="rounded-xl border border-line bg-ink-900/60 p-4"
-          aria-label="Progreso del análisis"
-        >
-          <div className="flex items-baseline justify-between gap-3">
-            <p className="text-xs text-muted">
-              Analizando el historial:{" "}
-              <strong className="text-gold-300">
-                {progress.detailed} de {progress.known}
-              </strong>{" "}
-              partidas conocidas
+        <div className="rounded-xl border border-line bg-ink-900/60 p-4">
+          <div className="flex items-baseline justify-between">
+            <p className="text-[11px] font-medium uppercase tracking-wider text-muted">
+              Forma reciente
             </p>
             <span className="tabular text-[11px] text-muted">
-              {Math.round((progress.detailed / progress.known) * 100)}%
+              {recentWins}V · {recent.length - recentWins}D
             </span>
           </div>
-          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-ink-800">
-            <div
-              className="h-full rounded-full bg-gold-500"
-              style={{
-                width: `${Math.max(2, Math.round((progress.detailed / progress.known) * 100))}%`,
-              }}
-            />
+
+          <div className="mt-2 flex flex-wrap gap-1">
+            {recent.map((row) => (
+              <Link
+                key={row.matchId}
+                href={`/partida/${encodeURIComponent(row.matchId)}?player=${encodeURIComponent(account.puuid)}`}
+                title={`${names[row.championName] ?? row.championName} · ${row.win ? "Victoria" : "Derrota"}`}
+                className={cn(
+                  "size-5 rounded-sm transition-transform hover:scale-110",
+                  row.win ? "bg-win/70" : "bg-loss/70",
+                )}
+              />
+            ))}
           </div>
-          <p className="mt-2 text-[11px] leading-relaxed text-muted">
-            Se completa solo con cada visita (o con{" "}
-            <code className="text-gold-400">npm run ingest</code>). Riot limita el
-            historial recuperable a ~1.000 partidas por jugador.
-          </p>
+
+          <WinrateBar value={summary.winrate} className="mt-3" />
+        </div>
+      </aside>
+
+      {/* ---------------- contenido ---------------- */}
+      <div className="min-w-0 space-y-4">
+        <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <StatCard
+            label="Partidas analizadas"
+            value={String(summary.matches)}
+            hint={
+              partial
+                ? `de ${progress.known} conocidas · sigue en curso`
+                : summary.from && summary.to
+                  ? `${formatDate(summary.from)} — ${formatDate(summary.to)}`
+                  : "sin partidas"
+            }
+          />
+          <StatCard
+            label="Winrate (analizadas)"
+            value={percent(summary.winrate)}
+            hint={`${summary.wins}V · ${summary.losses}D`}
+            accent={summary.winrate >= 0.5 ? "win" : "loss"}
+          />
+          <StatCard
+            label="KDA promedio"
+            value={summary.kda.toFixed(2)}
+            hint="(K + A) / D"
+          />
+          <StatCard
+            label="Más jugado"
+            value={top ? (names[top.championName] ?? top.championName) : "—"}
+            hint={
+              top
+                ? `${top.games} partidas · ${percent(top.winrate)} WR`
+                : undefined
+            }
+            accent="gold"
+          />
         </section>
-      ) : null}
 
-      {source === "live" ? (
-        <p className="rounded-lg border border-gold-600/40 bg-gold-600/10 px-4 py-3 text-xs leading-relaxed text-gold-300">
-          Este jugador todavía no está en la base: se muestran las últimas{" "}
-          {matches.length} partidas pedidas en vivo. Corré{" "}
-          <code className="text-gold-400">npm run ingest -- &quot;
-          {account.gameName}#{account.tagLine}&quot; {platform}</code> para
-          analizar el historial completo.
-        </p>
-      ) : null}
+        {partial && progress.known > 0 ? (
+          <section
+            className="rounded-xl border border-line bg-ink-900/60 p-4"
+            aria-label="Progreso del análisis"
+          >
+            <div className="flex items-baseline justify-between gap-3">
+              <p className="text-xs text-muted">
+                Analizando el historial:{" "}
+                <strong className="text-gold-300">
+                  {progress.detailed} de {progress.known}
+                </strong>{" "}
+                partidas conocidas
+              </p>
+              <span className="tabular text-[11px] text-muted">
+                {Math.round((progress.detailed / progress.known) * 100)}%
+              </span>
+            </div>
+            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-ink-800">
+              <div
+                className="h-full rounded-full bg-gold-500"
+                style={{
+                  width: `${Math.max(2, Math.round((progress.detailed / progress.known) * 100))}%`,
+                }}
+              />
+            </div>
+            <p className="mt-2 text-[11px] leading-relaxed text-muted">
+              Se completa solo con cada visita (o con{" "}
+              <code className="text-gold-400">npm run ingest</code>). Riot limita
+              el historial recuperable a ~1.000 partidas por jugador.
+            </p>
+          </section>
+        ) : null}
 
-      <nav aria-label="Filtrar por cola" className="flex flex-wrap gap-2">
-        {QUEUE_FILTERS.map((filter) => {
-          const active = filter.id === queueFilter;
-          return (
-            <Link
-              key={filter.id}
-              href={profileHref(platform, gameName, tagLine, {
-                queue: filter.id,
-                champion: championParam,
-              })}
-              aria-current={active ? "page" : undefined}
-              className={cn(
-                "rounded-full border px-3 py-1 text-xs transition-colors",
-                active
-                  ? "border-gold-600/70 bg-gold-600/10 text-gold-200"
-                  : "border-line text-muted hover:border-gold-600/40 hover:text-gold-300",
-              )}
-            >
-              {filter.label}
-            </Link>
-          );
-        })}
-      </nav>
+        {source === "live" ? (
+          <p className="rounded-lg border border-gold-600/40 bg-gold-600/10 px-4 py-3 text-xs leading-relaxed text-gold-300">
+            Este jugador todavía no está en la base: se muestran las últimas{" "}
+            {matches.length} partidas pedidas en vivo. Corré{" "}
+            <code className="text-gold-400">
+              npm run ingest -- &quot;{account.gameName}#{account.tagLine}&quot;{" "}
+              {platform}
+            </code>{" "}
+            para analizar el historial completo.
+          </p>
+        ) : null}
 
-      <div className="grid gap-4 lg:grid-cols-5">
-        <section className="rounded-xl border border-line bg-ink-900/80 lg:col-span-3">
+        {/* pool de campeones */}
+        <section className="space-y-2">
+          <div className="flex items-baseline justify-between">
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-gold-400">
+              Tu pool
+            </h2>
+            <span className="text-[11px] text-muted">
+              {summary.champions.length} campeones
+            </span>
+          </div>
+          <ChampionPool
+            champions={summary.champions}
+            names={names}
+            version={catalog.version}
+            selected={selected?.championName}
+            hrefFor={(championName) => hrefFor({ champion: championName })}
+          />
+        </section>
+
+        <nav aria-label="Filtrar por cola" className="flex flex-wrap gap-2">
+          {QUEUE_FILTERS.map((filter) => {
+            const active = filter.id === queueFilter;
+            return (
+              <Link
+                key={filter.id}
+                href={profileHref(platform, gameName, tagLine, {
+                  queue: filter.id,
+                  champion: championParam,
+                })}
+                aria-current={active ? "page" : undefined}
+                className={cn(
+                  "rounded-full border px-3 py-1 text-xs transition-colors",
+                  active
+                    ? "border-gold-600/70 bg-gold-600/10 text-gold-200"
+                    : "border-line text-muted hover:border-gold-600/40 hover:text-gold-300",
+                )}
+              >
+                {filter.label}
+              </Link>
+            );
+          })}
+        </nav>
+
+        {selected ? (
+          <div className="rounded-xl border border-gold-600/40 bg-gold-600/[0.07] p-3">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+              <p className="text-sm font-semibold text-gold-200">
+                {names[selected.championName] ?? selected.championName}
+              </p>
+              <span className="text-xs text-muted">
+                {selected.games} partidas · {selected.wins}V {selected.losses}D
+              </span>
+              <span
+                className={cn(
+                  "tabular text-xs",
+                  selected.winrate >= 0.5 ? "text-win" : "text-loss",
+                )}
+              >
+                {percent(selected.winrate)} WR
+              </span>
+              <span className="tabular text-xs text-muted">
+                KDA {selected.kda.toFixed(2)}
+              </span>
+              <Link
+                href={hrefFor({})}
+                className="ml-auto text-[11px] text-muted underline decoration-line hover:text-gold-300"
+              >
+                quitar filtro
+              </Link>
+            </div>
+          </div>
+        ) : null}
+
+        <section className="rounded-xl border border-line bg-ink-900/80">
           <div className="flex items-center justify-between border-b border-line px-4 py-3">
             <h2 className="text-sm font-semibold uppercase tracking-wider text-gold-400">
               Por campeón
@@ -252,117 +348,62 @@ export default async function ProfilePage({
               selected={selected?.championName}
               totalMatches={summary.matches}
               hrefFor={(championName) => hrefFor({ champion: championName })}
+              showAll={showAllChampions}
+              allHref={hrefFor({ all: true })}
+              lessHref={hrefFor({ all: false })}
             />
           </div>
-        </section>
-
-        <section className="space-y-4 lg:col-span-2">
-          {selected ? (
-            <div className="rounded-xl border border-gold-600/40 bg-gold-600/[0.07] p-4">
-              <p className="text-[11px] font-medium uppercase tracking-wider text-muted">
-                Campeón seleccionado
-              </p>
-              <p className="mt-1 text-xl font-semibold text-gold-200">
-                {names[selected.championName] ?? selected.championName}
-              </p>
-              <dl className="mt-3 grid grid-cols-3 gap-2 text-center">
-                <div className="rounded-lg bg-ink-900/70 p-2">
-                  <dt className="text-[10px] uppercase text-muted">Partidas</dt>
-                  <dd className="tabular text-lg text-gold-200">
-                    {selected.games}
-                  </dd>
-                </div>
-                <div className="rounded-lg bg-ink-900/70 p-2">
-                  <dt className="text-[10px] uppercase text-muted">Winrate</dt>
-                  <dd
-                    className={cn(
-                      "tabular text-lg",
-                      selected.winrate >= 0.5 ? "text-win" : "text-loss",
-                    )}
-                  >
-                    {percent(selected.winrate)}
-                  </dd>
-                </div>
-                <div className="rounded-lg bg-ink-900/70 p-2">
-                  <dt className="text-[10px] uppercase text-muted">KDA</dt>
-                  <dd className="tabular text-lg text-gold-200">
-                    {selected.kda.toFixed(2)}
-                  </dd>
-                </div>
-              </dl>
-            </div>
-          ) : null}
-
-          <div className="rounded-xl border border-line bg-ink-900/60 p-4">
-            <p className="text-[11px] font-medium uppercase tracking-wider text-muted">
-              Forma reciente
-            </p>
-            <div className="mt-2 flex flex-wrap gap-1">
-              {rows.slice(0, 20).map((row) => (
-                <span
-                  key={row.matchId}
-                  title={`${names[row.championName] ?? row.championName} · ${row.win ? "Victoria" : "Derrota"}`}
-                  className={cn(
-                    "size-5 rounded-sm",
-                    row.win ? "bg-win/70" : "bg-loss/70",
-                  )}
-                />
-              ))}
-            </div>
-            <p className="mt-2 text-[11px] text-muted">
-              Últimas {Math.min(rows.length, 20)} partidas ·{" "}
-              {rows.slice(0, 20).filter((r) => r.win).length}V ·{" "}
-              {rows.slice(0, 20).filter((r) => !r.win).length}D
-            </p>
-          </div>
-
-          <div className="rounded-xl border border-line bg-ink-900/60 p-4">
-            <div className="flex items-start gap-2">
-              <Info className="mt-0.5 size-4 shrink-0 text-gold-600" aria-hidden />
-              <div className="space-y-2 text-xs leading-relaxed text-muted">
-                <p>
-                  Base del cálculo:{" "}
-                  <strong className="text-gold-300">
-                    {`${summary.matches} partidas${baseSuffix}.`}
-                  </strong>{" "}
-                  {source === "db"
-                    ? `Salen de la base local (${progress.known} partidas conocidas de esta cuenta).`
-                    : `Pedidas en vivo a Riot (${analyzeCount()} por visita).`}
-                </p>
-                <p>
-                  Riot limita el historial recuperable a ~1.000 partidas por
-                  jugador, así que esto no es el total histórico de la cuenta.
-                </p>
-                {summary.customExcluded > 0 ? (
-                  <p>
-                    Se excluyeron {summary.customExcluded} partidas custom
-                    (política de Riot).
-                  </p>
-                ) : null}
-              </div>
-            </div>
+          <div className="border-t border-line px-4 py-3">
+            <RoleStrip rows={rows} />
           </div>
         </section>
-      </div>
 
-      <section className="rounded-xl border border-line bg-ink-900/80">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-3">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-gold-400">
-            Últimas partidas
-          </h2>
-          <span className="text-[11px] text-muted">
-            {selected
-              ? `${visible.length} con ${names[selected.championName] ?? selected.championName}`
-              : `${visible.length} de ${summary.matches} analizadas`}
-          </span>
+        <section className="rounded-xl border border-line bg-ink-900/80">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-3">
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-gold-400">
+              Últimas partidas
+            </h2>
+            <span className="text-[11px] text-muted">
+              {selected
+                ? `${visible.length} con ${names[selected.championName] ?? selected.championName}`
+                : `${visible.length} de ${summary.matches} analizadas`}
+            </span>
+          </div>
+          <MatchList
+            matches={visible}
+            version={catalog.version}
+            names={names}
+            puuid={account.puuid}
+          />
+        </section>
+
+        <div className="rounded-xl border border-line bg-ink-900/60 p-4">
+          <div className="flex items-start gap-2">
+            <Info className="mt-0.5 size-4 shrink-0 text-gold-600" aria-hidden />
+            <div className="space-y-1.5 text-xs leading-relaxed text-muted">
+              <p>
+                Base del cálculo:{" "}
+                <strong className="text-gold-300">
+                  {`${summary.matches} partidas${baseSuffix}.`}
+                </strong>{" "}
+                {source === "db"
+                  ? `Salen de la base local (${progress.known} partidas conocidas de esta cuenta).`
+                  : `Pedidas en vivo a Riot (${analyzeCount()} por visita).`}
+              </p>
+              <p>
+                Riot limita el historial recuperable a ~1.000 partidas por
+                jugador, así que esto no es el total histórico de la cuenta.
+              </p>
+              {summary.customExcluded > 0 ? (
+                <p>
+                  Se excluyeron {summary.customExcluded} partidas custom
+                  (política de Riot).
+                </p>
+              ) : null}
+            </div>
+          </div>
         </div>
-        <MatchList
-          matches={visible}
-          version={catalog.version}
-          names={names}
-          puuid={account.puuid}
-        />
-      </section>
+      </div>
     </div>
   );
 }
@@ -370,10 +411,11 @@ export default async function ProfilePage({
 function DataError({ error }: { error: unknown }) {
   const status = error instanceof RiotApiError ? error.status : undefined;
   const message =
-    error instanceof Error ? error.message : "Error desconocido al hablar con Riot.";
+    error instanceof Error
+      ? error.message
+      : "Error desconocido al hablar con Riot.";
 
   const missingKey = error instanceof MissingApiKeyError;
-
   const keyRejected = status === 401 || status === 403;
 
   const title = missingKey
