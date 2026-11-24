@@ -3,6 +3,7 @@ import { getLeagueEntries, getSummoner, resolveAccount } from "@/lib/riot/accoun
 import { getRecentMatches } from "@/lib/riot/matches";
 import { isMockMode } from "@/lib/riot/http";
 import {
+  findSyncedPuuid,
   getPlayerMatchesWithProgress,
   type Progress,
 } from "@/lib/db/matches";
@@ -23,6 +24,8 @@ export type ProfileSource = "db" | "live" | "demo";
 
 export type ProfileData = {
   account: Account;
+  /** Puuid efectivo: el resuelto o el que ya tenía datos. */
+  puuid: string;
   matches: Match[];
   progress: Progress;
   summoner: Summoner | null;
@@ -62,6 +65,7 @@ export async function loadProfile(
     const matches = await getRecentMatches(account.puuid, platform);
     return {
       account,
+      puuid: account.puuid,
       matches,
       progress: { known: matches.length, detailed: matches.length },
       summoner,
@@ -72,15 +76,31 @@ export async function loadProfile(
   }
 
   // Una sola consulta trae partidas + progreso.
-  let { matches, progress } = await getPlayerMatchesWithProgress(account.puuid);
+  let puuid = account.puuid;
+  let { matches, progress } = await getPlayerMatchesWithProgress(puuid);
+
+  // Red de seguridad: si el puuid resuelto no tiene datos, probamos con el que
+  // ya guardamos para ese mismo Riot ID (Riot a veces devuelve otro puuid).
+  if (matches.length === 0) {
+    const stored = await findSyncedPuuid(platform, gameName, tagLine);
+    if (stored && stored !== puuid) {
+      const alternative = await getPlayerMatchesWithProgress(stored);
+      if (alternative.matches.length > 0) {
+        puuid = stored;
+        matches = alternative.matches;
+        progress = alternative.progress;
+      }
+    }
+  }
 
   if (progress.detailed < MIN_TO_ANALYZE) {
     try {
-      await syncAccount(platform, gameName, tagLine, {
+      const result = await syncAccount(platform, gameName, tagLine, {
         budget: onDemandBudget(),
         maxPages: 4,
       });
-      ({ matches, progress } = await getPlayerMatchesWithProgress(account.puuid));
+      puuid = result.puuid;
+      ({ matches, progress } = await getPlayerMatchesWithProgress(puuid));
     } catch (error) {
       // 429 o 5xx: no rompemos la página, seguimos con lo que haya.
       console.warn(
@@ -93,13 +113,14 @@ export async function loadProfile(
   let source: ProfileSource = "db";
 
   if (matches.length === 0) {
-    matches = await getRecentMatches(account.puuid, platform);
+    matches = await getRecentMatches(puuid, platform);
     source = "live";
     progress = { known: matches.length, detailed: matches.length };
   }
 
   return {
     account,
+    puuid,
     matches,
     progress,
     summoner,

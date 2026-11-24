@@ -441,6 +441,40 @@ export async function unlockSync(puuid: string, token: string): Promise<void> {
   });
 }
 
+/**
+ * Busca el puuid que YA tiene datos para un Riot ID.
+ *
+ * Sirve de red de seguridad: si Riot devuelve un puuid distinto (o inválido)
+ * para una cuenta que ya conocemos, seguimos usando el que funciona en vez de
+ * mostrar la vía directa y perder las ~1.000 partidas analizadas.
+ */
+export async function findSyncedPuuid(
+  platform: Platform,
+  gameName: string,
+  tagLine: string,
+): Promise<string | null> {
+  await ensureSchema();
+  const result = await db().execute({
+    sql: `SELECT ps.puuid
+            FROM puuid_sync ps
+           WHERE ps.platform_id = ?
+             AND ps.game_name = ? COLLATE NOCASE
+             AND ps.tag_line = ? COLLATE NOCASE
+             AND EXISTS (
+               SELECT 1
+                 FROM puuid_matches pm
+                 JOIN match_participants p
+                   ON p.match_id = pm.match_id AND p.puuid = pm.puuid
+                WHERE pm.puuid = ps.puuid
+             )
+           ORDER BY COALESCE(ps.last_synced_at, 0) DESC
+           LIMIT 1`,
+    args: [platform, gameName, tagLine],
+  });
+  const row = result.rows[0];
+  return row ? str(row.puuid) : null;
+}
+
 export type PendingPlayer = {
   puuid: string;
   platform: Platform;

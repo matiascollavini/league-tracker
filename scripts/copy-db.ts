@@ -46,7 +46,12 @@ async function main() {
       await target.batch(
         slice.map((row) => ({
           sql: `INSERT OR REPLACE INTO ${table.name} (${table.columns}) VALUES ${placeholders}`,
-          args: Object.values(row) as (string | number | null)[],
+          // Mapeo explícito por nombre de columna: no dependemos del orden que
+          // devuelva el driver.
+          args: table.columns.split(",").map((column) => {
+            const value = row[column.trim()];
+            return (value ?? null) as string | number | null;
+          }),
         })),
         "write",
       );

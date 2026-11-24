@@ -40,8 +40,8 @@ async function loadSide(
   names: Record<string, string>,
 ): Promise<Loaded> {
   const profile = await loadProfile(side.platform, side.gameName, side.tagLine);
-  const summary: PlayerSummary = summarize(profile.matches, profile.account.puuid);
-  const rows = toMatchSummaries(profile.matches, profile.account.puuid);
+  const summary: PlayerSummary = summarize(profile.matches, profile.puuid);
+  const rows = toMatchSummaries(profile.matches, profile.puuid);
   const recent = rows.slice(0, 20);
   const solo = profile.league.find((e) => e.queueType === "RANKED_SOLO_5x5");
 

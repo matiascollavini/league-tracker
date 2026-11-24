@@ -87,7 +87,7 @@ export default async function ProfilePage({
     return <DataError error={error} />;
   }
 
-  const { account, matches, summoner, league, progress, source, partial } =
+  const { account, puuid, matches, summoner, league, progress, source, partial } =
     profile;
 
   const catalog = await getChampionCatalog();
@@ -103,8 +103,8 @@ export default async function ProfilePage({
       ? matches
       : matches.filter((match) => queueIds.includes(match.info.queueId));
 
-  const summary = summarize(inQueue, account.puuid);
-  const rows = toMatchSummaries(inQueue, account.puuid);
+  const summary = summarize(inQueue, puuid);
+  const rows = toMatchSummaries(inQueue, puuid);
 
   const selected = championParam
     ? summary.champions.find((c) => c.championName === championParam)
@@ -164,7 +164,7 @@ export default async function ProfilePage({
             {recent.map((row) => (
               <Link
                 key={row.matchId}
-                href={`/partida/${encodeURIComponent(row.matchId)}?player=${encodeURIComponent(account.puuid)}`}
+                href={`/partida/${encodeURIComponent(row.matchId)}?player=${encodeURIComponent(puuid)}`}
                 title={`${names[row.championName] ?? row.championName} · ${row.win ? "Victoria" : "Derrota"}`}
                 className={cn(
                   "size-5 rounded-sm transition-transform hover:scale-110",
@@ -383,7 +383,7 @@ export default async function ProfilePage({
             matches={visible}
             version={catalog.version}
             names={names}
-            puuid={account.puuid}
+            puuid={puuid}
           />
         </section>
 
