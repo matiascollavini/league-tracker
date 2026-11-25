@@ -109,7 +109,8 @@ retención), y no existe endpoint de "partidas totales". Por eso:
 ## 4. Mapa del repositorio
 
 ```
-src/app/api/    endpoints (health, sync, buscar, partida/[matchId])
+src/app/api/    endpoints (health, sync, buscar, recomendados, en-vivo,
+                partida/[matchId])
 src/app/        páginas (landing, perfil, detalle de partida, legales)
 src/components/ UI server-first + header-search y lista de partidas (client)
 src/lib/riot/   capa de datos: config, http, account, matches, aggregate, panel, types
@@ -201,6 +202,15 @@ scripts/        verify-riot.mjs (verificación contra la API real)
   no confirma, el botón vuelve a **"Actualizar"** con un aviso, no a un
   "Actualizado" falso (la vuelta anterior decía "Actualizado" y al recargar
   "Actualizar": ver ADR-018).
+- La **home** es un hero de una pantalla con **solo** el título y un buscador
+  centrado estilo Apple (`src/components/hero-search.tsx`, ADR-023); el resto
+  (features, recomendados, "Sobre los datos") aparece al scrollear. En `/` el
+  buscador del header se oculta (`hideOnHome`) para no tener dos campos en la
+  misma pantalla. `HeroSearch` despliega recomendados con el input vacío y
+  sugerencias de `/api/buscar` con ≥2 caracteres; Enter sin texto no navega.
+  Los recomendados salen de `GET /api/recomendados` → `featuredAccounts()`
+  (índice propio ordenado por partidas guardadas, no por habilidad) y el mapeo
+  fila→hit vive en `src/lib/search-hits.ts` (lo comparten buscar y recomendados).
 
 ---
 

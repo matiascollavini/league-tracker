@@ -163,6 +163,47 @@ export async function searchAccounts(
   }));
 }
 
+export type FeaturedAccount = AccountHit & {
+  /** Partidas guardadas en las que participó (criterio del ranking). */
+  games: number;
+};
+
+/**
+ * Cuentas "recomendadas" para la landing: las que más partidas guardadas
+ * tienen, desempatando por la más reciente.
+ *
+ * El `JOIN` con `match_participants` es a propósito: solo se recomiendan
+ * cuentas con partidas propias. Una fila de `accounts` sin partidas (creada al
+ * visitar un perfil, por ejemplo) no tiene nada interesante que mostrar.
+ */
+export async function featuredAccounts(limit = 8): Promise<FeaturedAccount[]> {
+  const max = Math.min(Math.max(Math.trunc(limit), 1), 24);
+  await ensureSchema();
+
+  const result = await db().execute({
+    sql: `SELECT a.puuid, a.platform_id, a.game_name, a.tag_line,
+                 a.profile_icon, a.summoner_level, a.last_seen_ts,
+                 COUNT(DISTINCT mp.match_id) AS games
+            FROM accounts a
+            JOIN match_participants mp ON mp.puuid = a.puuid
+           GROUP BY a.puuid
+           ORDER BY games DESC, a.last_seen_ts DESC, a.game_name ASC
+           LIMIT ?`,
+    args: [max],
+  });
+
+  return result.rows.map((row) => ({
+    puuid: str(row.puuid),
+    gameName: str(row.game_name),
+    tagLine: str(row.tag_line),
+    platformId: str(row.platform_id),
+    profileIcon: numOrNull(row.profile_icon),
+    level: numOrNull(row.summoner_level),
+    lastSeenTs: numOrNull(row.last_seen_ts) ?? 0,
+    games: Number(row.games ?? 0),
+  }));
+}
+
 /** Cuántas cuentas hay indexadas (para el estado del buscador y /api/health). */
 export async function countAccounts(): Promise<number> {
   await ensureSchema();

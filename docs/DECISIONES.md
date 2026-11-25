@@ -1120,3 +1120,70 @@ el roster completo de las 24 partidas.
   Riot. Medido en local: perfil caliente ~0,6 s.
 - El widget se actualiza solo al terminar el sync porque lee la base.
 - Si el jugador tiene pocas partidas, muestra menos de 5 o el estado vacío.
+
+---
+
+## ADR-023 — Landing con hero de una pantalla y perfiles recomendados
+
+**Estado:** aceptada · **Fecha:** 2026-11-25
+
+### Contexto
+La home competía consigo misma: hero con párrafo, formulario de dos campos +
+select, link a comparar, tres tarjetas y el aviso de demo, todo en la primera
+pantalla. Se pidió una home **estilo Apple**: un título y un buscador centrado
+que ocupe la pantalla completa, y el resto de la información recién al
+scrollear. Además, el buscador tenía que ofrecer **perfiles recomendados**.
+
+La restricción de datos sigue siendo la de ADR-014: Riot no tiene búsqueda por
+nombre y no sabemos nada de cuentas que nunca vimos. "Recomendar" solo puede
+significar "elegir entre lo que ya tenemos indexado".
+
+### Opciones evaluadas
+| Opción | A favor | En contra |
+|---|---|---|
+| Recomendados server-side con `"use cache"`/`connection()` | sale en el HTML, sin skeleton | rompe el shell estático de `/` y toca la base en build; más superficie de error |
+| Recomendados "curados" a mano en el código | simple | mentira: no conocemos cuentas fuera del índice |
+| Endpoint + fetch del cliente (elegido) | `/` sigue siendo estática (○), el CDN cachea el JSON, una request por visita | la sección parpadea con skeleton en la primera visita |
+
+### Decisión
+- **Hero de un viewport**: `<section>` con `min-h-[calc(100svh-3.5rem)]`
+  (`svh` = sin salto de la barra del navegador) y `-mt-6/-mt-8` para cancelar el
+  padding de `<main>`; descontar los `h-14` del header evita un scroll de 56 px.
+  Contiene **solo** el `<h1>` y `HeroSearch`. El aviso de demo, las features,
+  los recomendados y "Sobre los datos" pasaron debajo.
+- **Un solo buscador en la home**: `HeaderSearch` acepta `hideOnHome` y no
+  renderiza nada en `/` (el buscador del hero es el protagonista). En el resto
+  de las rutas el header sigue igual.
+- `HeroSearch` (`src/components/hero-search.tsx`) es una píldora grande
+  (`rounded-full`, `h-14`, fondo translúcido con blur) con ícono, input, región
+  compacta y botón de submit. Al enfocarla o al escribir despliega el panel:
+  **sin consulta** muestra recomendados; **con ≥2 caracteres** muestra las
+  sugerencias de `/api/buscar` (misma lógica de debounce/abort/teclado que el
+  header). Enter con `Nombre#TAG` resuelve contra Riot con la región elegida;
+  Enter sin texto **no** navega a la primera recomendación (solo con sugerencias
+  activas), para no mandar a nadie a un perfil ajeno sin querer.
+- **Recomendados = cuentas del índice con más partidas guardadas**:
+  `featuredAccounts()` (`src/lib/db/accounts.ts`) hace
+  `accounts JOIN match_participants GROUP BY puuid ORDER BY COUNT(DISTINCT match_id) DESC,
+  last_seen_ts DESC`. El `JOIN` deja afuera las cuentas sin partidas (visitadas
+  por búsqueda directa): no hay nada que mostrar de ellas.
+- `GET /api/recomendados` devuelve el mismo `SearchHit` de siempre + `games`.
+  `Cache-Control: public, max-age=30, s-maxage=300, stale-while-revalidate=900`:
+  el ranking cambia con el ingest, no con cada visita.
+- La landing usa la lista dos veces (panel del hero y sección de abajo) y las
+  dos comparten una única promesa (`src/lib/recommended.ts`), así que abrir el
+  panel y scrollear no duplica el fetch.
+- `mapAccountHits()` (`src/lib/search-hits.ts`) centraliza el mapeo fila →
+  `SearchHit` (validar plataforma + icono de Data Dragon) para que `/api/buscar`
+  y `/api/recomendados` no se desincronicen.
+- Se eliminó `src/components/search-form.tsx` (formulario viejo de la home): el
+  único buscador de la landing es `HeroSearch`.
+
+### Consecuencias
+- `/` sigue prerenderizada (aparece como `○` en el build): no hay DB ni Riot en
+  el render. El costo es un skeleton de ~1 request cacheada por el CDN.
+- Sin cuentas indexadas (base nueva) la sección no se muestra y el panel dice
+  que escribas `Nombre#TAG`; en modo demo se recomienda la cuenta de ejemplo.
+- El ranking es de **datos disponibles**, no de habilidad: la UI lo dice
+  ("Cuentas con más partidas analizadas"). Revisar si algún día hay un índice de
+  cuentas real (requiere producción key y otro enfoque, ADR-014).

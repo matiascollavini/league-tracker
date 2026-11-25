@@ -41,6 +41,11 @@ const LAST_PLATFORM_KEY = "lt:platform";
 type Props = {
   defaultPlatform: Platform;
   className?: string;
+  /**
+   * En la landing el buscador grande del hero es el único: el del header
+   * desaparece para no dejar dos campos de búsqueda en la misma pantalla.
+   */
+  hideOnHome?: boolean;
 };
 
 /** Una respuesta ya parseada. `key` es la consulta en minúsculas que la originó. */
@@ -50,7 +55,11 @@ type Snapshot = {
   failed: boolean;
 };
 
-export function HeaderSearch({ defaultPlatform, className }: Props) {
+export function HeaderSearch({
+  defaultPlatform,
+  className,
+  hideOnHome = false,
+}: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const inputId = useId();
@@ -258,6 +267,9 @@ export function HeaderSearch({ defaultPlatform, className }: Props) {
 
   const parsed = parseRiotId(query);
   const activeId = activeIndex >= 0 ? `${listId}-${activeIndex}` : undefined;
+
+  // Va después de todos los hooks: el orden no cambia al navegar a la home.
+  if (hideOnHome && pathname === "/") return null;
 
   return (
     <div ref={rootRef} className={cn("relative", className)}>

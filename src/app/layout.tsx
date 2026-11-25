@@ -63,9 +63,11 @@ export default function RootLayout({
             </nav>
 
             <div className="ml-auto flex min-w-0 flex-1 items-center justify-end gap-2">
-              {/* Buscador directo: las sugerencias salen del índice propio, no de Riot. */}
+              {/* Buscador directo: las sugerencias salen del índice propio, no de Riot.
+                  En la landing se oculta: ahí el protagonista es el buscador del hero. */}
               <HeaderSearch
                 defaultPlatform={platformFromEnv()}
+                hideOnHome
                 className="w-full max-w-[300px] md:w-64 lg:w-80"
               />
 

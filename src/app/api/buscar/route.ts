@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { countAccounts, searchAccounts } from "@/lib/db/accounts";
-import { getChampionCatalog, profileIconUrl } from "@/lib/ddragon/champions";
 import { profileHref } from "@/lib/links";
 import { isPlatform } from "@/lib/riot/config";
 import { isMockMode } from "@/lib/riot/http";
 import { mockAccount } from "@/lib/riot/fixtures";
+import { mapAccountHits } from "@/lib/search-hits";
 import {
   MIN_QUERY_LENGTH,
   SearchResponseSchema,
@@ -91,29 +91,11 @@ export async function GET(request: Request) {
     platform: platformParam && isPlatform(platformParam) ? platformParam : undefined,
   });
 
-  // El catálogo de Data Dragon se necesita solo por la versión del CDN de iconos
-  // (viene cacheado por fetch; si DDragon no responde, cae al patch de respaldo).
-  const catalog = hits.some((hit) => hit.profileIcon)
-    ? await getChampionCatalog()
-    : null;
-
-  const results: SearchHit[] = hits.flatMap((hit) => {
-    // La plataforma viene de la base; si es basura, no hay a dónde linkear.
-    if (!isPlatform(hit.platformId)) return [];
-    return [
-      {
-        gameName: hit.gameName,
-        tagLine: hit.tagLine,
-        platform: hit.platformId,
-        iconUrl:
-          hit.profileIcon && catalog
-            ? profileIconUrl(catalog.version, hit.profileIcon)
-            : null,
-        level: hit.level,
-        href: profileHref(hit.platformId, hit.gameName, hit.tagLine),
-      },
-    ];
-  });
+  // `mapAccountHits` valida la plataforma y resuelve la versión del CDN de
+  // iconos (Data Dragon); ver src/lib/search-hits.ts.
+  const results: SearchHit[] = (await mapAccountHits(hits)).map(
+    ({ hit }) => hit,
+  );
 
   const body = SearchResponseSchema.parse({
     query,

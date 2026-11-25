@@ -29,6 +29,23 @@ export const SearchResponseSchema = z.object({
 export type SearchHit = z.infer<typeof SearchHitSchema>;
 export type SearchResponse = z.infer<typeof SearchResponseSchema>;
 
+/**
+ * Cuenta sugerida como "recomendada" en la landing: el mismo hit del buscador
+ * más cuántas partidas tenemos guardadas de ella (el criterio del ranking).
+ */
+export const RecommendedHitSchema = SearchHitSchema.extend({
+  games: z.number().int().nonnegative(),
+});
+
+export const RecommendedResponseSchema = z.object({
+  results: z.array(RecommendedHitSchema),
+  /** Cuántas cuentas hay en el índice propio (contexto del subtítulo). */
+  indexed: z.number(),
+});
+
+export type RecommendedHit = z.infer<typeof RecommendedHitSchema>;
+export type RecommendedResponse = z.infer<typeof RecommendedResponseSchema>;
+
 /** Mínimo de caracteres para pedir sugerencias. */
 export const MIN_QUERY_LENGTH = 2;
 

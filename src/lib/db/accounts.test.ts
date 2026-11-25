@@ -9,6 +9,7 @@ import { closeDb, ensureSchema } from "./client";
 import {
   accountUpsertStatement,
   countAccounts,
+  featuredAccounts,
   saveAccount,
   searchAccounts,
   splitRiotId,
@@ -206,5 +207,73 @@ describe("saveMatch alimenta el índice", () => {
     });
     expect(statement.args).toHaveLength(9);
     expect(statement.sql).toContain("ON CONFLICT(puuid)");
+  });
+});
+
+describe("featuredAccounts", () => {
+  const first = "a".repeat(78);
+  const second = "b".repeat(78);
+  const idle = "c".repeat(78);
+
+  function matchWith(
+    matchId: string,
+    ts: number,
+    players: Array<[puuid: string, name: string]>,
+  ): Match {
+    return {
+      metadata: { matchId, participants: players.map(([puuid]) => puuid) },
+      info: {
+        gameCreation: ts,
+        gameStartTimestamp: ts,
+        gameEndTimestamp: ts + 1_800_000,
+        gameDuration: 1_800,
+        gameMode: "CLASSIC",
+        gameVersion: "16.23.1",
+        queueId: 420,
+        participants: players.map(([puuid, name], index) => ({
+          puuid,
+          championId: 103,
+          championName: "Ahri",
+          teamId: index === 0 ? 100 : 200,
+          teamPosition: "MIDDLE",
+          win: index === 0,
+          riotIdGameName: name,
+          riotIdTagline: "LAS",
+        })),
+      },
+    };
+  }
+
+  it("ordena por partidas guardadas y deja afuera las cuentas sin partidas", async () => {
+    await saveMatch(
+      matchWith("LA2_1", 1_700_000_000_000, [
+        [first, "Uno"],
+        [second, "Dos"],
+      ]),
+      "la2",
+    );
+    await saveMatch(
+      matchWith("LA2_2", 1_700_000_100_000, [[first, "Uno"]]),
+      "la2",
+    );
+    // Cuenta indexada por una búsqueda directa: no tiene partidas propias.
+    await saveAccount(account(idle, "SinPartidas", "LAS"));
+
+    const hits = await featuredAccounts();
+    expect(hits.map((hit) => hit.gameName)).toEqual(["Uno", "Dos"]);
+    expect(hits.map((hit) => hit.games)).toEqual([2, 1]);
+  });
+
+  it("respeta el límite y nunca devuelve más de 24", async () => {
+    await saveMatch(
+      matchWith("LA2_3", 1_700_000_200_000, [
+        [first, "Uno"],
+        [second, "Dos"],
+      ]),
+      "la2",
+    );
+
+    expect(await featuredAccounts(1)).toHaveLength(1);
+    expect(await featuredAccounts(999)).toHaveLength(2);
   });
 });
