@@ -1,6 +1,6 @@
 /**
- * Utilidades del botón "Actualizar": cronómetro y decisión del loop.
- * Módulo puro (sin React) para poder testearlo sin DOM.
+ * Utilidades del botón "Actualizar": progreso de la tanda, cronómetro y
+ * decisión del loop. Módulo puro (sin React) para poder testearlo sin DOM.
  */
 
 /** 42_000 -> "0:42", 3_600_000 -> "60:00". */
@@ -11,6 +11,46 @@ export function formatElapsed(ms: number): string {
   return minutes > 0
     ? `${minutes}:${String(seconds).padStart(2, "0")}`
     : `${seconds} s`;
+}
+
+export type BatchProgress = {
+  /** Partidas analizadas desde que se apretó el botón. */
+  analyzed: number;
+  /** Pendientes ahora mismo (puede crecer si Riot devuelve más IDs en el camino). */
+  pending: number;
+  /** Denominador de la tanda, nunca menor que lo analizado. */
+  total: number;
+  /** 0..100. */
+  pct: number;
+};
+
+/**
+ * Progreso de la tanda.
+ *
+ * Se mide contra el momento en que el usuario apretó el botón y no contra el
+ * total de la cuenta: si el jugador ya tenía 1.000 partidas y Riot trajo 5
+ * nuevas, el contador arranca en "0 de 5" en vez del inútil "1.000 de 1.005".
+ * Si aparecen IDs nuevos a mitad de camino, el denominador crece para que el
+ * porcentaje nunca mienta ni pase de 100.
+ */
+export function batchProgress(input: {
+  /** Analizadas en la base ahora. */
+  detailed: number;
+  /** Conocidas en la base ahora. */
+  known: number;
+  /** Analizadas cuando empezó la tanda. */
+  baselineDetailed: number;
+  /** Pendientes cuando empezó la tanda. */
+  batchTotal: number;
+}): BatchProgress {
+  const { detailed, known, baselineDetailed, batchTotal } = input;
+
+  const analyzed = Math.max(0, detailed - baselineDetailed);
+  const pending = Math.max(0, known - detailed);
+  const total = Math.max(batchTotal, analyzed + pending);
+  const pct = total > 0 ? Math.min(100, Math.round((analyzed / total) * 100)) : 0;
+
+  return { analyzed, pending, total, pct };
 }
 
 /**

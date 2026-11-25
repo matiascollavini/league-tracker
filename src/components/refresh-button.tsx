@@ -5,13 +5,20 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { Check, Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { decideAfterRound, formatElapsed } from "@/lib/sync-progress";
+import {
+  batchProgress,
+  decideAfterRound,
+  formatElapsed,
+} from "@/lib/sync-progress";
 import type { Platform } from "@/lib/riot/config";
 
 type Props = {
   platform: Platform;
   gameName: string;
   tagLine: string;
+  /** Progreso que ya conoce el server (para saber si la tanda es larga). */
+  known: number;
+  detailed: number;
   /**
    * El perfil está al día según el server: nada pendiente, backfill recorrido y
    * la partida más nueva de Riot ya está en la base. Decide qué dice el botón.
@@ -27,6 +34,8 @@ type Props = {
  * SIN progreso, y el botón tiene que poder contarlo igual.
  */
 type SyncPayload = {
+  known?: number;
+  detailed?: number;
   done?: boolean;
   /** Confirmación del server contra Riot (`null` = no se pudo verificar). */
   upToDate?: boolean | null;
@@ -42,6 +51,18 @@ type SyncPayload = {
   unavailable?: number;
 };
 
+type SyncPhase = NonNullable<SyncPayload["phase"]>;
+
+type ProgressState = {
+  known: number;
+  detailed: number;
+  /** Analizadas cuando empezó la tanda: base del "0 de N". */
+  baselineDetailed: number;
+  /** Pendientes al empezar; el total crece si aparecen IDs nuevos. */
+  batchTotal: number;
+  phase: SyncPhase | null;
+};
+
 type State = {
   running: boolean;
   /** Error que corta la carga (rojo). */
@@ -50,7 +71,20 @@ type State = {
   notice: string | null;
   /** Partidas que Riot ya no tiene y se sacaron de la cola. */
   unavailable: number;
+  /** Progreso de la tanda en curso; null cuando no corre. */
+  progress: ProgressState | null;
 };
+
+const PHASE_LABEL: Record<SyncPhase, string> = {
+  ids: "buscando partidas",
+  details: "bajando detalles",
+  done: "verificando con Riot",
+  locked: "esperando a otro proceso",
+  throttled: "rate limit de Riot",
+};
+
+/** Debajo de esto no vale la pena una barra: es una tanda de segundos. */
+const PROGRESS_THRESHOLD = 50;
 
 /** Tope de vueltas: 60 × 30 requests = 1.800, más que el máximo real. */
 const MAX_ROUNDS = 60;
@@ -81,9 +115,11 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
  * que no queda nada, y ahí **refresca la página sola** para que el perfil, los
  * agregados y las últimas partidas se redibujen con lo nuevo.
  *
- * Mientras corre solo se muestra el botón con "Actualizando…": sin contador,
- * sin barra de progreso y sin botón de detener. Los avisos (rate limit, lock,
- * error) aparecen debajo; el avance queda guardado igual.
+ * Mientras corre se muestra el botón con "Actualizando…". Si la tanda supera
+ * las 50 partidas pendientes, además aparece una barra y el estado actual del
+ * script (buscando partidas, bajando detalles, rate limit, lock...) para que el
+ * visitante sepa cuánto falta. En tandas cortas solo se ve el botón. Los avisos
+ * (rate limit, lock, error) aparecen debajo; el avance queda guardado igual.
  *
  * La decisión de qué decir no sale de nuestra cola: una partida jugada después
  * del último sync no está ni registrada, así que el server compara contra el
@@ -93,6 +129,8 @@ export function RefreshButton({
   platform,
   gameName,
   tagLine,
+  known,
+  detailed,
   upToDate,
   unverified,
 }: Props) {
@@ -108,6 +146,7 @@ export function RefreshButton({
     error: null,
     notice: null,
     unavailable: 0,
+    progress: null,
   });
 
   // Si desmontan la página, cortamos el request en curso.
@@ -120,6 +159,12 @@ export function RefreshButton({
 
     let notice: string | null = null;
     let unavailable = 0;
+    // Progreso de esta tanda: se mide desde los números del render actual.
+    let detailedNow = detailed;
+    let knownNow = known;
+    const baselineDetailed = detailed;
+    const batchTotal = Math.max(0, known - detailed);
+    let phase: SyncPhase | null = null;
     // Vueltas seguidas sin ningún request (429/lock/deadline) y vueltas con la
     // cola drenada pero sin confirmación de Riot. Deciden cuándo rendirse.
     let stallRounds = 0;
@@ -131,6 +176,13 @@ export function RefreshButton({
         error: null,
         notice: nextNotice,
         unavailable,
+        progress: {
+          known: knownNow,
+          detailed: detailedNow,
+          baselineDetailed,
+          batchTotal,
+          phase,
+        },
       });
 
     const finish = (extra: Partial<State>) =>
@@ -139,6 +191,7 @@ export function RefreshButton({
         error: null,
         notice: null,
         unavailable,
+        progress: null,
         ...extra,
       });
 
@@ -172,6 +225,12 @@ export function RefreshButton({
         });
         return;
       }
+
+      if (typeof payload.detailed === "number") detailedNow = payload.detailed;
+      if (typeof payload.known === "number") knownNow = payload.known;
+      if (payload.phase) phase = payload.phase;
+      // Un 429 no trae phase: el carril es el rate limit.
+      if (status === 429 && !payload.phase) phase = "throttled";
 
       const roundRequests =
         typeof payload.requests === "number" ? payload.requests : 0;
@@ -263,11 +322,26 @@ export function RefreshButton({
     });
   }
 
-  const { running, error, notice, unavailable } = state;
+  const { running, error, notice, unavailable, progress: progressState } = state;
   // Una sola fuente de verdad: el server. El cliente no puede declarar
   // "Actualizado" por su cuenta (ver ADR-018).
   const isUpToDate = upToDate;
   const busy = running || isRefreshing;
+  const progress = progressState
+    ? batchProgress({
+        detailed: progressState.detailed,
+        known: progressState.known,
+        baselineDetailed: progressState.baselineDetailed,
+        batchTotal: progressState.batchTotal,
+      })
+    : null;
+  // La barra solo aparece en tandas largas: el visitante necesita saber cuánto
+  // falta, pero en una actualización de 3 partidas sería ruido.
+  const showProgress =
+    running && progress !== null && progress.total > PROGRESS_THRESHOLD;
+  const phaseLabel = progressState?.phase
+    ? PHASE_LABEL[progressState.phase]
+    : "buscando partidas";
 
   return (
     <div className="flex w-full flex-col items-start gap-1.5 sm:w-auto sm:items-end">
@@ -296,6 +370,32 @@ export function RefreshButton({
         )}
         {busy ? "Actualizando…" : isUpToDate ? "Actualizado" : "Actualizar"}
       </Button>
+
+      {showProgress && progress ? (
+        <div className="w-full min-w-[220px] space-y-1 sm:w-[280px]">
+          <div className="h-1.5 overflow-hidden rounded-full bg-soft">
+            <div
+              className="h-full rounded-full bg-primary transition-all"
+              style={{
+                width: `${Math.max(
+                  progress.pct,
+                  progress.analyzed > 0 ? 2 : 0,
+                )}%`,
+              }}
+              role="progressbar"
+              aria-valuenow={progress.pct}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-label="Avance del análisis de partidas"
+            />
+          </div>
+          <p className="tabular text-[10px] leading-snug text-muted sm:text-right">
+            {progress.analyzed} de {progress.total} analizadas · {progress.pct}%
+            {progress.pending > 0 ? ` · faltan ${progress.pending}` : ""}
+            {` · ${phaseLabel}`}
+          </p>
+        </div>
+      ) : null}
 
       {error ? (
         <p className="max-w-[280px] text-[10px] leading-snug text-loss">{error}</p>

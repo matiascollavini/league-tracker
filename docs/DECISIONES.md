@@ -954,6 +954,8 @@ aviso de "sin avance". El pedido fue que quede **solo el botón
   resumible y el avance queda en la base.
 - La regla de ADR-018 no cambia: "Actualizado" sigue dependiendo de
   `upToDate === true`.
+  *Revisado en ADR-021:* la barra vuelve **solo** cuando la tanda supera las 50
+  partidas pendientes; en tandas cortas se mantiene el botón solo.
 
 ---
 
@@ -1010,6 +1012,40 @@ El endpoint vuelve a usar la **misma caché de 30 s** de SPECTATOR-V5, no un
   para ingerir partidas terminadas, no para refrescar UI.
 - Verificado el 2026-11-25: `GET /api/en-vivo` con un puuid sin partida
   devuelve `{"live":false}` y con plataforma inválida 400.
+
+---
+
+## ADR-021 — Barra de progreso solo para tandas largas (>50 pendientes)
+
+**Estado:** aceptada · **Fecha:** 2026-11-25
+
+### Contexto
+ADR-019 dejó solo el botón "Actualizando…" para limpiar el hero. Pero en una
+cuenta con cientos de partidas pendientes el visitante no tiene forma de saber
+cuánto falta ni qué está haciendo el script en ese momento.
+
+### Decisión
+- `RefreshButton` vuelve a recibir `known`/`detailed` del server. Al arrancar
+  guarda `baselineDetailed` y `batchTotal` (los pendientes de **esa** tanda).
+- Mientras corre, si `batchTotal > 50`, muestra debajo del botón:
+  - una barra de progreso (`analyzed / total`);
+  - el texto `X de Y analizadas · Z% · faltan N · fase`.
+- La fase sale de `/api/sync`: `ids` → "buscando partidas", `details` →
+  "bajando detalles", `done` → "verificando con Riot", `locked` → "esperando a
+  otro proceso", `throttled` → "rate limit de Riot". Antes de la primera
+  respuesta dice "buscando partidas".
+- Si la tanda es de 50 o menos, no hay barra: solo el botón (ADR-019).
+- El total se mide desde el clic y crece si Riot devuelve IDs nuevos a mitad de
+  camino (`batchProgress`), así el porcentaje nunca pasa de 100 ni miente.
+- Al terminar la barra desaparece; el label final sigue saliendo de `upToDate`
+  (ADR-018).
+
+### Consecuencias
+- Las actualizaciones normales de 1-20 partidas siguen limpias.
+- Un backfill grande muestra progreso real, con la fase del momento (incluso
+  cuando está esperando el lock o el rate limit).
+- `batchProgress` vuelve a `src/lib/sync-progress.ts` con tests (tanda
+  incremental, cuenta nueva, denominador que crece, tope 100).
 
 ---
 

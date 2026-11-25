@@ -259,6 +259,8 @@ export default async function ProfilePage({
               platform={effectivePlatform}
               gameName={account.gameName ?? gameName}
               tagLine={account.tagLine ?? tagLine}
+              known={progress.known}
+              detailed={progress.detailed}
               upToDate={upToDate}
               unverified={verificationUnknown}
             />

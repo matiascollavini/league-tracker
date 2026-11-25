@@ -180,9 +180,10 @@ scripts/        verify-riot.mjs (verificación contra la API real)
   (`src/components/refresh-button.tsx`, ADR-016/017). Llama a `POST /api/sync` en
   bucle hasta que no queden pendientes: el endpoint es incremental y resumible,
   así que sube solo las partidas que faltan. Al terminar hace `router.refresh()`
-  y el perfil se redibuja solo. Ya no hay contador al lado del botón: el estado
-  es el del botón (formato de dpm.lol) y los totales quedan en el banner de
-  historial completo y en el pie.
+  y el perfil se redibuja solo. Sin contador fijo: si la tanda supera las 50
+  partidas pendientes, aparece una barra con `X de Y analizadas · % · faltan N`
+  y la fase actual (`buscando partidas`, `bajando detalles`, `rate limit`...);
+  en tandas cortas solo se ve el botón (ADR-021).
 - Ojo con el estado del botón (ADR-017 / ADR-018): `pending` y `done` solo
   miran **nuestra** cola, y una partida jugada después del último sync no está
   ni registrada. Por eso `checkNewestMatch()` (`src/lib/sync-status.ts`) compara
