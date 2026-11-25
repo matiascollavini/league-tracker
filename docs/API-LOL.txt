@@ -2,8 +2,8 @@
   REFERENCIA TECNICA — RIOT GAMES API (LEAGUE OF LEGENDS)
   Documento de trabajo para league-page
 ================================================================================
-  Versión del documento : 1.0
-  Fecha de verificación  : 2026-11-24
+  Versión del documento : 1.4
+  Fecha de verificación  : 2026-11-25 (spectator-v5 añadido ese día)
   Patch de referencia    : 16.23.1
   API keys               : todas gratuitas (dev / personal / producción)
   Estado                 : verificado PARCIALMENTE. Lo marcado [OK] se comprobó
@@ -30,6 +30,7 @@
       7.6 LOL-STATUS-V4
       7.7 Data Dragon       (estáticos: campeones, iconos, locales)
       7.8 CommunityDragon / Meraki (opcionales)
+      7.9 SPECTATOR-V5      (¿está en partida ahora?)
   8.  Modelo de datos y trampas conocidas
   9.  Recetas de código (TypeScript)
   10. Arquitectura de caché recomendada
@@ -190,6 +191,9 @@ Docs:   https://developer.riotgames.com/docs/portal
   [OK] Observado en una dev key (2026-11-24):
     x-app-rate-limit     : 100:120,20:1     (100/2min y 20/1s)
     x-method-rate-limit  : 2000:60          (summoner-v4: 2.000 por minuto)
+  [OK] Observado en la misma dev key (2026-11-25):
+    x-method-rate-limit  : 1000:60          (match-v5)
+    x-method-rate-limit  : 3000:10,180000:600  (spectator-v5, ver 7.9)
   El límite por método es MUCHO más alto que el de la app: el que te frena
   siempre va a ser el de la aplicación.
 
@@ -557,6 +561,94 @@ Documentación: https://developer.riotgames.com/docs/lol#data-dragon
     Sirve solo para un futuro "meta global", nunca para datos por jugador.
     Requiere atribución y fallback si se cae.
 
+--------------------------------------------------------------------------------
+7.9 SPECTATOR-V5 — ¿ESTÁ EN PARTIDA AHORA?         (host de PLATAFORMA)
+--------------------------------------------------------------------------------
+GET https://{platform}.api.riotgames.com/lol/spectator/v5/active-games/by-summoner/{encryptedPUUID}
+
+  [GOTCHA] El path dice "by-summoner" pero el parámetro es el PUUID (resabio de
+  spectator-v4, que usaba el summonerId cifrado).
+  [GOTCHA] Host de PLATAFORMA. Con el cluster (americas/asia/europe/sea) Riot
+  contesta 403. Verificado 2026-11-25: americas -> 403, na1/kr/la2 -> 200/404.
+  [GOTCHA] TFT NO sale por acá. Tiene su propio endpoint, con otro nombre de
+  parámetro:
+    GET /lol/spectator/tft/v5/active-games/by-puuid/{encryptedPUUID}
+  Un jugador en TFT da 404 en el endpoint de LoL.
+
+  200 -> CurrentGameInfo. Verificado el 2026-11-25 05:2x con una ranked de LA2:
+  {
+    "gameId": 1639879656,
+    "mapId": 11,
+    "gameMode": "CLASSIC",
+    "gameType": "MATCHED",
+    "gameQueueConfigId": 420,
+    "platformId": "LA2",
+    "gameStartTime": 1795594139825,        // epoch ms
+    "gameLength": 1246,                    // segundos desde el inicio
+    "participants": [                      // siempre 10
+      { "puuid": "077q-0aRX...", "teamId": 100, "championId": 50,
+        "spell1Id": 4, "spell2Id": 3, "profileIconId": 3496,
+        "riotId": "keke#6seve",            // NO documentado
+        "lastSelectedSkinIndex": 1,        // NO documentado
+        "bot": false, "gameCustomizationObjects": [],
+        "perks": { "perkIds": [8112], "perkStyle": 8100,
+                   "perkSubStyle": 8000 } }
+      // ... los otros 9
+    ],
+    "bannedChampions": [ { "championId": 51, "teamId": 100, "pickTurn": 1 } ],
+    "observers": { "encryptionKey": "85LJ...4+EO" }
+  }
+
+  404 -> {"httpStatus":404,"errorCode":"NOT_FOUND","message":"Not Found",
+          "implementationDetails":"filtered"}
+       Es el caso NORMAL ("no está jugando"), no un error. NO parsear el body:
+       la doc avisa que el cuerpo del error no es contrato. Ramificar por
+       status code.
+  400 -> el valor no es un puuid válido:
+         {"status":{"message":"Bad Request - Exception decrypting abc",
+                    "status_code":400}}
+  403 -> host regional en vez de plataforma, o key vencida (dev key >24 h).
+
+  Reglas de parseo (documentadas o verificadas):
+  - Riot omite los campos en cero -> `gameLength` y `gameStartTime` pueden NO
+    venir si la partida recién arranca. La UI no puede asumir que están.
+  - `participants[].puuid` puede ser null en cuentas anonimizadas (doc).
+  - `perks.perkIds` trajo 1 solo id en la muestra real (no las 6 runas).
+  - `bannedChampions[].championId: -1` = sin ban (deducido del patrón de
+    pickTurn, no está documentado).
+  - `riotId` ahorra un account-v1, pero no es contrato: best-effort. Los
+    nombres propios salen de nuestra tabla `accounts` por puuid.
+
+  Rate limit (headers reales de la dev key, 2026-11-25):
+    X-App-Rate-Limit    : 100:120,20:1
+    X-Method-Rate-Limit : 3000:10,180000:600   (Riot no lo publica)
+  El que manda sigue siendo el de la app (20/s, 100/2min).
+
+  Caché y costo:
+  - Es el único dato del sitio que es tiempo real: NO puede venir del
+    ingest/worker. Se pide en el render del perfil con revalidate 60.
+  - **El reloj no cuesta requests**: `gameStartTime` es un epoch en ms, así que
+    el chip lo sigue contando en el browser con un `setInterval` de 1 s
+    (`liveClockSeconds` en `src/lib/live.ts`). Nada de polling a Riot: la única
+    llamada es la del render, cuando vence la caché.
+    El conteo arranca con el valor del server y, si el absoluto
+    (`ahora - gameStartTime`) se aleja más de 10 min de ese valor, cae a
+    "base + tiempo desde el montaje": así un navegador con la hora mal no rompe
+    el reloj, y un HTML servido 90 s tarde desde la caché igual se corrige.
+  - Un perfil caliente = 1 request por jugador por minuto. Con dev key
+    (100/2min) alcanza para ~50 jugadores distintos simultáneos.
+  - El perfil puede tener varios puuids (Riot los reasigna): se consultan hasta
+    2 y se corta en el primero que devuelve 200.
+  - 404 -> null y cualquier otro error también: si Riot limita o la key venció,
+    el perfil se dibuja sin badge. Nunca se rompe la página por este dato.
+
+  Lo que este endpoint NO da:
+  - No es la Spectator Grid: no hay kills, oro ni puntaje en vivo. Eso necesita
+    la `encryptionKey` y un cliente spectator (fuera de alcance).
+  - El `gameId` es el sufijo numérico del matchId futuro
+    (`LA2_1639879656`), pero hasta que la partida termina y Riot la procesa,
+    match-v5 no la devuelve [UNVERIFIED: no medido].
+
 ================================================================================
 8. MODELO DE DATOS Y TRAMPAS CONOCIDAS
 ================================================================================
@@ -806,6 +898,11 @@ solo puede ser privado/demo.
   | Refresh incremental con 3 partidas nuevas| 1 + 3 = 4            |
   | Backfill completo (10 páginas + 1000)    | 1 + 10 + 1000 = 1011 |
   | Segundo usuario abre el mismo perfil     | 1 + 0 (ya cacheadas) |
+  | Chip "en partida ahora" (spectator)      | 1 (2 si hay dos puuids) |
+
+  El chip de spectator es el único que no se puede cachear largo: con
+  revalidate 60, un jugador activo cuesta 1 call/min mientras alguien mire su
+  perfil. 100/2min de la dev key -> ~50 jugadores distintos a la vez.
 
   Throughput:
   - dev/personal: 20/1s + 100/2min = 0,83 rps sostenidos.
@@ -827,6 +924,7 @@ solo puede ser privado/demo.
        TAMBIÉN: host equivocado (plataforma vs regional) o path inexistente
        -> si el resto anda y una ruta da 403, sospechá del host/path primero
   404  recurso no encontrado (puuid sin partidas, matchId inexistente)
+       En spectator-v5 es el caso NORMAL: "no está en partida" (7.9).
   415  Content-Type incorrecto (solo en POST)
   429  rate limit -> leer Retry-After + X-Rate-Limit-Type
   500  error interno de Riot -> backoff y reintentar
@@ -911,6 +1009,7 @@ Fuentes: https://developer.riotgames.com/policies/general  (rev. 2025-05-29)
   [ ] Deploy con dominio propio y aplicar production key
   [ ] Manejo de estados: "analizando", "sin partidas", "cuenta no encontrada",
       "servicio de Riot caído"
+  [ ] Chip "en partida ahora" con SPECTATOR-V5 (7.9), opcional y degradable
 
 ================================================================================
 15. FUENTES
@@ -925,6 +1024,8 @@ Fuentes: https://developer.riotgames.com/policies/general  (rev. 2025-05-29)
   Referencia MATCH     https://developer.riotgames.com/api-details/match-v5
   Referencia LEAGUE    https://developer.riotgames.com/api-details/league-v4
   Referencia MASTERY   https://developer.riotgames.com/api-details/champion-mastery-v4
+  Referencia SPECTATOR https://developer.riotgames.com/api-details/spectator-v5
+  Referencia TFT       https://developer.riotgames.com/api-details/spectator-tft-v5
   Data Dragon          https://developer.riotgames.com/docs/lol#data-dragon
   Colas (queueId)      https://static.developer.riotgames.com/docs/lol/queues.json
   Retención de datos   https://www.riotgames.com/en/DevRel/match-history-retention-Change
@@ -957,6 +1058,15 @@ Fuentes: https://developer.riotgames.com/policies/general  (rev. 2025-05-29)
   - Si un PUUID es compartido entre distintos juegos de Riot.
   - Período de retención de datos exigido al desarrollador (no publicado).
   - APIs privadas/partner en U.GG, Mobalytics, LeagueOfGraphs, DeepLoL.
+  - SPECTATOR-V5 (7.9): el method rate limit de una production key (el
+    3000:10,180000:600 está medido con dev key y Riot no lo publica).
+  - SPECTATOR-V5: si devuelve 200 desde la champ select/lobby o recién cuando
+    la partida arranca de verdad. La doc no lo dice; nuestro corte observado fue
+    una partida ya en curso (gameLength > 0).
+  - SPECTATOR-V5: cobertura de ARAM, custom y modos rotativos (la muestra fue
+    una sola ranked soloQ).
+  - SPECTATOR-V5: si el `gameId` resuelve en match-v5 apenas termina la
+    partida o hay demora de procesamiento.
 
 ================================================================================
 17. CHANGELOG
@@ -1002,6 +1112,16 @@ Fuentes: https://developer.riotgames.com/policies/general  (rev. 2025-05-29)
                     - count=101 -> 400, count=0 -> [] se mantienen.
                     - Historial observado: ~473 partidas en 5 páginas. Sigue
                       pendiente medir el tope real: esta cuenta no llega a ~1.000.
+  2026-11-25  v1.4  Nueva §7.9 SPECTATOR-V5 (¿está en partida ahora?):
+                    - Ruta, host de plataforma (403 con el cluster), 404 = no
+                      está jugando, 400 con puuid inválido.
+                    - Method rate limit observado: 3000:10,180000:600.
+                    - `riotId` y `lastSelectedSkinIndex` vienen pero NO están
+                      documentados; `gameLength`/`gameStartTime` se omiten si
+                      valen 0.
+                    - TFT usa otro endpoint (`spectator-tft-v5`, `by-puuid`).
+                    - Implementado en src/lib/riot/spectator.ts + chip en el
+                      perfil; 404 y cualquier error degradan a "sin badge".
 
 ================================================================================
 18. VERIFICACIÓN EMPÍRICA (ejecutada el 2026-11-24 con dev key)

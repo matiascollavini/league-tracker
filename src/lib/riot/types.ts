@@ -63,6 +63,41 @@ const ParticipantSchema = z.object({
 });
 export type Participant = z.infer<typeof ParticipantSchema>;
 
+/**
+ * SPECTATOR-V5: partida en curso (`CurrentGameInfo`).
+ *
+ * [GOTCHA] Riot omite los campos en cero: `gameLength` y `gameStartTime` pueden
+ * NO venir si la partida recién arranca. Nada de esto es requerido.
+ * [GOTCHA] `participants[].riotId` y `lastSelectedSkinIndex` vienen en la
+ * respuesta real pero NO figuran en la doc: se usan como best-effort, nunca
+ * como identidad (la identidad es el `puuid`, que además puede ser null en
+ * cuentas anonimizadas).
+ */
+export const ActiveGameParticipantSchema = z.object({
+  puuid: z.string().nullable().optional(),
+  championId: z.number().optional(),
+  teamId: z.number().optional(),
+  riotId: z.string().optional(),
+  profileIconId: z.number().optional(),
+  spell1Id: z.number().optional(),
+  spell2Id: z.number().optional(),
+  bot: z.boolean().optional(),
+});
+export type ActiveGameParticipant = z.infer<typeof ActiveGameParticipantSchema>;
+
+export const ActiveGameSchema = z.object({
+  gameId: z.number().optional(),
+  gameMode: z.string().optional(),
+  gameType: z.string().optional(),
+  mapId: z.number().optional(),
+  gameQueueConfigId: z.number().optional(),
+  gameStartTime: z.number().optional(),
+  gameLength: z.number().optional(),
+  platformId: z.string().optional(),
+  participants: z.array(ActiveGameParticipantSchema).default([]),
+});
+export type ActiveGame = z.infer<typeof ActiveGameSchema>;
+
 export const MatchSchema = z.object({
   metadata: z.object({
     matchId: z.string(),

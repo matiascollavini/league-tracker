@@ -14,6 +14,8 @@ type HeroProps = {
   iconId: number | null;
   version: string;
   demo: boolean;
+  /** Chip de "en partida ahora" (SPECTATOR-V5). Opcional: si Riot no responde, no hay. */
+  live?: React.ReactNode;
   /** Barra de tabs (filtro por cola), pegada abajo como en dpm. */
   tabs?: React.ReactNode;
 };
@@ -44,6 +46,7 @@ export function ProfileHero({
   iconId,
   version,
   demo,
+  live,
   tabs,
 }: HeroProps) {
   return (
@@ -91,6 +94,7 @@ export function ProfileHero({
                 <FlaskConical className="size-2.5" aria-hidden /> demo
               </span>
             ) : null}
+            {live}
           </div>
         </div>
       </div>

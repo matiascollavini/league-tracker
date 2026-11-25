@@ -5,6 +5,7 @@ import { AlertTriangle, ArrowLeftRight, CheckCircle2, Info } from "lucide-react"
 import { ChampionPool } from "@/components/champion-pool";
 import { ChampionTable } from "@/components/champion-table";
 import { ChampionPicks } from "@/components/champion-picks";
+import { LiveBadge } from "@/components/live-badge";
 import { MatchList } from "@/components/match-list";
 import { Pagination } from "@/components/pagination";
 import { ProfileHero, RankSummary } from "@/components/profile-header";
@@ -26,14 +27,16 @@ import {
   isPlatform,
   isQueueFilter,
   PLATFORM_LABEL,
+  queueLabel,
   queuesFor,
   QUEUE_FILTERS,
   type Platform,
   type QueueFilterId,
 } from "@/lib/riot/config";
-import { getChampionCatalog } from "@/lib/ddragon/champions";
+import { championIconUrl, getChampionCatalog } from "@/lib/ddragon/champions";
 import { MissingApiKeyError, RiotApiError } from "@/lib/riot/http";
 import { analyzeCount } from "@/lib/riot/matches";
+import { elapsedSeconds, findActiveGame } from "@/lib/riot/spectator";
 import { groupTeams, toPanelPlayer, type PanelTeam } from "@/lib/riot/panel";
 import { profileHref } from "@/lib/links";
 import { decodeParam } from "@/lib/params";
@@ -117,7 +120,18 @@ export default async function ProfilePage({
     complete,
   } = profile;
 
-  const catalog = await getChampionCatalog();
+  // El catálogo (Data Dragon) y la partida en curso (SPECTATOR-V5) son
+  // independientes: van en paralelo. `findActiveGame` nunca tira: si Riot
+  // limita o la key venció, simplemente no hay badge.
+  const [catalog, live] = await Promise.all([
+    getChampionCatalog(),
+    findActiveGame(playerPuuids, effectivePlatform),
+  ]);
+  const liveGame = live?.game ?? null;
+  const liveChampion =
+    liveGame?.championId === null || liveGame?.championId === undefined
+      ? null
+      : (catalog.byKey.get(liveGame.championId) ?? null);
   const demo = source === "demo";
   // championName de Riot -> nombre localizado ("Kaisa" -> "Kai'Sa")
   const names: Record<string, string> = Object.fromEntries(
@@ -212,6 +226,30 @@ export default async function ProfilePage({
         iconId={summoner?.profileIconId ?? null}
         version={catalog.version}
         demo={demo}
+        live={
+          liveGame ? (
+            <LiveBadge
+              // El chip cuenta el reloj en el cliente desde estos dos datos:
+              // no hace falta ningún request extra a Riot.
+              startedAt={liveGame.startedAt}
+              base={elapsedSeconds(liveGame)}
+              queueLabel={
+                liveGame.queueId === null ? null : queueLabel(liveGame.queueId)
+              }
+              champion={
+                liveChampion
+                  ? {
+                      name: liveChampion.name,
+                      iconUrl: championIconUrl(
+                        catalog.version,
+                        liveChampion.id,
+                      ),
+                    }
+                  : null
+              }
+            />
+          ) : null
+        }
         tabs={
           <nav
             aria-label="Filtrar por cola"

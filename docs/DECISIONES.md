@@ -650,7 +650,66 @@ La cobertura mejora con el worker: cada partida nueva suma 10 cuentas.
 
 ---
 
-## Pendientes (no decididos todavía)
+## ADR-015 — Chip "en partida ahora" con SPECTATOR-V5
+
+**Estado:** aceptada · **Fecha:** 2026-11-25
+
+### Contexto
+El operador preguntó si se puede ver si el jugador del perfil está en una
+partida en vivo. **Sí**: `SPECTATOR-V5` expone
+`GET /lol/spectator/v5/active-games/by-summoner/{puuid}`. Verificado en vivo el
+2026-11-25 con la dev key: `200` con los 10 participantes para un jugador que
+estaba jugando y `404` para los que no.
+
+Es el **único dato del sitio que es tiempo real**: no puede venir del ingest ni
+del worker, porque tiene que pedirse en el render.
+
+### Decisión
+Chip opcional en el hero del perfil (`En partida · Solo/Duo · 24:46 · Swain`),
+resuelto en el server, con estas reglas:
+
+1. **Host de plataforma** (`{platform}.api.riotgames.com`). Con el cluster Riot
+   devuelve 403 (verificado). Encaja en `RiotTarget` como `{ platform }`.
+2. **`revalidate: 60`**: el badge puede quedar hasta un par de minutos viejo
+   (lo acota también el `revalidate` de la página). Preferible a un endpoint
+   propio + polling del cliente: cero JS extra y cero fan-out por page view.
+3. **404 = `null`, no error**; cualquier otro fallo también degrada a "sin
+   badge". `getActiveGame()` es honesto (404→null, 429/5xx tira) y
+   `findActiveGame()` es el que se traga todo para no romper el perfil.
+4. **Tope de 2 puuids** por visita (ADR-010: Riot reasigna puuids), cortando en
+   el primero que devuelve 200. Al primer error se corta la visita entera: si
+   Riot está limitando, no insistimos.
+5. **No se usa `riotId`** como identidad: viene en la respuesta pero **no está
+   documentado** (`httpStatus`/`errorCode` sí lo está; `riotId` y
+   `lastSelectedSkinIndex` no). El nombre visible sale de nuestro índice
+   `accounts` y el campeón de Data Dragon por `championId`.
+6. **Reloj**: lo cuenta el **browser**, no el server. El chip recibe
+   `startedAt` (epoch de `gameStartTime`) + `base` (segundos que calculó el
+   server) y avanza con un `setInterval` de 1 s: cero requests, cero polling a
+   Riot. Los helpers puros viven en `src/lib/live.ts` para que el client
+   component no arrastre `http.ts` al bundle.
+   Si el absoluto (`ahora - startedAt`) se aleja >10 min de `base`, cae a
+   `base + tiempo desde el montaje` (navegador con hora mal) y si Riot omitió
+   ambos campos (partida recién creada) el chip sale sin reloj. Pasadas 3 h se
+   esconde: no es una partida, es un dato viejo.
+
+### Consecuencias
+- Costo: 1–2 requests por perfil caliente por minuto (~50 jugadores distintos
+  simultáneos con la dev key). Documentado en `docs/API-LOL.txt` §11 y §7.9.
+- Cobertura: solo LoL. Un jugador en TFT da 404 (TFT usa `spectator-tft-v5` con
+  `by-puuid`), así que el chip significa "en una partida de LoL".
+- El `gameId` es el sufijo del futuro matchId (`LA2_<gameId>`), pero no se linkea
+  todavía: no está medido cuándo lo resuelve match-v5 (queda en §16 UNVERIFIED).
+- Tests: `src/lib/riot/spectator.test.ts` (13 casos) con el payload real del
+  200 y el 404, el mapeo puro, el reloj y la degradación.
+
+### Fuentes (consultadas 2026-11-25)
+- `developer.riotgames.com/api-details/spectator-v5` (bloque AJAX real; el HTML
+  de `/apis` no trae la tabla) y `.../api-details/spectator-tft-v5`.
+- `developer.riotgames.com/docs/lol` (platform routing) y `.../docs/portal`
+  (rate limiting: no publica el límite por método).
+- Curl propio: `200`/`404`/`403`/`400` en `la2`, `na1`, `kr`, `me1`, `americas`.
+
 
 - [x] Persistencia + ingesta (fase 2): SQLite/Turso con backfill resumible.
 - [x] Cron de ingesta en GitHub Actions (`.github/workflows/worker.yml`).
@@ -666,6 +725,8 @@ La cobertura mejora con el worker: cada partida nueva suma 10 cuentas.
       índice propio de cuentas (`accounts`, esquema v5) + `GET /api/buscar`.
       Riot no tiene search de invocadores, así que sugiere cuentas ya indexadas
       (participantes de partidas guardadas + perfiles visitados).
+- [x] "En partida ahora": hecho el 2026-11-25 (ADR-015) con SPECTATOR-V5.
+      Chip opcional en el perfil, caché de 60 s, 404 degrado sin romper nada.
 - [ ] Páginas de comparación / ranking global (necesitaría Meraki `championrates`).
 - [ ] Gráficos (Recharts candidato).
 - [ ] Tests: unitarios del agregador + smoke test contra API real con mock de fixtures.

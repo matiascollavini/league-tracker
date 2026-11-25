@@ -161,6 +161,14 @@ scripts/        verify-riot.mjs (verificación contra la API real)
   el dueño del perfil no se linkea a sí mismo para no perder los filtros. Sin
   Riot ID guardado (`riot_id` null) el nombre queda como texto, no como link roto.
 
+- El perfil muestra un chip **"En partida"** si el jugador está jugando ahora
+  (`src/lib/riot/spectator.ts` → SPECTATOR-V5, ADR-015 / `docs/API-LOL.txt` §7.9).
+  Es el único dato en tiempo real: se pide en el render con `revalidate: 60`, el
+  `404` es el caso normal (no está jugando) y cualquier error deja el perfil sin
+  chip. Host de **plataforma**; solo cubre LoL (TFT tiene su propio endpoint).
+  El **reloj avanza solo en el browser** desde `gameStartTime` (`src/lib/live.ts`):
+  ningún request extra ni polling.
+
 ---
 
 ## 5. Historial
