@@ -1,8 +1,3 @@
-Opens in a new window Opens an external website Opens an external website in a new window
-This website utilizes technologies such as cookies to enable essential site functionality, as well as for analytics, personalization, and targeted advertising. To learn more, view the following link:  [Privacy Notice](https://www.riotgames.com/en/privacy-notice)
-Manage Preferences 
-Close this consent banner
-Storage Preferences 
 [![](https://static.developer.riotgames.com/img/logo.png)](https://developer.riotgames.com/)
   * [APIs](https://developer.riotgames.com/apis)
   * Docs
