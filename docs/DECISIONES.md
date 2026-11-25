@@ -795,6 +795,11 @@ GET /lol/match/v5/matches/by-puuid/{puuid}/ids?start=0&count=1
 - `upToDate = !hasNewMatches && sin pendientes && backfill recorrido`. Es lo que
   decide el label: **"Actualizado"** vs **"Actualizar"** (formato de dpm.lol,
   que muestra "Update now" / "Up to date").
+  [CORREGIDO EN ADR-018] Comparar contra la tabla `matches` era demasiado
+  optimista (la partida puede estar guardada por otra persona) y el loop del
+  cliente podía cerrar sin consultar a Riot. La definición vigente es
+  `checkNewestMatch()` + `isMatchLoadedForPuuids()`, y `isSettledAfterRound`
+  fue reemplazado por `decideAfterRound`.
   [NOTA] La forma exacta del botón de dpm (medidas, colores, textos de los
   estados intermedios) quedó **UNVERIFIED**: su perfil devuelve 403 a curl y un
   crawl con browser se cortaba por navegaciones de la SPA. Lo único verificado
@@ -823,6 +828,90 @@ trae nada y ya no tiene pendientes termina y refresca.
 - Tests: `isSettledAfterRound` (4 casos) en `src/lib/sync-progress.test.ts`.
 - Verificado en vivo: `keke#6seve` -> "Actualizar" (ID nuevo ausente);
   `Carlos#RHLMC` -> "Actualizado" (su ID más nuevo **sí** está en la base).
+
+---
+
+## ADR-018 — "Actualizado" solo con confirmación de Riot (fin del ida y vuelta)
+
+**Estado:** aceptada · **Fecha:** 2026-11-25
+
+### Contexto (el ida y vuelta)
+En `Carlos#RHLMC` el botón decía **"Actualizar"** al entrar, al apretarlo decía
+**"Actualizado"** y al recargar volvía a **"Actualizar"**. No era un problema
+de datos: la base tenía 473/473 partidas y el backfill en `done`.
+
+Se reprodujo con datos reales. La partida más nueva era `LA2_1639441889`:
+
+1. Se borró el link de esa partida para el jugador (la base quedó 472/472) y el
+   perfil dijo "Actualizar" (correcto: Riot tenía algo no cargado).
+2. Se puso el lock de sync y se llamó `POST /api/sync`. El server devolvió
+   `{"done":false,"requests":0,"skipped":true,"phase":"locked"}`.
+3. El cliente calculaba `pending = known - detailed = 0` y `newIds = 0` y
+   `isSettledAfterRound` devolvía `true`: decía "Actualizado" **sin haber
+   consultado a Riot**. Al recargar, el perfil volvía a "Actualizar".
+
+Lo mismo pasaba con un `429`, con un `RiotDeadlineError` (sin turno en el
+rate limit) y con cualquier vuelta que no hiciera ningún request. Con la dev
+key (100 requests/2 min) es fácil de encontrar: la propia visita del perfil
+gasta varios requests y la verificación puede quedar frenada.
+
+Había dos causas más, del mismo tipo:
+
+- `loadProfile` comparaba el ID más nuevo contra la tabla **`matches`**, que es
+  compartida. Si otra persona ya había bajado esa partida, contaba como
+  "cargada" aunque este jugador no tuviera ni el link ni su participante.
+- El label tenía **dos fuentes de verdad**: el prop `upToDate` del server y un
+  `settledFor` local que el cliente prendía al cortar el loop. Si el refresh
+  posterior no cambiaba la firma de los props, el "Actualizado" local tapaba
+  un `false` del server.
+
+### Decisión
+**Una sola definición de "al día" y una sola fuente de verdad.**
+
+1. `src/lib/sync-status.ts` → `checkNewestMatch(puuids, platform, { deadline })`.
+   Pide el ID más nuevo a Riot (1 request, cache 45 s) y lo compara con
+   `isMatchLoadedForPuuids` (`src/lib/db/matches.ts`), que exige el link del
+   jugador **y** su fila en `match_participants`. La usan `loadProfile` y
+   `syncPuuid`, así el render y `/api/sync` no pueden discrepar.
+2. `syncPuuid` devuelve `upToDate: boolean | null` además de `done`. `done`
+   sigue significando "nuestra cola está drenada"; `upToDate` es la
+   verificación contra Riot. `null` = no se pudo verificar (429/5xx/timeout/
+   sin presupuesto): no se afirma nada.
+3. El cliente **solo** declara "Actualizado" con `upToDate === true`.
+   `decideAfterRound` (`src/lib/sync-progress.ts`) reemplaza a
+   `isSettledAfterRound`:
+   - confirma → `settle`;
+   - cola drenada sin confirmación → reintenta la verificación (máx. 3);
+   - Riot confirma que hay una partida nueva: reintenta 1 vez (puede ser una
+     partida jugada durante la vuelta); si sigue sin cargarse, `stop` honesto;
+   - 5 vueltas seguidas sin ningún request (429/lock/deadline) → `stop`
+     honesto.
+   Se fue el `settledFor`: el label sale del prop del server, sin excepciones.
+4. `router.refresh()` va dentro de `useTransition`: mientras trae los props
+   frescos el botón sigue en "Actualizando…" y no parpadea con el label viejo.
+5. La verificación usa la **misma ventana de 2 años** que el ingest
+   (`startTime`) y redondea el `since` al día para que la URL no cambie en cada
+   vista (si cambiara segundo a segundo, el cache de `fetch` no acertaría
+   nunca).
+6. Si la verificación falla, `loadProfile` sigue con `upToDate: false`
+   (conservador, como pedía ADR-017) pero agrega `verificationUnknown: true`:
+   la UI muestra una nota de "no pude verificar con Riot" en vez de un
+   "Actualizar" seco.
+
+### Consecuencias
+- El botón ya no puede decir "Actualizado" por una vuelta que no habló con
+  Riot. Un lock, un 429 o un deadline dejan el botón en "Actualizar" con un
+  aviso, no en un estado falso.
+- Si Riot no responde, el perfil no miente: dice que no pudo verificar. La
+  próxima vista (o el botón) reintenta.
+- `upToDate` ahora es estrictamente "Riot no tiene nada más nuevo **para este
+  jugador**", no "la partida existe en la tabla compartida".
+- Tests: `decideAfterRound` en `src/lib/sync-progress.test.ts` (6 casos,
+  incluido el regression: `done:false` + `requests:0` **no** termina).
+- Verificado en vivo el 2026-11-25 con `Carlos#RHLMC`: sync normal devuelve
+  `done:true, upToDate:true`; con el lock puesto devuelve
+  `done:false, upToDate:null, requests:0`, que ahora el cliente trata como
+  "seguir/reintentar" y nunca como "Actualizado".
 
 ---
 

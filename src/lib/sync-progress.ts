@@ -54,23 +54,76 @@ export function batchProgress(input: {
 }
 
 /**
- * ¿Ya no queda nada que traer después de esta vuelta?
+ * Qué hacer después de una vuelta de `/api/sync`.
  *
- * Tres formas de terminar:
- *  - `done`: el server ya recorrió todo el historial y no quedan pendientes.
- *  - Sin IDs nuevos y sin detalles pendientes: la partida más nueva de Riot ya
- *    está cargada, así que seguir es gastar cupo en nada.
+ * El bug que esto evita: una vuelta que **no hizo ningún request** (429, lock
+ * de otro proceso, deadline) devolvía `done: false` y los contadores locales
+ * seguían en `pending = 0` / `newIds = 0`; el cliente lo tomaba como "listo" y
+ * decía "Actualizado" sin haber consultado a Riot. Al recargar, el perfil
+ * volvía a decir "Actualizar" (la partida nueva seguía sin cargar).
  *
- * Ojo: NO alcanza con `pending === 0`. Una partida jugada después del último
- * sync no está ni en nuestra cola, así que el contador de pendientes puede dar
- * cero mientras Riot tiene partidas nuevas (`newIds` viene de comparar el
- * `known` de la vuelta anterior con el de ésta).
+ * Regla: **no se declara al día sin que Riot lo confirme** (`upToDate: true`).
+ * Si la cola está drenada pero no hubo confirmación, se reintenta la
+ * verificación unas pocas veces; si Riot directamente dice que hay una partida
+ * nueva que no pudimos cargar (`upToDate: false`), no tiene sentido seguir.
  */
-export function isSettledAfterRound(input: {
+export type RoundDecision =
+  | { action: "settle" }
+  | { action: "retry"; notice: string }
+  | { action: "stop"; notice: string }
+  | { action: "continue" };
+
+export function decideAfterRound(input: {
+  /** La cola local quedó drenada (backfill + detalles). */
   done: boolean;
-  pending: number;
-  newIds: number;
-}): boolean {
-  if (input.done) return true;
-  return input.pending === 0 && input.newIds === 0;
+  /** Confirmación contra Riot: true/false verificado, null/undefined sin prueba. */
+  upToDate: boolean | null | undefined;
+  /** Vueltas seguidas sin hacer ningún request a Riot (429, lock, deadline). */
+  stallRounds: number;
+  /** Vueltas seguidas con la cola drenada pero sin confirmación de Riot. */
+  unverifiedRounds: number;
+}): RoundDecision {
+  if (input.upToDate === true) return { action: "settle" };
+
+  if (input.done) {
+    if (input.upToDate === false) {
+      // Puede ser una partida jugada mientras corría la vuelta (la próxima
+      // página 0 la trae) o una que Riot ya no entrega. Un reintento alcanza
+      // para distinguirlas.
+      if (input.unverifiedRounds < 2) {
+        return {
+          action: "retry",
+          notice:
+            "Riot reporta una partida más nueva: reintento para cargarla.",
+        };
+      }
+      return {
+        action: "stop",
+        notice:
+          "Riot tiene una partida más nueva que no pudimos cargar (puede que ya no esté disponible). El perfil queda con pendientes.",
+      };
+    }
+    if (input.unverifiedRounds >= 3) {
+      return {
+        action: "stop",
+        notice:
+          "La cola está vacía, pero Riot no nos dejó confirmar si hay partidas nuevas. Probá de nuevo en un par de minutos.",
+      };
+    }
+    return {
+      action: "retry",
+      notice:
+        "La cola está vacía: falta que Riot confirme que no hay partidas nuevas.",
+    };
+  }
+
+  if (input.stallRounds >= 5) {
+    return {
+      action: "stop",
+      notice:
+        "Riot no nos dio turno en varias vueltas (rate limit, otro proceso o sin tiempo). No pude confirmar el estado; probá de nuevo en un par de minutos.",
+    };
+  }
+
+  return { action: "continue" };
 }

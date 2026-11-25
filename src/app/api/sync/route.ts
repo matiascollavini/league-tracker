@@ -78,6 +78,10 @@ export async function POST(request: Request) {
       detailed: result.progress.detailed,
       known: result.progress.known,
       done: result.done,
+      // La única respuesta que puede hacer que el botón diga "Actualizado":
+      // cola drenada **y** partida más nueva de Riot ya cargada. `null` = no se
+      // pudo verificar, así que el cliente no afirma nada y reintenta.
+      upToDate: result.upToDate,
       requests: result.requests,
       // Si el bucket cortó la vuelta (en la fase que sea), la fase que le
       // importa al cliente es "throttled": no es un lock ni un error.
@@ -98,6 +102,7 @@ export async function POST(request: Request) {
       return NextResponse.json({
         ok: true,
         done: false,
+        upToDate: null,
         phase: "throttled",
         requests: 0,
         retryAfterMs: Math.min(120_000, error.retryAfterMs || 5_000),

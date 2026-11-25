@@ -907,6 +907,12 @@ solo puede ser privado/demo.
   se va en IDs y en reintentos). Con dev key son ~15 s por vuelta y ~27
   partidas: 500 pendientes = ~19 vueltas (~5 min) con la luna girando.
 
+  La verificación de "¿hay partidas nuevas?" (ADR-018) usa el mismo
+  `startTime` de 2 años que el ingest, redondeado al día para que la URL no
+  cambie en cada vista y el cache de 45 s acierte. La última vuelta de
+  /api/sync agrega 1 request para confirmar `upToDate` (si no queda
+  presupuesto, devuelve `null` y el cliente no afirma "Actualizado").
+
   El chip de spectator es el único que no se puede cachear largo: con
   revalidate 60, un jugador activo cuesta 1 call/min mientras alguien mire su
   perfil. 100/2min de la dev key -> ~50 jugadores distintos a la vez.

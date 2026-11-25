@@ -10,10 +10,11 @@ vi.mock("@/lib/riot/matches", () => ({
   historyWindowStart: () => 0,
   getMatchIdsPage: vi.fn(),
   getMatch: vi.fn(),
+  getNewestMatchId: vi.fn(),
 }));
 
 import { RiotApiError, RiotDeadlineError } from "@/lib/riot/http";
-import { getMatch, getMatchIdsPage } from "@/lib/riot/matches";
+import { getMatch, getMatchIdsPage, getNewestMatchId } from "@/lib/riot/matches";
 import type { Match, Participant } from "@/lib/riot/types";
 import { closeDb, ensureSchema } from "./db/client";
 import {
@@ -203,11 +204,23 @@ describe("syncPuuid — cuentas ya completas", () => {
     expect(second.done).toBe(false); // faltan detalles: es correcto
     expect((await getSyncState(PUUID_COMPLETE))?.backfillState).toBe("done");
 
-    // 3) Cuando se bajan los detalles, vuelve a cerrar en done.
+    // 3) Cuando se bajan los detalles, vuelve a cerrar en done. La verificación
+    //    contra Riot dice que la más nueva ya está cargada.
+    vi.mocked(getNewestMatchId).mockResolvedValue("C000");
     const third = await syncPuuid(PUUID_COMPLETE, "la2", { budget: 200 });
     expect(third.progress).toEqual({ known: 100, detailed: 100 });
     expect(third.done).toBe(true);
+    expect(third.upToDate).toBe(true);
     expect(third.phase).toBe("done");
+  });
+
+  it("si Riot devuelve una partida que no está cargada, upToDate es false", async () => {
+    vi.mocked(getMatchIdsPage).mockResolvedValue([]);
+    vi.mocked(getNewestMatchId).mockResolvedValue("NO-ESTA");
+    const result = await syncPuuid(PUUID_COMPLETE, "la2", { budget: 10 });
+
+    expect(result.done).toBe(true);
+    expect(result.upToDate).toBe(false);
   });
 });
 
@@ -244,6 +257,7 @@ describe("syncPuuid — lock cooperativo", () => {
     expect(result.skipped).toBe(true);
     expect(result.phase).toBe("locked");
     expect(result.requests).toBe(0);
+    expect(result.upToDate).toBeNull();
     expect(result.lockForMs).toBeGreaterThan(0);
     expect(getMatchIdsPage).not.toHaveBeenCalled();
     expect(getMatch).not.toHaveBeenCalled();

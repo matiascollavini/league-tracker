@@ -52,20 +52,29 @@ export async function getMatchIdsPage(
  * registrada, así que el perfil decía "al día" mientras Riot tenía partidas
  * más nuevas. Cache corto (45 s): la respuesta cambia con cada partida.
  *
+ * Usa la misma ventana que el ingest (`startTime`, 2 años) para no exigir una
+ * partida que el sync nunca va a bajar. El `since` se redondea **hacia
+ * adelante** al día: así la verificación nunca pide una partida del borde que
+ * el ingest (ventana exacta) dejaría afuera, y la URL no cambia en cada vista
+ * (si cambiara segundo a segundo, el cache de `fetch` no acertaría nunca).
+ *
  * Devuelve null si el jugador no tiene partidas (o Riot responde 404).
  */
 export async function getNewestMatchId(
   puuid: string,
   platform: Platform,
+  deadline?: number,
 ): Promise<string | null> {
   if (isMockMode()) return mockMatches()[0]?.metadata.matchId ?? null;
 
+  const since = Math.ceil(historyWindowStart() / 86_400) * 86_400;
   const ids = await riotFetch(
-    `/lol/match/v5/matches/by-puuid/${puuid}/ids?start=0&count=1`,
+    `/lol/match/v5/matches/by-puuid/${puuid}/ids?start=0&count=1&startTime=${since}`,
     {
       cluster: clusterFor(platform),
       revalidate: 45,
       schema: MatchIdsSchema,
+      deadline,
     },
   ).catch((error: unknown) => {
     // 404 = el jugador no tiene partidas. No es un error de la página.

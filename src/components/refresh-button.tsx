@@ -1,14 +1,14 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { AlertTriangle, Check, Loader2, RefreshCw, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
   batchProgress,
+  decideAfterRound,
   formatElapsed,
-  isSettledAfterRound,
 } from "@/lib/sync-progress";
 import type { Platform } from "@/lib/riot/config";
 
@@ -24,6 +24,9 @@ type Props = {
    * la partida más nueva de Riot ya está en la base. Decide qué dice el botón.
    */
   upToDate: boolean;
+  /** El server no pudo comparar contra Riot (429/5xx): `upToDate` es false por
+   * precaución, no porque haya partidas nuevas. Se explica en la UI. */
+  unverified: boolean;
 };
 
 /**
@@ -35,6 +38,8 @@ type SyncPayload = {
   detailed?: number;
   known?: number;
   done?: boolean;
+  /** Confirmación del server contra Riot (`null` = no se pudo verificar). */
+  upToDate?: boolean | null;
   requests?: number;
   retryAfterMs?: number;
   error?: string;
@@ -135,16 +140,15 @@ export function RefreshButton({
   known,
   detailed,
   upToDate,
+  unverified,
 }: Props) {
   const router = useRouter();
   const abortRef = useRef<AbortController | null>(null);
   /**
-   * Firma de los props con la que quedó "al día" esta sesión. Se compara en
-   * render: si el server manda otros números (jugó otra partida), la firma no
-   * coincide y el botón vuelve a ofrecer "Actualizar". Sin setState en effects.
+   * Mientras `router.refresh()` trae los props frescos, el botón queda en
+   * "Actualizando…" y no alcanza a parpadear con el label viejo.
    */
-  const [settledFor, setSettledFor] = useState<string | null>(null);
-  const propsSignature = `${known}:${detailed}:${upToDate ? 1 : 0}`;
+  const [isRefreshing, startTransition] = useTransition();
   const [state, setState] = useState<State>({
     running: false,
     batch: null,
@@ -191,7 +195,6 @@ export function RefreshButton({
     const controller = new AbortController();
     abortRef.current = controller;
     const startedAt = Date.now();
-    setSettledFor(null);
 
     // Copias locales: el loop no depende de `state` (que quedaría viejo).
     let detailedNow = currentDetailed;
@@ -206,6 +209,10 @@ export function RefreshButton({
     let roundsDone = 0;
     let phase: State["phase"] = null;
     let unavailable = 0;
+    // Vueltas seguidas sin ningún request (429/lock/deadline) y vueltas con la
+    // cola drenada pero sin confirmación de Riot. Deciden cuándo rendirse.
+    let stallRounds = 0;
+    let unverifiedRounds = 0;
 
     const snapshot = () => ({
       batch: {
@@ -248,7 +255,6 @@ export function RefreshButton({
 
     for (let round = 1; round <= MAX_ROUNDS; round += 1) {
       roundsDone = round;
-      const knownBefore = knownNow;
 
       let payload: SyncPayload;
       let status = 0;
@@ -278,7 +284,13 @@ export function RefreshButton({
         return;
       }
 
-      requests += typeof payload.requests === "number" ? payload.requests : 0;
+      const roundRequests =
+        typeof payload.requests === "number" ? payload.requests : 0;
+      requests += roundRequests;
+      stallRounds = roundRequests > 0 ? 0 : stallRounds + 1;
+      if (payload.upToDate === true) unverifiedRounds = 0;
+      else if (payload.done === true) unverifiedRounds += 1;
+      else unverifiedRounds = 0;
 
       if (typeof payload.detailed === "number") {
         if (payload.detailed > detailedNow) lastProgressAt = Date.now();
@@ -298,22 +310,41 @@ export function RefreshButton({
         return;
       }
 
-      // ¿Ya no hay nada que traer? `pending` sale de nuestra cola y `newIds` de
-      // comparar el `known` de esta vuelta con el de la anterior.
-      const newIds = Math.max(0, knownNow - knownBefore);
-      const pending = Math.max(0, knownNow - detailedNow);
-      if (isSettledAfterRound({ done: payload.done === true, pending, newIds })) {
-        // Se redibuja el perfil con lo nuevo y el botón pasa a "Actualizado".
-        finish({});
-        setSettledFor(propsSignature);
-        router.refresh();
-        return;
-      }
-
+      // La condición para decir "Actualizado" es la del server, no nuestra
+      // cola: una vuelta sin requests (429/lock) no prueba nada.
       const retryMs = Math.min(
         30_000,
         typeof payload.retryAfterMs === "number" ? payload.retryAfterMs : 600,
       );
+      const decision = decideAfterRound({
+        done: payload.done === true,
+        upToDate: payload.upToDate,
+        stallRounds,
+        unverifiedRounds,
+      });
+
+      if (decision.action === "settle") {
+        // Riot confirmó: se redibuja el perfil y el botón queda "Actualizado".
+        finish({});
+        startTransition(() => router.refresh());
+        return;
+      }
+
+      if (decision.action === "stop") {
+        // Se corta sin mentir: el label lo decide el server al refrescar.
+        finish({ notice: decision.notice });
+        startTransition(() => router.refresh());
+        return;
+      }
+
+      if (decision.action === "retry") {
+        notice = decision.notice;
+        publish();
+        // La verificación contra Riot es 1 request: si falló por rate limit,
+        // vale la pena esperar un poco más que el retry normal de la cola.
+        await sleep(Math.max(retryMs, 5_000), controller.signal);
+        continue;
+      }
 
       // Explicamos por qué no avanzó, en vez de reintentar en silencio.
       if (payload.error) {
@@ -368,9 +399,10 @@ export function RefreshButton({
   const stalled = running && !error && sinceProgressMs >= STALL_MS;
   const phaseLabel = state.phase ? PHASE_LABEL[state.phase] : null;
 
-  // Una sola fuente de verdad para el estado: lo que dijo el server o, si esta
-  // tanda acaba de terminar con los mismos datos, lo que acabamos de comprobar.
-  const isUpToDate = upToDate || settledFor === propsSignature;
+  // Una sola fuente de verdad: el server. El cliente no puede declarar
+  // "Actualizado" por su cuenta (ver ADR-018).
+  const isUpToDate = upToDate;
+  const busy = running || isRefreshing;
 
   return (
     <div className="flex w-full flex-col items-start gap-1.5 sm:w-auto sm:items-end">
@@ -378,25 +410,27 @@ export function RefreshButton({
         <Button
           type="button"
           size="sm"
-          variant={isUpToDate && !running ? "ghost" : "primary"}
+          variant={isUpToDate && !busy ? "ghost" : "primary"}
           onClick={run}
-          disabled={running}
-          aria-busy={running}
+          disabled={busy}
+          aria-busy={busy}
           title={
             isUpToDate
               ? "El perfil está al día: la partida más nueva de Riot ya está cargada"
-              : "Traer las partidas que faltan de esta cuenta"
+              : unverified && !running
+                ? "No pude verificar con Riot si hay partidas nuevas (rate limit o error). Probá de nuevo en un momento"
+                : "Traer las partidas que faltan de esta cuenta"
           }
-          className={cn(isUpToDate && !running && "text-win hover:text-win")}
+          className={cn(isUpToDate && !busy && "text-win hover:text-win")}
         >
-          {running ? (
+          {busy ? (
             <Loader2 className="size-3.5 animate-spin" aria-hidden />
           ) : isUpToDate ? (
             <Check className="size-3.5" aria-hidden />
           ) : (
             <RefreshCw className="size-3.5" aria-hidden />
           )}
-          {running ? "Actualizando…" : isUpToDate ? "Actualizado" : "Actualizar"}
+          {busy ? "Actualizando…" : isUpToDate ? "Actualizado" : "Actualizar"}
         </Button>
 
         {running ? (
@@ -454,6 +488,14 @@ export function RefreshButton({
       {notice && !error && !stalled ? (
         <p className="max-w-[280px] text-[10px] leading-snug text-muted">
           {notice}
+        </p>
+      ) : null}
+
+      {!busy && !error && !notice && !isUpToDate && unverified ? (
+        <p className="max-w-[280px] text-[10px] leading-snug text-muted">
+          No pude verificar con Riot si hay partidas nuevas (rate limit o
+          error). El perfil puede estar al día igual; probá de nuevo en un
+          momento.
         </p>
       ) : null}
 

@@ -176,12 +176,18 @@ scripts/        verify-riot.mjs (verificación contra la API real)
   y el perfil se redibuja solo. Ya no hay contador al lado del botón: el estado
   es el del botón (formato de dpm.lol) y los totales quedan en el banner de
   historial completo y en el pie.
-- Ojo con el estado del botón (ADR-017): `pending` y `done` solo miran **nuestra**
-  cola, y una partida jugada después del último sync no está ni registrada. Por
-  eso `loadProfile` compara contra Riot con `getNewestMatchId()` (1 request,
-  `ids?count=1`, cache 45 s) y devuelve `upToDate`. El botón dice
-  **"Actualizado"** / **"Actualizar"** en base a eso, nunca solo a la base
-  local. Si la consulta falla, `upToDate` es false (no se afirma "al día").
+- Ojo con el estado del botón (ADR-017 / ADR-018): `pending` y `done` solo
+  miran **nuestra** cola, y una partida jugada después del último sync no está
+  ni registrada. Por eso `checkNewestMatch()` (`src/lib/sync-status.ts`) compara
+  contra Riot (1 request, `ids?count=1`, cache 45 s) y exige el link **del
+  jugador** (`isMatchLoadedForPuuids`), no solo que la partida exista en
+  `matches` (tabla compartida). La usan el render y `/api/sync`: el endpoint
+  devuelve `upToDate` (`null` = no se pudo verificar).
+- El cliente **solo** dice **"Actualizado"** con `upToDate === true`; una vuelta
+  sin requests (lock, 429, deadline) no prueba nada y no cierra el loop. Si Riot
+  no confirma, el botón vuelve a **"Actualizar"** con un aviso, no a un
+  "Actualizado" falso (la vuelta anterior decía "Actualizado" y al recargar
+  "Actualizar": ver ADR-018).
 
 ---
 

@@ -2,6 +2,7 @@ import type { Platform } from "@/lib/riot/config";
 import { getMatch, getMatchIdsPage, historyWindowStart } from "@/lib/riot/matches";
 import { resolveAccount } from "@/lib/riot/account";
 import { RiotApiError, RiotDeadlineError } from "@/lib/riot/http";
+import { checkNewestMatch } from "@/lib/sync-status";
 import type { Account, Match } from "@/lib/riot/types";
 import {
   filterKnownMatchIds,
@@ -75,6 +76,13 @@ export type IngestResult = {
    * reintentar. Sin esto el cliente reintenta al toque y no hay turno todavía.
    */
   retryAfterMs?: number;
+  /**
+   * ¿Riot confirma que no hay partidas más nuevas que las cargadas? Es lo que
+   * decide el "Actualizado" del botón. `null` = no se pudo verificar (sin
+   * presupuesto, 429, timeout): no se afirma nada. Ojo: `done` solo habla de
+   * nuestra cola, no de Riot.
+   */
+  upToDate: boolean | null;
 };
 
 /** Resuelve el Riot ID y delega. Atajo para el CLI y la visita al perfil. */
@@ -157,6 +165,7 @@ export async function syncPuuid(
           ? undefined
           : Math.max(0, state.lockedUntil - Date.now()),
       unavailable: 0,
+      upToDate: null,
     };
   }
 
@@ -281,6 +290,26 @@ export async function syncPuuid(
     const progress = await getProgress(puuids);
     const complete = (reachedEnd || done) && progress.detailed >= progress.known;
 
+    // `complete` solo dice que nuestra cola está drenada. Riot puede tener una
+    // partida más nueva que nunca llegó a registrarse; se verifica con 1 request
+    // (cache 45 s) para que el cliente no diga "Actualizado" sin prueba.
+    let upToDate: boolean | null = false;
+    if (complete) {
+      upToDate = null;
+      if (remaining > 0) {
+        remaining -= 1;
+        const check = await checkNewestMatch(puuids, platform, { deadline });
+        upToDate = check.upToDate;
+        options.onProgress?.(
+          upToDate === true
+            ? "Riot confirma que no hay partidas más nuevas"
+            : upToDate === false
+              ? "Riot tiene una partida más nueva que no pudimos cargar"
+              : "no se pudo verificar contra Riot",
+        );
+      }
+    }
+
     return {
       puuid,
       progress,
@@ -290,6 +319,7 @@ export async function syncPuuid(
       phase: complete ? "done" : phase,
       elapsedMs: Date.now() - startedAt,
       unavailable,
+      upToDate,
     };
   } catch (error) {
     // El deadline no es un error: es el final normal de una vuelta acotada.
@@ -310,6 +340,8 @@ export async function syncPuuid(
       phase,
       elapsedMs: Date.now() - startedAt,
       unavailable,
+      // La corrida se cortó antes de verificar: no hay prueba.
+      upToDate: null,
       retryAfterMs:
         error.retryAfterMs > 0
           ? Math.min(120_000, Math.round(error.retryAfterMs))

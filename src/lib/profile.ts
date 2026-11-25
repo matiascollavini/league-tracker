@@ -1,9 +1,9 @@
 import type { Platform } from "@/lib/riot/config";
 import { getLeagueEntries, getSummoner, resolveAccount } from "@/lib/riot/account";
-import { getNewestMatchId, getRecentMatches } from "@/lib/riot/matches";
+import { getRecentMatches } from "@/lib/riot/matches";
+import { checkNewestMatch } from "@/lib/sync-status";
 import { isMockMode } from "@/lib/riot/http";
 import {
-  filterKnownMatchIds,
   findSyncedPuuid,
   findSyncForPuuid,
   getAliasPuuids,
@@ -56,7 +56,17 @@ export type ProfileData = {
    * Riot tiene partidas (o IDs que no tenemos) que la página todavía no puede
    * mostrar. Se calcula contra Riot, no solo contra nuestra cola.
    */
+  /**
+   * Riot tiene una partida más nueva que la que tenemos cargada para **este**
+   * jugador (verificado, no una suposición).
+   */
   hasNewMatches: boolean;
+  /**
+   * No se pudo consultar a Riot si hay partidas nuevas (429/5xx/timeout).
+   * En ese caso `upToDate` es false por precaución, pero no porque haya algo
+   * pendiente: el botón lo explica en vez de mostrar un "Actualizar" seco.
+   */
+  verificationUnknown: boolean;
   /**
    * El perfil está al día: nada pendiente, backfill recorrido y la partida más
    * nueva de Riot ya está en la base. Es lo que muestra el botón ("Actualizado"
@@ -125,6 +135,7 @@ export async function loadProfile(
       // Sin key no hay nada que sincronizar: el aviso de "cargar" no aplica.
       complete: true,
       hasNewMatches: false,
+      verificationUnknown: false,
       upToDate: true,
     };
   }
@@ -219,18 +230,21 @@ export async function loadProfile(
 
   // ¿Riot tiene una partida más nueva que la que tenemos? Es 1 request (solo el
   // ID) y cachea 45 s. Sin esto, una partida jugada después del último sync no
-  // figura en `known` y el botón decía "al día" mintiendo.
-  let hasNewMatches = source === "live";
-  if (source === "db" && !isMockMode()) {
-    try {
-      const newest = await getNewestMatchId(puuid, effectivePlatform);
-      hasNewMatches =
-        newest !== null && (await filterKnownMatchIds([newest])).length === 0;
-    } catch {
-      // No se pudo verificar (429/5xx): no podemos afirmar que está al día.
-      hasNewMatches = true;
-    }
-  }
+  // figura en `known` y el botón decía "al día" mintiendo. Se compara contra el
+  // link del jugador (no contra la tabla `matches`, que es compartida).
+  const verification =
+    source === "db" && !isMockMode()
+      ? await checkNewestMatch(
+          // El puuid fresco de account-v1 va primero: es a quien Riot le
+          // asigna las partidas nuevas. El resto son alias para el "ya está
+          // cargada" (Riot reasigna puuids).
+          [...new Set([account.puuid, puuid, ...playerPuuids])],
+          effectivePlatform,
+        )
+      : { upToDate: null, newestMatchId: null };
+  const hasNewMatches = verification.upToDate === false;
+  const verificationUnknown =
+    source === "db" && !isMockMode() && verification.upToDate === null;
 
   return {
     account,
@@ -252,10 +266,11 @@ export async function loadProfile(
       backfillState === "done" &&
       progress.detailed >= progress.known,
     hasNewMatches,
+    verificationUnknown,
     upToDate:
       source !== "live" &&
       !isMockMode() &&
-      !hasNewMatches &&
+      verification.upToDate === true &&
       progress.detailed >= progress.known &&
       backfillState === "done",
   };

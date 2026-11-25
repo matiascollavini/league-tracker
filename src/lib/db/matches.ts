@@ -195,6 +195,34 @@ export async function filterKnownMatchIds(
 }
 
 /**
+ * ¿La partida está cargada **para este jugador**?
+ *
+ * No alcanza con que exista en `matches`: otra persona pudo haberla bajado
+ * (la partida es compartida) y este jugador no tener ni el link ni su fila de
+ * participante. Es la misma condición que usa el perfil para mostrar partidas,
+ * así "la más nueva de Riot ya está" significa lo mismo en todos lados.
+ */
+export async function isMatchLoadedForPuuids(
+  puuid: PuuidArg,
+  matchId: string,
+): Promise<boolean> {
+  await ensureSchema();
+  const ids = puuidList(puuid);
+  const inSql = inClause(ids.length);
+  const result = await db().execute({
+    sql: `SELECT 1
+            FROM puuid_matches pm
+            JOIN match_participants p
+              ON p.match_id = pm.match_id AND p.puuid = pm.puuid
+           WHERE pm.puuid IN (${inSql})
+             AND pm.match_id = ?
+           LIMIT 1`,
+    args: [...ids, matchId],
+  });
+  return result.rows.length > 0;
+}
+
+/**
  * Saca una partida de la cola de un jugador.
  *
  * Se usa cuando Riot devuelve 404/400 para esa partida (la retención la borró o
