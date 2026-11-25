@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AlertTriangle, ArrowLeftRight, CheckCircle2, Info } from "lucide-react";
+import { AlertTriangle, ArrowLeftRight, Info } from "lucide-react";
 import { ChampionPool } from "@/components/champion-pool";
 import { ChampionTable } from "@/components/champion-table";
 import { ChampionPicks } from "@/components/champion-picks";
@@ -120,7 +120,6 @@ export default async function ProfilePage({
     progress,
     source,
     partial,
-    complete,
     upToDate,
     verificationUnknown,
   } = profile;
@@ -407,27 +406,6 @@ export default async function ProfilePage({
               </strong>
               . La buscaste en {PLATFORM_LABEL[platform]}, así que te muestro los
               datos de su región real.
-            </p>
-          ) : null}
-
-          {/* La acción vive en el hero ("Actualizar ahora"): acá queda solo la
-              confirmación de que no hay nada pendiente. */}
-          {complete ? (
-            <p className="panel flex flex-wrap items-center gap-x-2 gap-y-1 px-3 py-2.5 text-[11px] text-muted">
-              <CheckCircle2 className="size-3.5 shrink-0 text-win" aria-hidden />
-              <span>
-                Historial completo:{" "}
-                <strong className="font-bold text-fg">
-                  {progress.detailed} partidas analizadas
-                </strong>
-                {summary.from && summary.to
-                  ? ` (${formatDate(summary.from)} — ${formatDate(summary.to)})`
-                  : ""}
-                .
-              </span>
-              <span className="text-dim">
-                Riot permite hasta ~1.000 por jugador.
-              </span>
             </p>
           ) : null}
 
