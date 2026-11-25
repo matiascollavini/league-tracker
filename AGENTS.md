@@ -162,12 +162,19 @@ scripts/        verify-riot.mjs (verificación contra la API real)
   Riot ID guardado (`riot_id` null) el nombre queda como texto, no como link roto.
 
 - El perfil muestra un chip **"En partida"** si el jugador está jugando ahora
-  (`src/lib/riot/spectator.ts` → SPECTATOR-V5, ADR-015 / `docs/API-LOL.txt` §7.9).
-  Es el único dato en tiempo real: se pide en el render con `revalidate: 60`, el
-  `404` es el caso normal (no está jugando) y cualquier error deja el perfil sin
-  chip. Host de **plataforma**; solo cubre LoL (TFT tiene su propio endpoint).
-  El **reloj avanza solo en el browser** desde `gameStartTime` (`src/lib/live.ts`):
-  ningún request extra ni polling.
+  (`src/lib/riot/spectator.ts` → SPECTATOR-V5, ADR-015 / ADR-020 /
+  `docs/API-LOL.txt` §7.9). Es el único dato en tiempo real: se pide en el render
+  con `revalidate: 30` y el tag `spectator`; `POST /api/sync` invalida el tag
+  para que "Actualizar" no deje el chip pegado. El `404` es el caso normal (no
+  está jugando) y cualquier error deja el perfil sin chip. Host de **plataforma**;
+  solo cubre LoL (TFT tiene su propio endpoint).
+- El **reloj** avanza solo en el browser desde `gameStartTime` (`src/lib/live.ts`),
+  sin requests. El **estado** sí se revalida: el chip consulta
+  `GET /api/en-vivo?platform=&puuid=` cada 45 s (nada si la pestaña está oculta)
+  y desaparece cuando Riot devuelve 404. Ese endpoint comparte la caché de 30 s,
+  así que N espectadores de la misma partida no multiplican los requests a Riot.
+  GitHub Actions no puede invalidar la Data Cache de Vercel: el poll es el que
+  limpia una página ya abierta.
 
 - El botón **"Actualizar" / "Actualizado"** vive en el hero del perfil
   (`src/components/refresh-button.tsx`, ADR-016/017). Llama a `POST /api/sync` en

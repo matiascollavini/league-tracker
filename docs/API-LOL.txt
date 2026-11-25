@@ -626,16 +626,23 @@ GET https://{platform}.api.riotgames.com/lol/spectator/v5/active-games/by-summon
 
   Caché y costo:
   - Es el único dato del sitio que es tiempo real: NO puede venir del
-    ingest/worker. Se pide en el render del perfil con revalidate 60.
+    ingest/worker. Se pide en el render del perfil con **revalidate 30** y con el
+    tag `spectator`; `POST /api/sync` invalida ese tag (`expire: 0`) para que
+    el "Actualizar" del perfil no siga mostrando una partida que ya terminó.
   - **El reloj no cuesta requests**: `gameStartTime` es un epoch en ms, así que
     el chip lo sigue contando en el browser con un `setInterval` de 1 s
-    (`liveClockSeconds` en `src/lib/live.ts`). Nada de polling a Riot: la única
-    llamada es la del render, cuando vence la caché.
+    (`liveClockSeconds` en `src/lib/live.ts`).
     El conteo arranca con el valor del server y, si el absoluto
     (`ahora - gameStartTime`) se aleja más de 10 min de ese valor, cae a
     "base + tiempo desde el montaje": así un navegador con la hora mal no rompe
     el reloj, y un HTML servido 90 s tarde desde la caché igual se corrige.
-  - Un perfil caliente = 1 request por jugador por minuto. Con dev key
+  - El **estado** sí se revalida: una página abierta no se re-renderiza sola, así
+    que el chip consulta `GET /api/en-vivo?platform=&puuid=` cada 45 s (y no
+    cuando la pestaña está oculta). Ese endpoint vuelve a usar esta misma caché
+    de 30 s, por lo que N espectadores de la misma partida comparten el request
+    a Riot; el costo es como máximo ~2 requests por jugador por minuto mientras
+    el badge está visible. Si Riot devuelve 404, el chip desaparece.
+  - Un perfil caliente = 1 request por jugador por ventana de 30 s. Con dev key
     (100/2min) alcanza para ~50 jugadores distintos simultáneos.
   - El perfil puede tener varios puuids (Riot los reasigna): se consultan hasta
     2 y se corta en el primero que devuelve 200.

@@ -957,6 +957,62 @@ aviso de "sin avance". El pedido fue que quede **solo el botón
 
 ---
 
+## ADR-020 — El chip "En partida" se entera de que la partida terminó
+
+**Estado:** aceptada · **Fecha:** 2026-11-25
+
+### Contexto (el badge pegado)
+El perfil mostraba "En partida" con el reloj corriendo después de que el
+jugador ya había terminado. No era un dato mal parseado: el render pedía
+SPECTATOR-V5 una vez y **la página abierta no se volvía a renderizar**, así que
+el chip seguía contando para siempre (hasta el tope de 3 h). Además:
+
+- la caché era de 60 s, así que un refresh podía traer la foto vieja;
+- "Actualizar" solo sincronizaba partidas; el `router.refresh()` posterior
+  podía volver a pegarle a la misma entrada de caché de spectator;
+- GitHub Actions no sirve para esto: corre en otra infraestructura, no comparte
+  la Data Cache de Vercel y no puede actualizar una página ya abierta.
+
+### Decisión
+1. **Caché más corta y con tag.** `getActiveGame()` usa `revalidate: 30` y
+   `tags: ["spectator"]`.
+2. **"Actualizar" invalida el tag.** `POST /api/sync`, después de sincronizar,
+   llama a `revalidateTag("spectator", { expire: 0 })` (Next 16: la forma de un
+   argumento está deprecada). El `router.refresh()` que ya hace el botón
+   encuentra la caché vencida y pregunta de nuevo: si la partida terminó, el
+   chip desaparece en el acto.
+3. **Poll liviano del chip.** `LiveBadge` consulta
+   `GET /api/en-vivo?platform=&puuid=` cada 45 s (y no cuando la pestaña está
+   oculta). El endpoint:
+   - valida plataforma/puuid y devuelve `{ live: true | false | null }`;
+   - usa `getActiveGame()` con un deadline de 3 s (si el bucket está seco, no
+     cuelga el poll);
+   - `404` -> `false` (partida terminada); `429/5xx/timeout` -> `null`
+     (no sabemos: el chip se queda y reintenta).
+4. El reloj sigue siendo local (cero requests). El poll es del **estado**, no
+   del reloj.
+
+### Costo y rate limit
+El endpoint vuelve a usar la **misma caché de 30 s** de SPECTATOR-V5, no un
+`no-store` contra Riot. Entonces:
+
+- N espectadores de la misma partida comparten el request a Riot.
+- Mientras un badge está visible, el costo máximo es ~2 requests por jugador
+  por minuto (la caché de 30 s), no 1 por espectador.
+- El reloj no agrega requests.
+
+### Consecuencias
+- Una partida terminada deja de mostrar el chip en ~45-75 s sin tocar nada; con
+  "Actualizar" se va de inmediato.
+- Si Riot está caído o limita, el chip **no desaparece por las dudas**: se
+  mantiene y reintenta (fail-open), que es lo menos sorprendente.
+- No hace falta un cron de GitHub Actions para el badge. El cron sigue siendo
+  para ingerir partidas terminadas, no para refrescar UI.
+- Verificado el 2026-11-25: `GET /api/en-vivo` con un puuid sin partida
+  devuelve `{"live":false}` y con plataforma inválida 400.
+
+---
+
 ## Pendientes (no decididos todavía)
 
 - [x] Persistencia + ingesta (fase 2): SQLite/Turso con backfill resumible.
@@ -974,7 +1030,8 @@ aviso de "sin avance". El pedido fue que quede **solo el botón
       Riot no tiene search de invocadores, así que sugiere cuentas ya indexadas
       (participantes de partidas guardadas + perfiles visitados).
 - [x] "En partida ahora": hecho el 2026-11-25 (ADR-015) con SPECTATOR-V5.
-      Chip opcional en el perfil, caché de 60 s, 404 degradado sin romper nada.
+      Chip opcional en el perfil, caché de 30 s, 404 degradado sin romper nada.
+      ADR-020: poll de estado + invalidación del tag al "Actualizar".
 - [x] Botón "Actualizar ahora" en el hero del perfil (ADR-016), con "Actualizando…"
       y `router.refresh()` al terminar. ADR-019: sin contador, barra ni Detener.
 - [ ] Páginas de comparación / ranking global (necesitaría Meraki `championrates`).

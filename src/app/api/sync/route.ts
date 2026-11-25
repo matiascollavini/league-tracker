@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import { z } from "zod";
 import { isPlatform } from "@/lib/riot/config";
 import { hasApiKey, RiotApiError, RiotDeadlineError } from "@/lib/riot/http";
@@ -70,6 +71,11 @@ export async function POST(request: Request) {
       maxPages: 3,
       deadlineMs: chunkDeadlineMs(),
     });
+
+    // Si la partida terminó, el chip "En partida" del perfil no puede seguir
+    // mostrando la foto vieja después del `router.refresh()`. Se invalida el
+    // tag que usa SPECTATOR-V5 para que el próximo render pregunte de nuevo.
+    revalidateTag("spectator", { expire: 0 });
 
     return NextResponse.json({
       ok: true,

@@ -231,6 +231,8 @@ export default async function ProfilePage({
         live={
           liveGame ? (
             <LiveBadge
+              puuid={live?.puuid ?? puuid}
+              platform={effectivePlatform}
               startedAt={liveGame.startedAt}
               base={elapsedSeconds(liveGame)}
               queueLabel={
