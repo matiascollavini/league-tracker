@@ -1,6 +1,7 @@
 import type { Row } from "@libsql/client";
 import { isPlatform, type Platform } from "@/lib/riot/config";
 import { db, ensureSchema } from "./client";
+import { accountUpsertStatement } from "./accounts";
 import { durationSeconds, participantOf } from "@/lib/riot/aggregate";
 import type { Match } from "@/lib/riot/types";
 
@@ -141,6 +142,24 @@ export async function saveMatch(
       ],
     })),
   ];
+
+  // Los 10 participantes también alimentan el índice del buscador del header
+  // (ADR-014). Va en el mismo batch: no cuesta un viaje extra a la base.
+  const startTs = info.gameStartTimestamp ?? info.gameCreation;
+  for (const participant of info.participants) {
+    if (!participant.riotIdGameName || !participant.riotIdTagline) continue;
+    statements.push(
+      accountUpsertStatement({
+        puuid: participant.puuid,
+        platformId,
+        gameName: participant.riotIdGameName,
+        tagLine: participant.riotIdTagline,
+        profileIcon: participant.profileIcon ?? null,
+        level: participant.summonerLevel ?? null,
+        lastSeenTs: startTs,
+      }),
+    );
+  }
 
   await c.batch(statements, "write");
 }
@@ -755,6 +774,7 @@ export async function resetDbForTests(): Promise<void> {
     "puuid_matches",
     "matches",
     "puuid_sync",
+    "accounts",
   ]) {
     await c.execute(`DELETE FROM ${table}`);
   }

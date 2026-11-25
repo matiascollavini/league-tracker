@@ -79,6 +79,22 @@ const SCHEMA = [
      locked_until    INTEGER,
      locked_by       TEXT
    )`,
+  // Índice de cuentas para el buscador del header (ADR-014). Riot no tiene
+  // búsqueda por nombre: se indexan los participantes de las partidas que ya
+  // tenemos, una fila por puuid, con el nombre más nuevo.
+  `CREATE TABLE IF NOT EXISTS accounts (
+     puuid          TEXT PRIMARY KEY,
+     platform_id    TEXT NOT NULL,
+     game_name      TEXT NOT NULL,
+     tag_line       TEXT NOT NULL,
+     name_lower     TEXT NOT NULL,
+     profile_icon   INTEGER,
+     summoner_level INTEGER,
+     last_seen_ts   INTEGER NOT NULL DEFAULT 0,
+     updated_at     INTEGER NOT NULL
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_accounts_name
+     ON accounts (name_lower)`,
 ];
 
 /**
@@ -90,6 +106,40 @@ const MIGRATIONS = [
   `ALTER TABLE puuid_sync ADD COLUMN locked_by TEXT`,
   `ALTER TABLE match_participants ADD COLUMN profile_icon INTEGER`,
   `ALTER TABLE match_participants ADD COLUMN summoner_level INTEGER`,
+];
+
+/**
+ * Relleno del índice de cuentas con lo que ya estaba en la base (bases creadas
+ * antes de la v5). Corre una sola vez por base, dentro del upgrade de esquema.
+ *
+ * El nombre sale de la partida **más nueva** de ese puuid (`MAX(game_start_ts)`
+ * con columnas desnudas: SQLite las toma de la fila que gana el agregado), así
+ * un Riot ID cambiado no revive con partidas viejas. Después el upsert de cada
+ * partida nueva mantiene las filas al día.
+ */
+const BACKFILL_ACCOUNTS = [
+  `INSERT OR IGNORE INTO accounts
+     (puuid, platform_id, game_name, tag_line, name_lower,
+      profile_icon, summoner_level, last_seen_ts, updated_at)
+   SELECT mp.puuid, m.platform_id,
+          substr(mp.riot_id, 1, instr(mp.riot_id, '#') - 1),
+          substr(mp.riot_id, instr(mp.riot_id, '#') + 1),
+          lower(substr(mp.riot_id, 1, instr(mp.riot_id, '#') - 1)),
+          mp.profile_icon, mp.summoner_level, MAX(m.game_start_ts),
+          CAST(strftime('%s', 'now') AS INTEGER) * 1000
+     FROM match_participants mp
+     JOIN matches m ON m.match_id = mp.match_id
+    WHERE mp.riot_id LIKE '%#%'
+    GROUP BY mp.puuid`,
+  `INSERT OR IGNORE INTO accounts
+     (puuid, platform_id, game_name, tag_line, name_lower,
+      profile_icon, summoner_level, last_seen_ts, updated_at)
+   SELECT puuid, platform_id, game_name, tag_line, lower(game_name),
+          NULL, NULL, COALESCE(newest_ts, 0),
+          CAST(strftime('%s', 'now') AS INTEGER) * 1000
+     FROM puuid_sync
+    WHERE game_name IS NOT NULL AND game_name <> ''
+      AND tag_line IS NOT NULL AND tag_line <> ''`,
 ];
 
 export type DbConfig = {
@@ -152,7 +202,7 @@ export function db(): Client {
   return client;
 }
 
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 5;
 
 /**
  * Crea las tablas si no existen. Idempotente y barato: en Turso cada statement
@@ -189,6 +239,13 @@ export async function ensureSchema(): Promise<void> {
         if (!/duplicate column/i.test(message)) throw error;
       }
     }
+
+    // v5: índice de cuentas del buscador. En bases nuevas las tablas están
+    // vacías y el backfill es un no-op; en las existentes corre una sola vez.
+    await c.batch(
+      BACKFILL_ACCOUNTS.map((sql) => ({ sql, args: [] })),
+      "write",
+    );
 
     await c.execute({
       sql: "INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)",

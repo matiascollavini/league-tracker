@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { Plus_Jakarta_Sans } from "next/font/google";
+import { HeaderSearch } from "@/components/header-search";
+import { platformFromEnv } from "@/lib/riot/config";
 import "./globals.css";
 
 // dpm.lol usa Plus Jakarta Sans (200–800). La variable la consume globals.css.
@@ -22,7 +24,6 @@ export const metadata: Metadata = {
 };
 
 const NAV = [
-  { href: "/", label: "Buscar" },
   { href: "/comparar", label: "Comparar" },
   { href: "/legal/privacidad", label: "Privacidad" },
 ];
@@ -34,7 +35,7 @@ export default function RootLayout({
     <html lang="es" className={jakarta.variable}>
       <body className="flex min-h-dvh flex-col">
         <header className="sticky top-0 z-30 border-b border-white/5 bg-deep/92 backdrop-blur-md">
-          <div className="mx-auto flex h-14 w-full max-w-[1202px] items-center gap-5 px-4">
+          <div className="mx-auto flex h-14 w-full max-w-[1202px] items-center gap-3 px-4 sm:gap-5">
             <Link href="/" className="group flex shrink-0 items-center gap-2">
               <Image
                 src="/logo.png"
@@ -44,12 +45,12 @@ export default function RootLayout({
                 priority
                 className="size-8 drop-shadow-[0_2px_6px_rgba(0,0,0,0.45)] transition-transform group-hover:scale-105"
               />
-              <span className="text-[15px] font-extrabold tracking-tight text-fg">
+              <span className="hidden text-[15px] font-extrabold tracking-tight text-fg sm:inline">
                 League<span className="text-primary">Tracker</span>
               </span>
             </Link>
 
-            <nav className="flex items-center gap-0.5 text-[13px] font-semibold text-muted">
+            <nav className="hidden items-center gap-0.5 text-[13px] font-semibold text-muted md:flex">
               {NAV.map((item) => (
                 <Link
                   key={item.href}
@@ -61,8 +62,14 @@ export default function RootLayout({
               ))}
             </nav>
 
-            <div className="ml-auto flex items-center gap-2">
-              <span className="hidden items-center gap-1.5 rounded-md border border-white/10 bg-soft/50 px-2 py-1 text-[11px] font-semibold text-muted sm:inline-flex">
+            <div className="ml-auto flex min-w-0 flex-1 items-center justify-end gap-2">
+              {/* Buscador directo: las sugerencias salen del índice propio, no de Riot. */}
+              <HeaderSearch
+                defaultPlatform={platformFromEnv()}
+                className="w-full max-w-[300px] md:w-64 lg:w-80"
+              />
+
+              <span className="hidden items-center gap-1.5 rounded-md border border-white/10 bg-soft/50 px-2 py-1 text-[11px] font-semibold text-muted lg:inline-flex">
                 <span
                   className="size-1.5 rounded-full bg-win"
                   aria-hidden="true"
@@ -89,6 +96,13 @@ export default function RootLayout({
             <p>
               Datos obtenidos de la API oficial de Riot Games. Este sitio no
               está afiliado ni patrocinado por Riot Games.{" "}
+              <Link
+                href="/comparar"
+                className="underline decoration-line hover:text-muted"
+              >
+                Comparar
+              </Link>{" "}
+              ·{" "}
               <Link
                 href="/legal/terminos"
                 className="underline decoration-line hover:text-muted"

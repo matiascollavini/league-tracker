@@ -12,6 +12,7 @@ import {
   type Progress,
 } from "@/lib/db/matches";
 import { syncAccount } from "@/lib/ingest";
+import { saveAccount } from "@/lib/db/accounts";
 import type { Account, LeagueEntry, Match, Summoner } from "@/lib/riot/types";
 
 /**
@@ -154,6 +155,19 @@ export async function loadProfile(
       rankStale = true;
     }
   }
+
+  // El índice del buscador del header se entera de esta cuenta (y del icono y
+  // nivel reales) en la primera visita. Es un upsert chico, fire-and-forget:
+  // no debe demorar ni romper el render del perfil.
+  void saveAccount({
+    puuid,
+    platformId: effectivePlatform,
+    gameName: account.gameName ?? gameName,
+    tagLine: account.tagLine ?? tagLine,
+    profileIcon: summoner?.profileIconId ?? null,
+    level: summoner?.summonerLevel ?? null,
+    lastSeenTs: Date.now(),
+  }).catch(() => {});
 
   // Ojo con "tiene algunas partidas": quien aparece como participante de las
   // partidas de otro tiene links pero NUNCA estuvo en la cola del worker, así

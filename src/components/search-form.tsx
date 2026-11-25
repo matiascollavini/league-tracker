@@ -5,6 +5,7 @@ import { useState, type FormEvent } from "react";
 import { Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
+import { parseRiotId } from "@/lib/search";
 import type { Platform } from "@/lib/riot/config";
 import { PLATFORM_OPTIONS } from "@/lib/riot/config";
 
@@ -21,27 +22,15 @@ export function SearchForm({ defaultPlatform, size = "lg" }: Props) {
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const raw = riotId.trim();
-    const hash = raw.lastIndexOf("#");
-
-    if (hash <= 0 || hash === raw.length - 1) {
-      setError(
-        "Escribí tu Riot ID completo, con el tag: por ejemplo Faker#KR1",
-      );
-      return;
-    }
-
-    const gameName = raw.slice(0, hash).trim();
-    const tagLine = raw.slice(hash + 1).trim();
-
-    if (gameName.length < 3 || tagLine.length < 2) {
-      setError("El nombre o el tag parecen incompletos.");
+    const parsed = parseRiotId(riotId);
+    if (!parsed.ok) {
+      setError(parsed.error);
       return;
     }
 
     setError(null);
     router.push(
-      `/perfil/${platform}/${encodeURIComponent(gameName)}/${encodeURIComponent(tagLine)}`,
+      `/perfil/${platform}/${encodeURIComponent(parsed.value.gameName)}/${encodeURIComponent(parsed.value.tagLine)}`,
     );
   }
 
