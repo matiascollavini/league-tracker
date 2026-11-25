@@ -546,6 +546,110 @@ imagen provista por él.
 
 ---
 
+## ADR-014 — Buscador con sugerencias en el header (índice de cuentas propio)
+
+**Estado:** aceptada · **Fecha:** 2026-11-24
+
+### Contexto
+El header tenía un link "Buscar" que llevaba a la landing. El operador pidió un
+buscador directo en el header, con **preview de varias cuentas** a medida que se
+escribe, "como op.gg, u.gg y dpm.lol".
+
+El problema no es de UI sino de datos: **Riot no expone búsqueda por nombre**.
+`ACCOUNT-V1` solo resuelve un Riot ID **exacto**
+(`/riot/account/v1/accounts/by-riot-id/{gameName}/{tagLine}`); `SUMMONER-V4`
+tiene `by-name` deprecado y también exacto. La FAQ de migración a Riot ID
+(`developer.riotgames.com/docs/summoner-name-to-riot-id-faq`) responde que no hay
+búsqueda y sugiere **mantener una base propia de jugadores** (paráfrasis; no hay
+cita textual verificada). Fuentes consultadas el **2026-11-24** (ver al final).
+
+Cómo lo resuelven los grandes (comportamiento observable, no su backend):
+- **op.gg**: la búsqueda web exige región + `nombre#tagline`; la app de escritorio
+  muestra una lista con juegos activos, servidor (KR/NA/EU), tier, nivel y stats
+  recientes (help.op.gg, artículos de búsqueda y de búsqueda integrada).
+- **dpm.lol**: un solo command palette en el header (`Ctrl+K`), placeholder
+  "Search Summoner, Champion, Team, Pro…", y perfiles en `/{Nombre}-{TAG}` **sin
+  región en la URL** → búsqueda global (dpm.lol + `dpm.lol/llms.txt`).
+- **u.gg**: perfiles con región en el path (`/lol/profile/{platform}/…`), o sea
+  búsqueda acotada a la región elegida (`u.gg/faq`; el dropdown exacto quedó
+  `UNVERIFIED`, el sitio bloquea crawlers).
+- **Ninguna API de terceros** con búsqueda por prefijo de cuentas: las que existen
+  son scrapers de esos sitios (chocan con sus ToS y con la política de Riot sobre
+  data brokering). Revisado: BALLDONTLIE (esports, no cuentas), wrappers tipo
+  `opgg.py` (scraping). `UNVERIFIED` para cualquier dataset mantenido.
+
+### Decisión
+**Índice propio de cuentas + búsqueda global en el header.** Nada de fan-out a
+Riot por tecla (no hay endpoint) ni de depender de un tercero.
+
+1. **Tabla `accounts`** (una fila por puuid): `game_name`, `tag_line`,
+   `name_lower` (para comparar sin distinguir mayúsculas), `platform_id`,
+   `profile_icon`, `summoner_level`, `last_seen_ts`, `updated_at`. Esquema **v5**
+   de `src/lib/db/client.ts`, con backfill de una sola vez desde
+   `match_participants` (tomando el nombre de la partida **más nueva** de cada
+   puuid) y desde `puuid_sync`.
+2. **Se alimenta sola**, sin trabajo extra:
+   - `saveMatch` agrega los 10 participantes al **mismo batch** de la partida
+     (`accountUpsertStatement`), con la plataforma y el `gameStartTimestamp`.
+   - `loadProfile` hace un `saveAccount` fire-and-forget con el nombre autoritativo
+     de `account-v1` más icono y nivel de `SUMMONER-V4`.
+   - El upsert **no pisa un nombre más nuevo con uno viejo** (el ingest baja del
+     más nuevo al más viejo); una búsqueda directa sí gana siempre.
+3. **`GET /api/buscar?q=&limit=&platform=`**: prefijo por `substr()` (no `LIKE`,
+   así `%` y `_` son literales), `Nombre#TAG` filtra también por tag, orden
+   exacto→más corto→más reciente. Devuelve `{ query, results[], indexed }` con
+   `href` ya armado en el server y `iconUrl` de Data Dragon. **Nunca sale a Riot.**
+   `Cache-Control: s-maxage=120`.
+4. **UI (`HeaderSearch`)**: combobox ARIA con debounce de 180 ms, `AbortController`,
+   cache por consulta, flechas + Enter + Escape, `/` y `Ctrl/Cmd+K` para enfocar.
+   Enter resuelve en este orden: sugerencia elegida → Riot ID exacto tipeado →
+   primera sugerencia. Las filas muestran icono, `Nombre#TAG`, región y nivel.
+   La búsqueda es **global** (como dpm), no region-scoped: el índice es chico y
+   obligar a elegir región primero solo agrega fricción. Para el Riot ID tipeado
+   a mano se usa la región del perfil abierto o la última visitada
+   (`localStorage: lt:platform`), con la de `.env` como fallback.
+5. El link "Buscar" del nav desaparece (lo reemplaza el input). En mobile el nav
+   se oculta y los links quedan en el footer.
+
+### Limitación (dicha en la UI, no escondida)
+El autocompletado **solo sugiere cuentas ya indexadas**: las que aparecieron en
+partidas que ya bajamos y las que alguien visitó. op.gg/u.gg/dpm tienen años de
+crawl; nosotros arrancamos con lo que hay en la base (5.447 cuentas locales al
+momento de este ADR) y crece con cada partida ingerida. Por eso el desplegable
+siempre ofrece además "ir a `Nombre#TAG`", que resuelve contra Riot como antes.
+La cobertura mejora con el worker: cada partida nueva suma 10 cuentas.
+
+### Alternativas descartadas
+- **Pedirle a Riot en cada tecla**: imposible, no hay endpoint (y sería rate-limit
+  suicide).
+- **Scrapear op.gg/u.gg**: viola sus ToS y la política de datos de Riot.
+- **API de terceros**: ninguna confiable ni legal (ver arriba).
+- **`LIKE 'prefijo%'`**: descartado por los comodines; `substr()` es exacto y a
+  esta escala (miles de filas) sobra. Si algún día crece, FTS5 es el paso natural.
+
+### Consecuencias
+- Subir el esquema a v5 corre el backfill una vez por base (en bases nuevas es un
+  no-op). Es la primera migración con datos, no solo con `ALTER TABLE`.
+- El buscador no gasta rate limit de Riot: una búsqueda = una query SQLite/Turso.
+- `saveMatch` crece 10 statements por partida (mismo viaje de red).
+- Tests: `src/lib/db/accounts.test.ts` (prefijo, tags, `%` literal, nombre viejo
+  vs. nuevo, icono que sobrevive, `saveMatch` alimentando el índice) y
+  `src/lib/search.test.ts` (parseo de Riot ID + contrato de la API).
+
+### Fuentes (consultadas 2026-11-24)
+- Riot: `developer.riotgames.com/api-details/account-v1` y `.../summoner-v4`
+  (operaciones exact-match, sin search).
+- Riot: `developer.riotgames.com/docs/summoner-name-to-riot-id-faq` (sin búsqueda;
+  base de jugadores propia) y `.../docs/lol` (migración a Riot ID).
+- op.gg: `help.op.gg/hc/en-us/articles/31090336977177`,
+  `.../48464937576473` (resultados con región/tier/nivel), `.../31088821370777`.
+- dpm.lol: home + `dpm.lol/llms.txt` + un perfil (`/HansD4mpf-EUW`).
+- u.gg: `u.gg/faq` + URLs de perfil con plataforma en el path.
+- No verificable: dropdown exacto de u.gg (`UNVERIFIED`, Cloudflare), volumen y
+  latencia de los índices de op.gg/u.gg/dpm (`UNVERIFIED`).
+
+---
+
 ## Pendientes (no decididos todavía)
 
 - [x] Persistencia + ingesta (fase 2): SQLite/Turso con backfill resumible.
@@ -558,8 +662,10 @@ imagen provista por él.
       una cuenta de prueba) y endpoints de liga/maestría validados.
 
 - [ ] Autenticación de usuarios (¿"login con Riot" RSO? Requiere production key).
-- [ ] Buscador con autocompletado (requiere un endpoint propio de sugerencias por
-      prefijo de campeón, no de invocador — Riot no tiene search de invocadores).
+- [x] Buscador con autocompletado en el header. Hecho el 2026-11-24 (ADR-014):
+      índice propio de cuentas (`accounts`, esquema v5) + `GET /api/buscar`.
+      Riot no tiene search de invocadores, así que sugiere cuentas ya indexadas
+      (participantes de partidas guardadas + perfiles visitados).
 - [ ] Páginas de comparación / ranking global (necesitaría Meraki `championrates`).
 - [ ] Gráficos (Recharts candidato).
 - [ ] Tests: unitarios del agregador + smoke test contra API real con mock de fixtures.

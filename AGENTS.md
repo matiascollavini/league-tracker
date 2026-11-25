@@ -109,10 +109,11 @@ retención), y no existe endpoint de "partidas totales". Por eso:
 ## 4. Mapa del repositorio
 
 ```
-src/app/api/    endpoints (health, sync, partida/[matchId])
+src/app/api/    endpoints (health, sync, buscar, partida/[matchId])
 src/app/        páginas (landing, perfil, detalle de partida, legales)
-src/components/ UI server-first + buscador y lista de partidas (client)
+src/components/ UI server-first + header-search y lista de partidas (client)
 src/lib/riot/   capa de datos: config, http, account, matches, aggregate, panel, types
+src/lib/db/     SQLite/Turso: client, matches, accounts (índice del buscador)
 docs/           API-LOL.txt (referencia de la API), DECISIONES.md (ADRs)
 research/       briefs crudos de investigación + crawled/ (fuentes)
 workflows/      scripts de orquestación de subagentes
@@ -141,6 +142,12 @@ scripts/        verify-riot.mjs (verificación contra la API real)
   1. **Deploy**: crear cuenta gratis en Turso + Vercel (paso a paso en
      `docs/DEPLOY.md`) y pedir la production key de Riot.
   2. Más UI: gráficos (winrate por campeón, evolución temporal).
+
+- El **buscador del header** (`HeaderSearch` → `GET /api/buscar`) sugiere cuentas
+  del **índice propio** (`accounts`, esquema v5), no de Riot: `account-v1` no
+  tiene búsqueda por nombre (ADR-014). Se alimenta con los 10 participantes de
+  cada partida y con cada perfil visitado; el desplegable siempre ofrece ir al
+  `Nombre#TAG` exacto, que sí resuelve contra Riot al abrir el perfil.
 
 - La lista de "Últimas partidas" **no navega**: el click despliega el detalle de
   la partida en la misma página (ADR-012). El roster de los 10 jugadores se pide

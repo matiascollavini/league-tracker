@@ -7,6 +7,13 @@ Estadísticas de League of Legends: buscás tu **Riot ID** y ves tus últimas 20
 partidas, tu **campeón más jugado** con su winrate, y podés **filtrar por campeón**
 y por cola.
 
+El header tiene un buscador con **sugerencias de cuentas** mientras escribís
+(`/` o `Ctrl/Cmd+K`). Riot no ofrece búsqueda por nombre (`account-v1` solo
+resuelve un Riot ID exacto), así que las sugerencias salen de un **índice propio**
+que se alimenta con los jugadores de cada partida guardada y con cada perfil
+visitado; escribir `Nombre#TAG` y darle Enter siempre resuelve contra Riot.
+Detalle y limitaciones en el **ADR-014** de `docs/DECISIONES.md`.
+
 Funciona hoy en **modo demo** (datos de ejemplo) y pasa a datos reales en cuanto
 cargás una API key de Riot.
 
