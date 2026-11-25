@@ -102,7 +102,7 @@ export function liveClockSeconds(input: {
   return base + Math.max(0, Math.floor((now - mountedAt) / 1_000));
 }
 
-/** 754 -> "12:34". null/negativo -> null (la UI muestra "en partida"). */
+/** 754 -> "12:34". null/negativo -> null (la UI muestra sin reloj). */
 export function formatGameClock(seconds: number | null): string | null {
   if (seconds === null || !Number.isFinite(seconds) || seconds < 0) return null;
   const total = Math.floor(seconds);

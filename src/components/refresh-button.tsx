@@ -2,10 +2,14 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { AlertTriangle, Moon, Square } from "lucide-react";
+import { AlertTriangle, Check, Loader2, RefreshCw, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { batchProgress, formatElapsed } from "@/lib/sync-progress";
+import {
+  batchProgress,
+  formatElapsed,
+  isSettledAfterRound,
+} from "@/lib/sync-progress";
 import type { Platform } from "@/lib/riot/config";
 
 type Props = {
@@ -15,6 +19,11 @@ type Props = {
   /** Progreso que ya conoce el servidor. */
   known: number;
   detailed: number;
+  /**
+   * El perfil está al día según el server: nada pendiente, backfill recorrido y
+   * la partida más nueva de Riot ya está en la base. Decide qué dice el botón.
+   */
+  upToDate: boolean;
 };
 
 /**
@@ -40,7 +49,7 @@ type SyncPayload = {
 };
 
 const PHASE_LABEL: Record<string, string> = {
-  ids: "descubriendo partidas",
+  ids: "buscando partidas",
   details: "bajando detalles",
   locked: "esperando a otro proceso",
   throttled: "rate limit de Riot",
@@ -66,7 +75,6 @@ type State = {
   notice: string | null;
   round: number;
   requests: number;
-  /** Qué estaba haciendo el server en la última vuelta. */
   phase: "ids" | "details" | "done" | "locked" | "throttled" | null;
   /** Partidas que Riot ya no tiene y se sacaron de la cola. */
   unavailable: number;
@@ -89,8 +97,6 @@ type State = {
 const STALL_MS = 90_000;
 /** Tope de vueltas: 60 × 30 requests = 1.800, más que el máximo real. */
 const MAX_ROUNDS = 60;
-/** Cuánto queda visible el "Listo" después de refrescar. */
-const FLASH_MS = 4_000;
 
 /** Sleep cancelable: si el usuario aprieta "Detener", despierta al toque. */
 function sleep(ms: number, signal: AbortSignal): Promise<void> {
@@ -110,16 +116,17 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
 }
 
 /**
- * Botón "Actualizar ahora", al lado del perfil.
+ * Botón de estado + acción del perfil, al lado del nombre.
  *
- * Pide tandas a `/api/sync` hasta que la base no tenga nada pendiente: el
- * endpoint es incremental y resumible (descubre IDs nuevos y baja solo los
- * detalles que faltan). Mientras corre muestra una luna que parpadea y el
- * avance de la tanda; al terminar **refresca la página sola** para que el
- * perfil, los agregados y las últimas partidas se redibujen con lo nuevo.
+ * Dos estados, como el de dpm.lol: **"Actualizado"** (no hay nada que traer) y
+ * **"Actualizar"** (hay partidas nuevas en Riot o detalles pendientes). Al
+ * apretarlo pide tandas a `/api/sync` —endpoint incremental y resumible— hasta
+ * que no queda nada, y ahí **refresca la página sola** para que el perfil, los
+ * agregados y las últimas partidas se redibujen con lo nuevo.
  *
- * Si el server corta por rate limit o porque otro proceso tiene el lock, el
- * cliente espera lo que le dice `retryAfterMs` y reintenta en vez de fallar.
+ * La decisión de qué decir no sale de nuestra cola: una partida jugada después
+ * del último sync no está ni registrada, así que el server compara contra el
+ * matchId más nuevo de Riot y manda `upToDate`.
  */
 export function RefreshButton({
   platform,
@@ -127,10 +134,17 @@ export function RefreshButton({
   tagLine,
   known,
   detailed,
+  upToDate,
 }: Props) {
   const router = useRouter();
   const abortRef = useRef<AbortController | null>(null);
-  const [flash, setFlash] = useState<string | null>(null);
+  /**
+   * Firma de los props con la que quedó "al día" esta sesión. Se compara en
+   * render: si el server manda otros números (jugó otra partida), la firma no
+   * coincide y el botón vuelve a ofrecer "Actualizar". Sin setState en effects.
+   */
+  const [settledFor, setSettledFor] = useState<string | null>(null);
+  const propsSignature = `${known}:${detailed}:${upToDate ? 1 : 0}`;
   const [state, setState] = useState<State>({
     running: false,
     batch: null,
@@ -150,7 +164,7 @@ export function RefreshButton({
   });
 
   // Números vigentes: los de la tanda en curso o, si ya no aplican, los props
-  // que mandó el server (que después de `router.refresh()` son los frescos).
+  // que mandó el server (después de `router.refresh()` son los frescos).
   const usable =
     state.batch !== null &&
     state.batch.propsKnown === known &&
@@ -170,17 +184,6 @@ export function RefreshButton({
     return () => clearInterval(id);
   }, [state.running]);
 
-  // Después de `router.refresh()` llegan props nuevas y el `batch` de la tanda
-  // anterior deja de coincidir: se ignora solo (ver `usable`) y el contador
-  // arranca del valor fresco, sin efectos ni setState extra.
-
-  // El "Listo" se va solo.
-  useEffect(() => {
-    if (!flash) return;
-    const id = setTimeout(() => setFlash(null), FLASH_MS);
-    return () => clearTimeout(id);
-  }, [flash]);
-
   // Si desmontan la página, cortamos el request en curso.
   useEffect(() => () => abortRef.current?.abort(), []);
 
@@ -188,7 +191,7 @@ export function RefreshButton({
     const controller = new AbortController();
     abortRef.current = controller;
     const startedAt = Date.now();
-    setFlash(null);
+    setSettledFor(null);
 
     // Copias locales: el loop no depende de `state` (que quedaría viejo).
     let detailedNow = currentDetailed;
@@ -205,7 +208,12 @@ export function RefreshButton({
     let unavailable = 0;
 
     const snapshot = () => ({
-      batch: { known: knownNow, detailed: detailedNow, propsKnown: known, propsDetailed: detailed },
+      batch: {
+        known: knownNow,
+        detailed: detailedNow,
+        propsKnown: known,
+        propsDetailed: detailed,
+      },
       round: roundsDone,
       requests,
       phase,
@@ -240,6 +248,7 @@ export function RefreshButton({
 
     for (let round = 1; round <= MAX_ROUNDS; round += 1) {
       roundsDone = round;
+      const knownBefore = knownNow;
 
       let payload: SyncPayload;
       let status = 0;
@@ -289,11 +298,14 @@ export function RefreshButton({
         return;
       }
 
-      if (payload.done) {
-        // Nada pendiente: se redibuja el perfil con lo nuevo y el botón queda
-        // listo para otra vez (no se queda en "historial completo").
+      // ¿Ya no hay nada que traer? `pending` sale de nuestra cola y `newIds` de
+      // comparar el `known` de esta vuelta con el de la anterior.
+      const newIds = Math.max(0, knownNow - knownBefore);
+      const pending = Math.max(0, knownNow - detailedNow);
+      if (isSettledAfterRound({ done: payload.done === true, pending, newIds })) {
+        // Se redibuja el perfil con lo nuevo y el botón pasa a "Actualizado".
         finish({});
-        setFlash("Actualizado");
+        setSettledFor(propsSignature);
         router.refresh();
         return;
       }
@@ -355,16 +367,10 @@ export function RefreshButton({
     state.lastProgressAt === null ? 0 : state.now - state.lastProgressAt;
   const stalled = running && !error && sinceProgressMs >= STALL_MS;
   const phaseLabel = state.phase ? PHASE_LABEL[state.phase] : null;
-  const pendingGlobal = Math.max(0, currentKnown - currentDetailed);
 
-  // Línea corta debajo del botón: una sola frase, sin párrafos en el hero.
-  const line = running
-    ? progress.total > 0
-      ? `${progress.analyzed} de ${progress.total} · ${progress.pct}% · ${formatElapsed(elapsedMs)}${phaseLabel ? ` · ${phaseLabel}` : ""}`
-      : "Buscando partidas nuevas…"
-    : pendingGlobal > 0
-      ? `${currentDetailed} analizadas · faltan ${pendingGlobal}`
-      : `${currentDetailed} partidas analizadas · sin pendientes`;
+  // Una sola fuente de verdad para el estado: lo que dijo el server o, si esta
+  // tanda acaba de terminar con los mismos datos, lo que acabamos de comprobar.
+  const isUpToDate = upToDate || settledFor === propsSignature;
 
   return (
     <div className="flex w-full flex-col items-start gap-1.5 sm:w-auto sm:items-end">
@@ -372,34 +378,55 @@ export function RefreshButton({
         <Button
           type="button"
           size="sm"
-          variant="primary"
+          variant={isUpToDate && !running ? "ghost" : "primary"}
           onClick={run}
           disabled={running}
           aria-busy={running}
+          title={
+            isUpToDate
+              ? "El perfil está al día: la partida más nueva de Riot ya está cargada"
+              : "Traer las partidas que faltan de esta cuenta"
+          }
+          className={cn(isUpToDate && !running && "text-win hover:text-win")}
         >
-          <Moon
-            className={cn(
-              "size-4",
-              running && "animate-pulse motion-reduce:animate-none",
-            )}
-            aria-hidden
-          />
-          {running ? "Actualizando…" : "Actualizar ahora"}
+          {running ? (
+            <Loader2 className="size-3.5 animate-spin" aria-hidden />
+          ) : isUpToDate ? (
+            <Check className="size-3.5" aria-hidden />
+          ) : (
+            <RefreshCw className="size-3.5" aria-hidden />
+          )}
+          {running ? "Actualizando…" : isUpToDate ? "Actualizado" : "Actualizar"}
         </Button>
 
         {running ? (
-          <Button type="button" size="sm" variant="ghost" onClick={stop}>
-            <Square className="size-3" aria-hidden />
-            Detener
-          </Button>
+          <>
+            <span className="tabular text-[10px] font-semibold text-muted">
+              {progress.total > 0
+                ? `${progress.analyzed}/${progress.total} · ${progress.pct}%`
+                : "…"}
+              {phaseLabel ? ` · ${phaseLabel}` : ""}
+            </span>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={stop}
+              aria-label="Detener la actualización"
+            >
+              <Square className="size-3" aria-hidden />
+            </Button>
+          </>
         ) : null}
       </div>
 
       {running && progress.total > 0 ? (
-        <div className="h-1 w-full min-w-[180px] overflow-hidden rounded-full bg-soft">
+        <div className="h-0.5 w-full min-w-[160px] overflow-hidden rounded-full bg-soft">
           <div
             className="h-full rounded-full bg-primary transition-all"
-            style={{ width: `${Math.max(progress.pct, progress.analyzed > 0 ? 2 : 0)}%` }}
+            style={{
+              width: `${Math.max(progress.pct, progress.analyzed > 0 ? 2 : 0)}%`,
+            }}
             role="progressbar"
             aria-valuenow={progress.pct}
             aria-valuemin={0}
@@ -408,14 +435,6 @@ export function RefreshButton({
           />
         </div>
       ) : null}
-
-      <p className="tabular text-[10px] leading-tight text-muted">
-        {flash && !running ? (
-          <span className="font-semibold text-win">{flash}</span>
-        ) : (
-          line
-        )}
-      </p>
 
       {error ? (
         <p className="max-w-[280px] text-[10px] leading-snug text-loss">{error}</p>

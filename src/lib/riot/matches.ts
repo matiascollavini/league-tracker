@@ -45,6 +45,38 @@ export async function getMatchIdsPage(
 }
 
 /**
+ * El matchId MÁS NUEVO de Riot para este jugador (1 request, solo el ID).
+ *
+ * Es la única forma de saber si jugó algo que todavía NO está en nuestra base:
+ * `pending` y `done` solo miran nuestra cola, y una partida nueva no está ni
+ * registrada, así que el perfil decía "al día" mientras Riot tenía partidas
+ * más nuevas. Cache corto (45 s): la respuesta cambia con cada partida.
+ *
+ * Devuelve null si el jugador no tiene partidas (o Riot responde 404).
+ */
+export async function getNewestMatchId(
+  puuid: string,
+  platform: Platform,
+): Promise<string | null> {
+  if (isMockMode()) return mockMatches()[0]?.metadata.matchId ?? null;
+
+  const ids = await riotFetch(
+    `/lol/match/v5/matches/by-puuid/${puuid}/ids?start=0&count=1`,
+    {
+      cluster: clusterFor(platform),
+      revalidate: 45,
+      schema: MatchIdsSchema,
+    },
+  ).catch((error: unknown) => {
+    // 404 = el jugador no tiene partidas. No es un error de la página.
+    if (error instanceof RiotApiError && error.status === 404) return [];
+    throw error;
+  });
+
+  return ids[0] ?? null;
+}
+
+/**
  * MATCH-V5. Host REGIONAL (no plataforma). count va de 0 a 100.
  * Cache corto: la lista de IDs cambia con cada partida nueva.
  */

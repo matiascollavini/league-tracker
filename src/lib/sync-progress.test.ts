@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { batchProgress, formatElapsed } from "./sync-progress";
+import {
+  batchProgress,
+  formatElapsed,
+  isSettledAfterRound,
+} from "./sync-progress";
 
 describe("formatElapsed", () => {
   it("usa segundos bajo el minuto y mm:ss arriba", () => {
@@ -71,5 +75,23 @@ describe("batchProgress", () => {
         batchTotal: 0,
       }),
     ).toEqual({ analyzed: 0, pending: 0, total: 0, pct: 0 });
+  });
+});
+
+describe("isSettledAfterRound", () => {
+  it("termina cuando el server dice done", () => {
+    expect(isSettledAfterRound({ done: true, pending: 40, newIds: 3 })).toBe(true);
+  });
+
+  it("termina si no hay pendientes ni IDs nuevos", () => {
+    expect(isSettledAfterRound({ done: false, pending: 0, newIds: 0 })).toBe(true);
+  });
+
+  it("sigue si aparecieron IDs nuevos (partidas recién jugadas)", () => {
+    expect(isSettledAfterRound({ done: false, pending: 0, newIds: 1 })).toBe(false);
+  });
+
+  it("sigue mientras haya detalles pendientes", () => {
+    expect(isSettledAfterRound({ done: false, pending: 12, newIds: 0 })).toBe(false);
   });
 });

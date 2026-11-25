@@ -52,3 +52,25 @@ export function batchProgress(input: {
 
   return { analyzed, pending, total, pct };
 }
+
+/**
+ * ¿Ya no queda nada que traer después de esta vuelta?
+ *
+ * Tres formas de terminar:
+ *  - `done`: el server ya recorrió todo el historial y no quedan pendientes.
+ *  - Sin IDs nuevos y sin detalles pendientes: la partida más nueva de Riot ya
+ *    está cargada, así que seguir es gastar cupo en nada.
+ *
+ * Ojo: NO alcanza con `pending === 0`. Una partida jugada después del último
+ * sync no está ni en nuestra cola, así que el contador de pendientes puede dar
+ * cero mientras Riot tiene partidas nuevas (`newIds` viene de comparar el
+ * `known` de la vuelta anterior con el de ésta).
+ */
+export function isSettledAfterRound(input: {
+  done: boolean;
+  pending: number;
+  newIds: number;
+}): boolean {
+  if (input.done) return true;
+  return input.pending === 0 && input.newIds === 0;
+}

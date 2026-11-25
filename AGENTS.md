@@ -169,13 +169,19 @@ scripts/        verify-riot.mjs (verificación contra la API real)
   El **reloj avanza solo en el browser** desde `gameStartTime` (`src/lib/live.ts`):
   ningún request extra ni polling.
 
-- El botón **"Actualizar ahora"** vive en el hero del perfil
-  (`src/components/refresh-button.tsx`, ADR-016). Llama a `POST /api/sync` en
+- El botón **"Actualizar" / "Actualizado"** vive en el hero del perfil
+  (`src/components/refresh-button.tsx`, ADR-016/017). Llama a `POST /api/sync` en
   bucle hasta que no queden pendientes: el endpoint es incremental y resumible,
-  así que sube solo las partidas que faltan. Mientras corre muestra una luna
-  parpadeando y el avance de la tanda; al llegar a `done` hace `router.refresh()`
-  y el perfil se redibuja solo. El bloque "Progreso del análisis" ya no existe:
-  su info está en la línea del botón y en el pie.
+  así que sube solo las partidas que faltan. Al terminar hace `router.refresh()`
+  y el perfil se redibuja solo. Ya no hay contador al lado del botón: el estado
+  es el del botón (formato de dpm.lol) y los totales quedan en el banner de
+  historial completo y en el pie.
+- Ojo con el estado del botón (ADR-017): `pending` y `done` solo miran **nuestra**
+  cola, y una partida jugada después del último sync no está ni registrada. Por
+  eso `loadProfile` compara contra Riot con `getNewestMatchId()` (1 request,
+  `ids?count=1`, cache 45 s) y devuelve `upToDate`. El botón dice
+  **"Actualizado"** / **"Actualizar"** en base a eso, nunca solo a la base
+  local. Si la consulta falla, `upToDate` es false (no se afirma "al día").
 
 ---
 

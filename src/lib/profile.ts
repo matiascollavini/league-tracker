@@ -1,8 +1,9 @@
 import type { Platform } from "@/lib/riot/config";
 import { getLeagueEntries, getSummoner, resolveAccount } from "@/lib/riot/account";
-import { getRecentMatches } from "@/lib/riot/matches";
+import { getNewestMatchId, getRecentMatches } from "@/lib/riot/matches";
 import { isMockMode } from "@/lib/riot/http";
 import {
+  filterKnownMatchIds,
   findSyncedPuuid,
   findSyncForPuuid,
   getAliasPuuids,
@@ -51,6 +52,17 @@ export type ProfileData = {
    * Riot: el botón de "cargar todo" no tiene nada que hacer y se esconde.
    */
   complete: boolean;
+  /**
+   * Riot tiene partidas (o IDs que no tenemos) que la página todavía no puede
+   * mostrar. Se calcula contra Riot, no solo contra nuestra cola.
+   */
+  hasNewMatches: boolean;
+  /**
+   * El perfil está al día: nada pendiente, backfill recorrido y la partida más
+   * nueva de Riot ya está en la base. Es lo que muestra el botón ("Actualizado"
+   * vs "Actualizar"). Conservador: si no se pudo verificar, es false.
+   */
+  upToDate: boolean;
 };
 
 /**
@@ -112,6 +124,8 @@ export async function loadProfile(
       partial: false,
       // Sin key no hay nada que sincronizar: el aviso de "cargar" no aplica.
       complete: true,
+      hasNewMatches: false,
+      upToDate: true,
     };
   }
 
@@ -203,6 +217,21 @@ export async function loadProfile(
     progress = { known: matches.length, detailed: matches.length };
   }
 
+  // ¿Riot tiene una partida más nueva que la que tenemos? Es 1 request (solo el
+  // ID) y cachea 45 s. Sin esto, una partida jugada después del último sync no
+  // figura en `known` y el botón decía "al día" mintiendo.
+  let hasNewMatches = source === "live";
+  if (source === "db" && !isMockMode()) {
+    try {
+      const newest = await getNewestMatchId(puuid, effectivePlatform);
+      hasNewMatches =
+        newest !== null && (await filterKnownMatchIds([newest])).length === 0;
+    } catch {
+      // No se pudo verificar (429/5xx): no podemos afirmar que está al día.
+      hasNewMatches = true;
+    }
+  }
+
   return {
     account,
     puuid,
@@ -222,5 +251,12 @@ export async function loadProfile(
       source === "db" &&
       backfillState === "done" &&
       progress.detailed >= progress.known,
+    hasNewMatches,
+    upToDate:
+      source !== "live" &&
+      !isMockMode() &&
+      !hasNewMatches &&
+      progress.detailed >= progress.known &&
+      backfillState === "done",
   };
 }

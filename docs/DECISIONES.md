@@ -738,6 +738,9 @@ baja solo los detalles que faltan) y el cliente lo llamaba en bucle hasta
    Riot limita o hay lock — con feedback **compacto**: luna (`Moon` de lucide)
    con `animate-pulse` mientras corre, `Actualizar ahora` / `Actualizando…`, una
    línea `34 de 361 · 9% · 0:42` y una barra de 1 px.
+   *Revisado en ADR-017:* la luna y el contador se fueron; quedó el formato de
+   dpm.lol (`Actualizado` con check / `Actualizar` con flecha / `Actualizando…`
+   con spinner, y el avance `34/361 · 9%` al lado del botón).
 3. Se **elimina el bloque "Progreso del análisis"** de la página: sus dos datos
    (`X de Y` y "Riot permite ~1.000") ya están en la línea del botón y en el
    pie de la página. Queda solo el banner de "Historial completo".
@@ -759,6 +762,67 @@ baja solo los detalles que faltan) y el cliente lo llamaba en bucle hasta
   verdad; hay `Detener` y el avance queda guardado.
 - Aritmética de la tanda extraída a `src/lib/sync-progress.ts` (puro) con tests:
   tanda incremental, cuenta nueva, denominador que crece y el caso 0/0.
+
+---
+
+## ADR-017 — El botón sabe si Riot tiene partidas nuevas (y por qué mentía)
+
+**Estado:** aceptada · **Fecha:** 2026-11-25
+
+### Contexto (el bug)
+El botón decía "Actualizado" con partidas nuevas sin cargar. Reproducido con
+datos reales: para `keke#6seve`, Riot devolvía `LA2_1639883346` como partida más
+nueva y nuestra base llegaba a `LA2_1639879656`.
+
+La causa no era el botón sino **de dónde salía la respuesta**:
+`pending = known - detailed` y `done` se calculan sobre `puuid_matches`, o sea
+sobre las partidas que **ya descubrimos**. Una partida jugada después del último
+sync no está ni registrada: no suma a `known`, no suma a `detailed` y no genera
+fila pendiente. Resultado: "0 pendientes" era cierto y "al día" era falso.
+
+### Decisión
+**Comparar contra Riot, no contra nuestra cola.** 1 request, solo IDs:
+
+```
+GET /lol/match/v5/matches/by-puuid/{puuid}/ids?start=0&count=1
+```
+
+- `getNewestMatchId()` en `src/lib/riot/matches.ts`, con `revalidate: 45` (la
+  respuesta cambia con cada partida). Host regional, 404 -> null.
+- En `loadProfile`: si el ID más nuevo **no está en `matches`**, `hasNewMatches
+  = true`. Si la llamada falla (429/5xx), también: sin prueba no se afirma
+  "al día" (conservador).
+- `upToDate = !hasNewMatches && sin pendientes && backfill recorrido`. Es lo que
+  decide el label: **"Actualizado"** vs **"Actualizar"** (formato de dpm.lol,
+  que muestra "Update now" / "Up to date").
+  [NOTA] La forma exacta del botón de dpm (medidas, colores, textos de los
+  estados intermedios) quedó **UNVERIFIED**: su perfil devuelve 403 a curl y un
+  crawl con browser se cortaba por navegaciones de la SPA. Lo único verificado
+  es el literal "Update now" en el HTML crawleado del perfil
+  (`research/crawled/dpm-lol/https-dpm-lol-hansd4mpf-euw.md`, 2026-11-24) y
+  ubicación (al lado del Riot ID, antes de las tabs). Se replicó el
+  comportamiento (dos estados + spinner), no el pixel.
+- Costo: +1 request por vista de perfil, cacheado 45 s. Es el mismo orden que el
+  chip de partida en vivo (§7.9) y no crece con la cantidad de partidas.
+
+### El loop del cliente también cambió
+`done` del server sigue significando "backfill recorrido + nada pendiente". El
+cliente ahora corta con `isSettledAfterRound({ done, pending, newIds })`:
+`newIds` es el crecimiento de `known` en esa vuelta, así que una tanda que trae
+una partida nueva sigue (aunque el backfill viejo esté incompleto) y una que no
+trae nada y ya no tiene pendientes termina y refresca.
+
+### Consecuencias
+- El label nunca dice "Actualizado" sin haber consultado a Riot en los últimos
+  45 s.
+- Una cuenta con backlog grande sigue diciendo "Actualizar" hasta drenarlo:
+  es honesto y es lo que se pidió en ADR-016 (cargar lo que falta).
+- Se fue el contador de "N partidas analizadas" de al lado del botón: ahora el
+  estado es el del botón (dpm) y los totales quedan en el banner de historial
+  completo y en el pie del perfil.
+- Tests: `isSettledAfterRound` (4 casos) en `src/lib/sync-progress.test.ts`.
+- Verificado en vivo: `keke#6seve` -> "Actualizar" (ID nuevo ausente);
+  `Carlos#RHLMC` -> "Actualizado" (su ID más nuevo **sí** está en la base).
 
 ---
 

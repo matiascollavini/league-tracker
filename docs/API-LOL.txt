@@ -899,6 +899,7 @@ solo puede ser privado/demo.
   | Backfill completo (10 páginas + 1000)    | 1 + 10 + 1000 = 1011 |
   | Segundo usuario abre el mismo perfil     | 1 + 0 (ya cacheadas) |
   | Chip "en partida ahora" (spectator)      | 1 (2 si hay dos puuids) |
+  | ¿Hay partidas nuevas? (ids count=1)      | 1                    |
   | Una vuelta de "Actualizar ahora"         | 30 (RIOT_SYNC_CHUNK) |
 
   El botón "Actualizar ahora" del perfil llama a /api/sync en bucle: cada

@@ -118,6 +118,7 @@ export default async function ProfilePage({
     source,
     partial,
     complete,
+    upToDate,
   } = profile;
 
   // El catálogo (Data Dragon) y la partida en curso (SPECTATOR-V5) son
@@ -257,6 +258,7 @@ export default async function ProfilePage({
               tagLine={account.tagLine ?? tagLine}
               known={progress.known}
               detailed={progress.detailed}
+              upToDate={upToDate}
             />
           )
         }
