@@ -1,5 +1,7 @@
 import Image from "next/image";
+import Link from "next/link";
 import { championIconUrl } from "@/lib/ddragon/champions";
+import { participantHref } from "@/lib/links";
 import { kdaOf } from "@/lib/riot/aggregate";
 import { roleLabel, type PanelTeam } from "@/lib/riot/panel";
 import { cn } from "@/lib/utils";
@@ -10,6 +12,11 @@ type Props = {
   version: string;
   /** championName de Riot -> nombre localizado de Data Dragon. */
   names: Record<string, string>;
+  /**
+   * Plataforma de la partida (la de los 10 jugadores). Con esto el nombre de
+   * cada participante linkea a su perfil; sin esto se muestra como texto.
+   */
+  platform?: string | null;
   /** Puuid del jugador del perfil: se resalta su fila. */
   mePuuid?: string | null;
   /** Versión apretada, para el desplegable de la lista de partidas. */
@@ -26,6 +33,7 @@ export function MatchTeams({
   teams,
   version,
   names,
+  platform,
   mePuuid,
   compact = false,
 }: Props) {
@@ -93,6 +101,54 @@ export function MatchTeams({
               {team.players.map((player) => {
                 const isMe = mePuuid !== undefined && player.puuid === mePuuid;
                 const role = roleLabel(player.position);
+                // El jugador del perfil no linkea a sí mismo: sería recargar la
+                // misma página y perder los filtros. Los otros 9 sí.
+                const href = isMe
+                  ? null
+                  : participantHref(platform, player.riotId);
+
+                const identity = (
+                  <div className="flex min-w-0 items-center gap-2">
+                    <Image
+                      src={championIconUrl(version, player.championName)}
+                      alt=""
+                      width={28}
+                      height={28}
+                      className={cn(
+                        "shrink-0 rounded-sm bg-soft",
+                        compact ? "size-6" : "size-7",
+                      )}
+                    />
+                    <div className="min-w-0">
+                      <p
+                        className={cn(
+                          "truncate font-semibold",
+                          compact ? "text-[11px]" : "text-[12px]",
+                          isMe ? "text-primary" : "text-fg",
+                          href &&
+                            "transition-colors group-hover/player:text-primary",
+                        )}
+                      >
+                        {player.riotId ?? "Jugador"}
+                        {isMe ? (
+                          <span className="ml-1 text-[9px] font-bold uppercase text-primary">
+                            vos
+                          </span>
+                        ) : null}
+                      </p>
+                      <p
+                        className={cn(
+                          "truncate text-muted",
+                          compact ? "text-[10px]" : "text-[11px]",
+                        )}
+                      >
+                        {names[player.championName] ?? player.championName}
+                        {role !== "—" ? ` · ${role}` : ""}
+                      </p>
+                    </div>
+                  </div>
+                );
+
                 return (
                   <tr
                     key={player.puuid}
@@ -102,43 +158,17 @@ export function MatchTeams({
                     )}
                   >
                     <td className={compact ? "px-2 py-1" : "px-3 py-1.5"}>
-                      <div className="flex min-w-0 items-center gap-2">
-                        <Image
-                          src={championIconUrl(version, player.championName)}
-                          alt=""
-                          width={28}
-                          height={28}
-                          className={cn(
-                            "shrink-0 rounded-sm bg-soft",
-                            compact ? "size-6" : "size-7",
-                          )}
-                        />
-                        <div className="min-w-0">
-                          <p
-                            className={cn(
-                              "truncate font-semibold",
-                              compact ? "text-[11px]" : "text-[12px]",
-                              isMe ? "text-primary" : "text-fg",
-                            )}
-                          >
-                            {player.riotId ?? "Jugador"}
-                            {isMe ? (
-                              <span className="ml-1 text-[9px] font-bold uppercase text-primary">
-                                vos
-                              </span>
-                            ) : null}
-                          </p>
-                          <p
-                            className={cn(
-                              "truncate text-muted",
-                              compact ? "text-[10px]" : "text-[11px]",
-                            )}
-                          >
-                            {names[player.championName] ?? player.championName}
-                            {role !== "—" ? ` · ${role}` : ""}
-                          </p>
-                        </div>
-                      </div>
+                      {href ? (
+                        <Link
+                          href={href}
+                          title={`Ver el perfil de ${player.riotId}`}
+                          className="group/player block min-w-0 rounded-sm"
+                        >
+                          {identity}
+                        </Link>
+                      ) : (
+                        identity
+                      )}
                     </td>
                     <td
                       className={cn(

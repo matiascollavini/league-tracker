@@ -73,6 +73,19 @@ export function clusterFor(platform: Platform): Cluster {
   return PLATFORM_CLUSTER[platform];
 }
 
+/**
+ * Plataforma en la que se jugó una partida, deducida del id de match-v5
+ * (`LA2_1639441889` -> `la2`). Sirve para armar links a los perfiles de los
+ * 10 participantes: todos jugaron en la plataforma del prefijo.
+ *
+ * Devuelve `null` si el prefijo no es una plataforma conocida, en vez de
+ * romper el render.
+ */
+export function platformOfMatchId(matchId: string): Platform | null {
+  const prefix = matchId.split("_")[0]?.toLowerCase() ?? "";
+  return isPlatform(prefix) ? prefix : null;
+}
+
 export function platformFromEnv(): Platform {
   const value = process.env.RIOT_DEFAULT_PLATFORM?.toLowerCase() ?? "la2";
   return isPlatform(value) ? value : "la2";

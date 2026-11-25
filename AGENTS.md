@@ -155,6 +155,12 @@ scripts/        verify-riot.mjs (verificación contra la API real)
   a Riot). La ruta `/partida/[matchId]` sigue viva para compartir y para "forma
   reciente".
 
+- Dentro del roster, el nombre de cada participante linkea a **su** perfil
+  (`participantHref` en `src/lib/links.ts`). La plataforma sale del prefijo del
+  `matchId` (`platformOfMatchId`: `LA2_…` → `la2`), que es la de los 10 jugadores;
+  el dueño del perfil no se linkea a sí mismo para no perder los filtros. Sin
+  Riot ID guardado (`riot_id` null) el nombre queda como texto, no como link roto.
+
 ---
 
 ## 5. Historial

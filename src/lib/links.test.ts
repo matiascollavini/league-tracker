@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { profileHref } from "./links";
+import { participantHref, profileHref } from "./links";
 
 describe("profileHref", () => {
   it("arma la URL canónica sin query", () => {
@@ -29,5 +29,29 @@ describe("profileHref", () => {
         page: 2,
       }),
     ).toBe("/perfil/la2/Carlos/RHLMC?champion=Ahri&queue=solo&page=2");
+  });
+});
+
+describe("participantHref", () => {
+  it("arma el perfil del participante con la plataforma de la partida", () => {
+    expect(participantHref("la2", "Carlos#RHLMC")).toBe(
+      "/perfil/la2/Carlos/RHLMC",
+    );
+    expect(participantHref("kr", "Hide on bush#KR1")).toBe(
+      "/perfil/kr/Hide%20on%20bush/KR1",
+    );
+  });
+
+  it("corta por el último # (el nombre puede tener símbolos)", () => {
+    expect(participantHref("na1", "a#b#NA1")).toBe("/perfil/na1/a%23b/NA1");
+  });
+
+  it("devuelve null cuando no hay link posible", () => {
+    expect(participantHref("la2", null)).toBeNull();
+    expect(participantHref(null, "Carlos#RHLMC")).toBeNull();
+    expect(participantHref("LAS", "Carlos#RHLMC")).toBeNull();
+    expect(participantHref("la2", "Carlos")).toBeNull();
+    expect(participantHref("la2", "Carlos#")).toBeNull();
+    expect(participantHref("la2", "#RHLMC")).toBeNull();
   });
 });

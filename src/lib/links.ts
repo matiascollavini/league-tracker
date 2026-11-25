@@ -1,4 +1,4 @@
-import type { Platform, QueueFilterId } from "@/lib/riot/config";
+import { isPlatform, type Platform, type QueueFilterId } from "@/lib/riot/config";
 
 /** URL canónica de un perfil. Los segmentos se encodifican una sola vez. */
 export function profileHref(
@@ -21,4 +21,29 @@ export function profileHref(
   if (options.page && options.page > 1) params.set("page", String(options.page));
   const query = params.toString();
   return query ? `${base}?${query}` : base;
+}
+
+/**
+ * URL del perfil de un participante de una partida, a partir del Riot ID que
+ * reportó Riot (`Nombre#TAG`) y la plataforma de la partida.
+ *
+ * Devuelve `null` cuando no hay con qué armar el link (sin Riot ID, sin
+ * plataforma válida o un `#` mal formado): la tabla muestra el nombre como
+ * texto plano en vez de un link roto.
+ */
+export function participantHref(
+  platform: string | null | undefined,
+  riotId: string | null | undefined,
+): string | null {
+  if (!platform || !isPlatform(platform) || !riotId) return null;
+
+  // Riot separa por el ÚLTIMO `#`: el nombre puede tener espacios y acentos.
+  const hash = riotId.lastIndexOf("#");
+  if (hash <= 0 || hash === riotId.length - 1) return null;
+
+  const gameName = riotId.slice(0, hash).trim();
+  const tagLine = riotId.slice(hash + 1).trim();
+  if (!gameName || !tagLine) return null;
+
+  return profileHref(platform, gameName, tagLine);
 }

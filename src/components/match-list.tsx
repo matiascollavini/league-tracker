@@ -12,6 +12,7 @@ import {
   type MatchTimes,
 } from "@/lib/riot/aggregate";
 import { parsePanelTeams, type PanelTeam } from "@/lib/riot/panel";
+import { platformOfMatchId } from "@/lib/riot/config";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -228,13 +229,19 @@ export function MatchList({
                   </div>
 
                   {Array.isArray(state) ? (
-                    <MatchTeams
-                      teams={state}
-                      version={version}
-                      names={names}
-                      mePuuid={rowPuuid}
-                      compact
-                    />
+                    <>
+                      <MatchTeams
+                        teams={state}
+                        version={version}
+                        names={names}
+                        platform={platformOfMatchId(match.matchId)}
+                        mePuuid={rowPuuid}
+                        compact
+                      />
+                      <p className="mt-1 px-1 text-[10px] font-medium text-dim">
+                        Click en un jugador para abrir su perfil.
+                      </p>
+                    </>
                   ) : state === "error" ? (
                     <p className="px-1 py-2 text-[11px] leading-relaxed text-muted">
                       No pudimos cargar los jugadores de esta partida.{" "}

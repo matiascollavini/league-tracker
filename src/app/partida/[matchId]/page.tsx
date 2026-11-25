@@ -119,12 +119,18 @@ export default async function MatchPage({ params, searchParams }: Props) {
         </div>
       </header>
 
-      <MatchTeams
-        teams={groupTeams(detail.participants)}
-        version={catalog.version}
-        names={names}
-        mePuuid={me?.puuid ?? null}
-      />
+      <div className="space-y-2">
+        <p className="text-[10px] font-medium text-dim">
+          Click en un jugador para abrir su perfil.
+        </p>
+        <MatchTeams
+          teams={groupTeams(detail.participants)}
+          version={catalog.version}
+          names={names}
+          platform={detail.platformId}
+          mePuuid={me?.puuid ?? null}
+        />
+      </div>
 
       <p className="flex items-center gap-1.5 text-[10px] font-medium text-dim">
         <Swords className="size-3" aria-hidden />

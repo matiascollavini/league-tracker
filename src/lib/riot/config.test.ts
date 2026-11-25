@@ -3,6 +3,7 @@ import {
   clusterFor,
   isPlatform,
   isQueueFilter,
+  platformOfMatchId,
   PLATFORMS,
   queuesFor,
   queueLabel,
@@ -33,6 +34,19 @@ describe("routing", () => {
     expect(isPlatform("LAS")).toBe(false);
     expect(isPlatform("las")).toBe(false);
     expect(isPlatform("")).toBe(false);
+  });
+
+  it("deduce la plataforma del id de la partida", () => {
+    expect(platformOfMatchId("LA2_1639441889")).toBe("la2");
+    expect(platformOfMatchId("NA1_1")).toBe("na1");
+    expect(platformOfMatchId("KR_42")).toBe("kr");
+    expect(platformOfMatchId("ME1_7")).toBe("me1");
+  });
+
+  it("no inventa plataformas para ids raros", () => {
+    expect(platformOfMatchId("LAS_123")).toBeNull();
+    expect(platformOfMatchId("1639441889")).toBeNull();
+    expect(platformOfMatchId("")).toBeNull();
   });
 });
 
