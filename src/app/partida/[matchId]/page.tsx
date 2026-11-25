@@ -89,7 +89,7 @@ export default async function MatchPage({ params, searchParams }: Props) {
           resultWin === null
             ? "border-white/5 bg-card"
             : resultWin
-              ? "border-primary/20 bg-win-tint"
+              ? "border-win/20 bg-win-tint"
               : "border-loss/20 bg-loss-tint",
         )}
       >
@@ -100,7 +100,7 @@ export default async function MatchPage({ params, searchParams }: Props) {
               resultWin === null
                 ? "text-fg"
                 : resultWin
-                  ? "text-primary"
+                  ? "text-win"
                   : "text-loss",
             )}
           >

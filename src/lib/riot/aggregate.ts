@@ -189,6 +189,58 @@ export function summarize(
   };
 }
 
+/**
+ * Picks destacados del perfil: los mejores y los que conviene dejar.
+ *
+ * Solo se miran los campeones más jugados (`poolSize`), así una partida suelta
+ * con 0% u 100% de winrate no se cuela como "mejor" ni "peor" pick. Dentro de
+ * ese grupo, `best` ordena por winrate descendente y `worst` por ascendente.
+ * Los dos listados no se repiten: si hay pocos campeones el grupo se parte.
+ */
+export type PickHighlights = {
+  best: ChampionStat[];
+  worst: ChampionStat[];
+};
+
+export function pickHighlights(
+  champions: readonly ChampionStat[],
+  { limit = 3, poolSize = 8 }: { limit?: number; poolSize?: number } = {},
+): PickHighlights {
+  const byGames = [...champions].sort(
+    (a, b) =>
+      b.games - a.games ||
+      b.winrate - a.winrate ||
+      a.championName.localeCompare(b.championName),
+  );
+  const pool = byGames.slice(0, Math.max(poolSize, limit));
+
+  const byBest = [...pool].sort(
+    (a, b) =>
+      b.winrate - a.winrate ||
+      b.games - a.games ||
+      a.championName.localeCompare(b.championName),
+  );
+  const byWorst = [...pool].sort(
+    (a, b) =>
+      a.winrate - b.winrate ||
+      b.games - a.games ||
+      a.championName.localeCompare(b.championName),
+  );
+
+  // Con 6+ candidatos alcanza para dos listas de 3; con menos se reparte.
+  const bestCount = pool.length >= limit * 2 ? limit : Math.ceil(pool.length / 2);
+  const best = byBest.slice(0, bestCount);
+  const taken = new Set(best.map((champion) => champion.championName));
+
+  return {
+    best,
+    // Se excluyen los de `best` para no recomendar y desaconsejar el mismo pick.
+    worst: byWorst
+      .filter((champion) => !taken.has(champion.championName))
+      .slice(0, limit),
+  };
+}
+
 export function toMatchSummaries(
   matches: readonly Match[],
   puuid: PuuidArg,

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   durationSeconds,
+  pickHighlights,
   normalizeRole,
   formatDuration,
   kdaOf,
@@ -9,6 +10,7 @@ import {
   summarize,
   toMatchSummaries,
 } from "./aggregate";
+import type { ChampionStat } from "./aggregate";
 import type { Match } from "./types";
 
 const PUUID = "p".repeat(78);
@@ -159,6 +161,78 @@ describe("summarize", () => {
 
     const summary = summarize(matches, PUUID);
     expect(summary.champions.map((c) => c.championName)).toEqual(["Darius", "Lux"]);
+  });
+});
+
+function stat(championName: string, games: number, wins: number): ChampionStat {
+  return {
+    championId: 0,
+    championName,
+    games,
+    wins,
+    losses: games - wins,
+    winrate: wins / games,
+    kda: 0,
+    kills: 0,
+    deaths: 0,
+    assists: 0,
+  };
+}
+
+describe("pickHighlights", () => {
+  it("elige los mejores y peores winrates entre los más jugados", () => {
+    const champions = [
+      stat("Ahri", 20, 12),
+      stat("Lux", 18, 8),
+      stat("Jinx", 16, 11),
+      stat("Darius", 14, 5),
+      stat("Nami", 12, 7),
+      stat("Riven", 10, 3),
+      stat("Zed", 9, 5),
+      stat("Sona", 8, 2),
+    ];
+
+    const { best, worst } = pickHighlights(champions);
+
+    // Jinx 11/16 (69%), Ahri 12/20 (60%), Nami 7/12 (58%).
+    expect(best.map((c) => c.championName)).toEqual(["Jinx", "Ahri", "Nami"]);
+    expect(worst.map((c) => c.championName)).toEqual(["Sona", "Riven", "Darius"]);
+  });
+
+  it("ignora campeones con pocas partidas aunque tengan 0% u 100% WR", () => {
+    const champions = [
+      stat("Ahri", 30, 18),
+      stat("Lux", 25, 14),
+      stat("Jinx", 22, 13),
+      stat("Darius", 20, 6),
+      stat("Nami", 18, 11),
+      stat("Riven", 16, 7),
+      stat("Zed", 15, 9),
+      stat("Sona", 14, 4),
+      stat("Yuumi", 1, 0),
+      stat("Kaisa", 1, 1),
+    ];
+
+    const { best, worst } = pickHighlights(champions);
+    const names = [...best, ...worst].map((c) => c.championName);
+
+    expect(names).not.toContain("Yuumi");
+    expect(names).not.toContain("Kaisa");
+  });
+
+  it("no repite un campeón entre mejores y peores", () => {
+    const champions = [stat("Ahri", 5, 3), stat("Lux", 5, 3), stat("Jinx", 5, 3)];
+
+    const { best, worst } = pickHighlights(champions);
+    const names = [...best, ...worst].map((c) => c.championName);
+
+    expect(new Set(names).size).toBe(names.length);
+    expect(best).toHaveLength(2);
+    expect(worst).toHaveLength(1);
+  });
+
+  it("sin campeones devuelve listas vacías", () => {
+    expect(pickHighlights([])).toEqual({ best: [], worst: [] });
   });
 });
 

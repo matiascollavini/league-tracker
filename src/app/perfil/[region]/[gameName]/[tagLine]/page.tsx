@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { AlertTriangle, ArrowLeftRight, CheckCircle2, Info } from "lucide-react";
 import { ChampionPool } from "@/components/champion-pool";
 import { ChampionTable } from "@/components/champion-table";
+import { ChampionPicks } from "@/components/champion-picks";
 import { MatchList } from "@/components/match-list";
 import { Pagination } from "@/components/pagination";
 import { ProfileHero, RankSummary } from "@/components/profile-header";
@@ -15,6 +16,7 @@ import {
   formatDate,
   matchTimes,
   percent,
+  pickHighlights,
   summarize,
   toMatchSummaries,
   type MatchTimes,
@@ -148,6 +150,8 @@ export default async function ProfilePage({
   const visible = filtered.slice(pageStart, pageStart + PAGE_SIZE);
 
   const top = summary.champions[0];
+  // Mejores y peores picks entre los más jugados (no toca `summary.champions`).
+  const highlights = pickHighlights(summary.champions);
   const recent = rows.slice(0, 20);
   const recentWins = recent.filter((row) => row.win).length;
 
@@ -259,7 +263,7 @@ export default async function ProfilePage({
                   title={`${names[row.championName] ?? row.championName} · ${row.win ? "Victoria" : "Derrota"}`}
                   className={cn(
                     "size-4 rounded-[2px] transition-transform hover:scale-125",
-                    row.win ? "bg-primary/80" : "bg-loss/70",
+                    row.win ? "bg-win/80" : "bg-loss/70",
                   )}
                 />
               ))}
@@ -398,7 +402,7 @@ export default async function ProfilePage({
           {/* pool de campeones */}
           <section className="space-y-2">
             <div className="flex items-baseline justify-between">
-              <h2 className="section-title">Tu pool</h2>
+              <h2 className="section-title">Picks más jugados</h2>
               <span className="text-[11px] font-medium text-dim">
                 {summary.champions.length} campeones
               </span>
@@ -411,6 +415,37 @@ export default async function ProfilePage({
               hrefFor={(championName) =>
                 hrefFor({ champion: championName ?? null })
               }
+            />
+          </section>
+
+          {/* recomendaciones: mejores y peores picks del pool */}
+          <section
+            className="grid gap-3 sm:grid-cols-2"
+            aria-label="Recomendación de picks"
+          >
+            <ChampionPicks
+              title="Mejores picks"
+              tone="best"
+              champions={highlights.best}
+              names={names}
+              version={catalog.version}
+              selected={selected?.championName}
+              hrefFor={(championName) =>
+                hrefFor({ champion: championName ?? null })
+              }
+              emptyLabel="Todavía no hay partidas suficientes para recomendar un pick."
+            />
+            <ChampionPicks
+              title="No pickees más esto"
+              tone="worst"
+              champions={highlights.worst}
+              names={names}
+              version={catalog.version}
+              selected={selected?.championName}
+              hrefFor={(championName) =>
+                hrefFor({ champion: championName ?? null })
+              }
+              emptyLabel="Sin picks para desaconsejar por ahora."
             />
           </section>
 

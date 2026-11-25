@@ -205,7 +205,7 @@ export function MatchList({
                     <span
                       className={cn(
                         "text-[11px] font-bold",
-                        match.win ? "text-primary" : "text-loss",
+                        match.win ? "text-win" : "text-loss",
                       )}
                     >
                       {match.win ? "Victoria" : "Derrota"}

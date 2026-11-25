@@ -4,7 +4,7 @@
  * Sistema visual calcado de dpm.lol (scope "theme-rft" de su tema oscuro).
  * Los valores salen de su CSS compilado:
  *   background #131619 · card rgb(222 204 251 / .04) · muted #242832
- *   foreground #f9fafd · muted-foreground #9b9c9e · primary #a6b0f2
+ *   foreground #f9fafd · muted-foreground #9b9c9e · primary #c8aa6e (oro LoL)
  *   success #4ac97e · destructive #f7665e · gold #ffd147
  * Los nombres son semánticos (no "ink/gold") para que la capa de UI no
  * dependa de la paleta.
@@ -25,9 +25,9 @@
   --color-muted: #9b9c9e;
   --color-dim: #6f7176;
 
-  /* acentos */
-  --color-primary: #a6b0f2;
-  --color-primary-deep: #4d62e5;
+  /* acentos: el primary es el oro de League (#c8aa6e), no el azul de dpm. */
+  --color-primary: #c8aa6e;
+  --color-primary-deep: #6b4f1d;
   --color-blue: #92c5ff;
   --color-gold: #ffd147;
   --color-gold-soft: #ffe8a3;
@@ -35,8 +35,8 @@
   --color-win: #4ac97e;
   --color-loss: #f7665e;
 
-  /* tintes de fila (dpm: dpm-blue-600/25 y destructive/20) */
-  --color-win-tint: #1f264a;
+  /* tintes de fila: verde tenue en victoria, rojo tenue en derrota. */
+  --color-win-tint: #1e3a2a;
   --color-loss-tint: #452b2c;
 
   --font-sans:
@@ -106,6 +106,20 @@
     letter-spacing: 0.02em;
     text-transform: uppercase;
     color: var(--color-primary);
+  }
+
+  /*
+   * Variantes de color de `.section-title`. Van DESPUÉS de la regla base a
+   * propósito: misma especificidad, gana la última declaración del layer.
+   * `text-win`/`text-loss` solos no alcanzan, porque `.section-title` también
+   * fija `color` y se emite después de las utilidades de Tailwind.
+   */
+  .section-title--win {
+    color: var(--color-win);
+  }
+
+  .section-title--loss {
+    color: var(--color-loss);
   }
 
   /* Etiqueta chica (labels de KPI, meta de filas). */
