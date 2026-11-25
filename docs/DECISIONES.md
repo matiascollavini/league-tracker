@@ -524,14 +524,16 @@ imagen provista por él.
   `template`), header, footer y páginas legales. El nombre del repo y el `name`
   de `package.json` siguen siendo `league-page`: renombrarlos no aporta nada
   funcional y rompería rutas de deploy y documentación.
-- **Logo:** `public/logo.png` (256×256, PNG con paleta, ~30 KB) derivado de la
-  imagen original 2048×2048. Se sirve con `next/image` (28×28 en el header, con
-  `priority` porque está above the fold).
+- **Logo:** `public/logo.png` (256×256, PNG con transparencia y paleta, ~33 KB)
+  derivado de la imagen original 2048×2048 con el fondo recortado. Se sirve con
+  `next/image` (32×32 en el header, con `priority` porque está above the fold).
 - **Favicon e icono de app:** `src/app/icon.png` (192×192) y
   `src/app/apple-icon.png` (180×180), derivados de la misma imagen. Next los
   levanta por convención de file-based metadata, sin tocar `metadata.icons`.
-- El logo es cuadrado y de fondo oscuro, así que se muestra con `rounded-md` +
-  `ring-1 ring-white/10` para integrarse al panel sin recortar el emblema.
+- El logo tiene fondo transparente: antes de exportarlo se le recorta el margen
+  vacío (`sharp.trim`) y se le deja un padding del 2 % para que no toque los
+  bordes. En el header va sin fondo ni borde, con un `drop-shadow` y un
+  `scale-105` al hover (el fondo lo pone el header).
 - El wordmark queda como texto (`League` en `fg` + `Tracker` en `primary`) para no
   depender de una imagen de texto y mantener el look de dpm.lol (ADR-011).
 - El aviso legal en inglés se reescribió con el nombre nuevo, sin cambiar el

@@ -39,10 +39,10 @@ export default function RootLayout({
               <Image
                 src="/logo.png"
                 alt="League Tracker"
-                width={28}
-                height={28}
+                width={32}
+                height={32}
                 priority
-                className="size-7 rounded-md ring-1 ring-white/10 transition-shadow group-hover:ring-primary/40"
+                className="size-8 drop-shadow-[0_2px_6px_rgba(0,0,0,0.45)] transition-transform group-hover:scale-105"
               />
               <span className="text-[15px] font-extrabold tracking-tight text-fg">
                 League<span className="text-primary">Tracker</span>
