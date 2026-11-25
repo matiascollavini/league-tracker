@@ -5,6 +5,7 @@ import { AlertTriangle, ArrowLeftRight, CheckCircle2, Info } from "lucide-react"
 import { ChampionPool } from "@/components/champion-pool";
 import { ChampionTable } from "@/components/champion-table";
 import { ChampionPicks } from "@/components/champion-picks";
+import { FrequentTeammates } from "@/components/frequent-teammates";
 import { LiveBadge } from "@/components/live-badge";
 import { MatchList } from "@/components/match-list";
 import { Pagination } from "@/components/pagination";
@@ -22,6 +23,7 @@ import {
   toMatchSummaries,
   type MatchTimes,
 } from "@/lib/riot/aggregate";
+import { getTopTeammates } from "@/lib/db/teammates";
 import { loadProfile } from "@/lib/profile";
 import {
   isPlatform,
@@ -34,6 +36,7 @@ import {
   type QueueFilterId,
 } from "@/lib/riot/config";
 import { championIconUrl, getChampionCatalog } from "@/lib/ddragon/champions";
+import { topTeammatesFromMatches } from "@/lib/riot/teammates";
 import { MissingApiKeyError, RiotApiError } from "@/lib/riot/http";
 import { analyzeCount } from "@/lib/riot/matches";
 import { elapsedSeconds, findActiveGame } from "@/lib/riot/spectator";
@@ -122,12 +125,25 @@ export default async function ProfilePage({
     verificationUnknown,
   } = profile;
 
+  const queueIds = queuesFor(queueFilter);
+  const inQueue =
+    queueIds.length === 0
+      ? matches
+      : matches.filter((match) => queueIds.includes(match.info.queueId));
+
   // El catálogo (Data Dragon) y la partida en curso (SPECTATOR-V5) son
   // independientes: van en paralelo. `findActiveGame` nunca tira: si Riot
   // limita o la key venció, simplemente no hay badge.
-  const [catalog, live] = await Promise.all([
+  //
+  // Los compañeros frecuentes salen de `match_participants` en la base (el
+  // perfil solo trae la fila del jugador). En demo/vía directa las partidas ya
+  // vienen con el roster completo y se calculan en memoria.
+  const [catalog, live, teammates] = await Promise.all([
     getChampionCatalog(),
     findActiveGame(playerPuuids, effectivePlatform),
+    source === "db"
+      ? getTopTeammates(playerPuuids, { queueIds, limit: 5 })
+      : Promise.resolve(topTeammatesFromMatches(inQueue, playerPuuids, 5)),
   ]);
   const liveGame = live?.game ?? null;
   const liveChampion =
@@ -139,12 +155,6 @@ export default async function ProfilePage({
   const names: Record<string, string> = Object.fromEntries(
     catalog.all.map((champion) => [champion.id, champion.name]),
   );
-
-  const queueIds = queuesFor(queueFilter);
-  const inQueue =
-    queueIds.length === 0
-      ? matches
-      : matches.filter((match) => queueIds.includes(match.info.queueId));
 
   // El agregado va sobre TODOS los puuids del jugador: sus partidas viejas y las
   // nuevas están registradas con puuids distintos (Riot los reasigna).
@@ -344,6 +354,11 @@ export default async function ProfilePage({
               Comparar con otro jugador
             </Link>
           </div>
+
+          <FrequentTeammates
+            teammates={teammates}
+            version={catalog.version}
+          />
         </aside>
 
         {/* ---------------- contenido ---------------- */}

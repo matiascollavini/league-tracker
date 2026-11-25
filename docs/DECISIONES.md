@@ -1073,3 +1073,50 @@ cuánto falta ni qué está haciendo el script en ese momento.
 - [ ] Páginas de comparación / ranking global (necesitaría Meraki `championrates`).
 - [ ] Gráficos (Recharts candidato).
 - [ ] Tests: unitarios del agregador + smoke test contra API real con mock de fixtures.
+
+---
+
+## ADR-022 — Compañeros frecuentes ("duos") en la barra lateral del perfil
+
+**Estado:** aceptada · **Fecha:** 2026-11-25
+
+### Contexto
+Faltaba ver con quién juega el jugador: los 5 compañeros de equipo con más
+partidas juntos, con partidas, victorias/derrotas, winrate, Riot ID, icono y
+link a su perfil. La tarjeta va debajo de "Forma reciente", en la columna
+izquierda del perfil.
+
+El problema de datos: el perfil lee de la base **solo la fila del jugador** en
+cada partida (`getPlayerMatchesWithProgress`), así que los otros 9 participantes
+no están en memoria. La vía directa a Riot y el modo demo, en cambio, sí traen
+el roster completo de las 24 partidas.
+
+### Opciones evaluadas
+| Opción | A favor | En contra |
+|---|---|---|
+| Calcular en memoria desde `matches` | cero SQL nuevo | en modo DB solo está el jugador: devolvería vacío |
+| Bajar el roster de cada partida en la página | — | fan-out de N requests a Riot (prohibido por §2.5) |
+| **Agregar en SQL sobre `match_participants`** | 1 query, sin requests externos, usa la PK `(match_id, puuid)` | joins sobre ~1.000 partidas por perfil |
+
+### Decisión
+- `getTopTeammates` (`src/lib/db/teammates.ts`) agrega en SQL:
+  `puuid_matches` del jugador → `match_participants` del **mismo `team_id`**,
+  excluyendo todos sus puuids. Nada de rivales.
+- Respeta el tab de cola (`queueIds`) igual que "Forma reciente"; el filtro de
+  campeón no aplica a la barra lateral.
+- La identidad es el **Riot ID normalizado**, no el puuid (`mergeTeammates` en
+  `src/lib/riot/teammates.ts`): Riot reasigna puuids y la misma persona
+  aparecería partida en dos filas. Gana el nombre/icono de la partida más nueva.
+- Demo y vía directa usan `topTeammatesFromMatches` (mismo shape y mismo merge)
+  con el roster que ya vino en el payload.
+- El icono sale de `accounts`; si esa fila es vieja y no tiene icono, se rescata
+  el de la partida más nueva que sí lo trajo.
+- La plataforma de Riot viene en mayúsculas (`LA1`); se normaliza a minúsculas
+  antes de armar el link con `profileHref`. Sin Riot ID o plataforma válida, la
+  fila queda como texto (nunca un link roto).
+
+### Consecuencias
+- Una query extra por render del perfil (≤5 filas), sin tocar el rate limit de
+  Riot. Medido en local: perfil caliente ~0,6 s.
+- El widget se actualiza solo al terminar el sync porque lee la base.
+- Si el jugador tiene pocas partidas, muestra menos de 5 o el estado vacío.

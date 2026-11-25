@@ -168,6 +168,11 @@ scripts/        verify-riot.mjs (verificación contra la API real)
   para que "Actualizar" no deje el chip pegado. El `404` es el caso normal (no
   está jugando) y cualquier error deja el perfil sin chip. Host de **plataforma**;
   solo cubre LoL (TFT tiene su propio endpoint).
+- Debajo de "Forma reciente" el perfil muestra los **5 compañeros de equipo
+  más frecuentes** (ADR-022): partidas juntos, V/D, winrate, icono y link a su
+  perfil. Sale de `match_participants` en SQL (`getTopTeammates`), no de Riot;
+  respeta el tab de cola y agrupa por Riot ID, no por puuid. En demo/vía directa
+  se calcula del roster en memoria (`topTeammatesFromMatches`).
 - El **reloj** avanza solo en el browser desde `gameStartTime` (`src/lib/live.ts`),
   sin requests. El **estado** sí se revalida: el chip consulta
   `GET /api/en-vivo?platform=&puuid=` cada 45 s (nada si la pestaña está oculta)
