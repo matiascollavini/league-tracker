@@ -741,6 +741,8 @@ baja solo los detalles que faltan) y el cliente lo llamaba en bucle hasta
    *Revisado en ADR-017:* la luna y el contador se fueron; quedó el formato de
    dpm.lol (`Actualizado` con check / `Actualizar` con flecha / `Actualizando…`
    con spinner, y el avance `34/361 · 9%` al lado del botón).
+   *Revisado en ADR-019:* también se fueron el avance, la barra y `Detener`;
+   mientras corre solo se ve el botón con "Actualizando…".
 3. Se **elimina el bloque "Progreso del análisis"** de la página: sus dos datos
    (`X de Y` y "Riot permite ~1.000") ya están en la línea del botón y en el
    pie de la página. Queda solo el banner de "Historial completo".
@@ -753,15 +755,20 @@ baja solo los detalles que faltan) y el cliente lo llamaba en bucle hasta
    cambiaron. Cuando el refresh trae números nuevos, el snapshot se descarta
    solo — sin `setState` dentro de un `useEffect` (que el linter de React
    rechaza por cascada de renders).
+   *Revisado en ADR-019:* sin contador ni barra, ese snapshot ya no existe.
 6. En modo demo no se renderiza: sin `RIOT_API_KEY`, `/api/sync` devuelve 503.
 
 ### Consecuencias
 - Una sola acción por página (antes estaba abajo y competía con el panel).
 - `done` puede tardar minutos en una cuenta con backlog grande (con dev key son
   ~27 partidas por vuelta de ~15 s). Es el precio de cargar el historial de
-  verdad; hay `Detener` y el avance queda guardado.
+  verdad; el avance queda guardado.
+  *Revisado en ADR-019:* ya no hay `Detener`; el loop se corta solo a las 60
+  vueltas o cuando Riot no da turno, y se retoma al volver a tocar el botón.
 - Aritmética de la tanda extraída a `src/lib/sync-progress.ts` (puro) con tests:
   tanda incremental, cuenta nueva, denominador que crece y el caso 0/0.
+  *Revisado en ADR-019:* `batchProgress` se eliminó junto con el contador;
+  quedaron `formatElapsed` y `decideAfterRound`.
 
 ---
 
@@ -915,6 +922,41 @@ Había dos causas más, del mismo tipo:
 
 ---
 
+## ADR-019 — Mientras actualiza, solo el botón
+
+**Estado:** aceptada · **Fecha:** 2026-11-25
+
+### Contexto
+Al apretar "Actualizar" aparecían, al lado del botón, el avance
+(`34/361 · 9% · bajando detalles`), un botón **Detener**, una barra de 1 px y el
+aviso de "sin avance". El pedido fue que quede **solo el botón
+"Actualizando…"**.
+
+### Decisión
+- `RefreshButton` se queda con el estado mínimo: `{ running, error, notice,
+  unavailable }`.
+- Mientras corre se renderiza **solo el botón** con spinner y "Actualizando…".
+  Se fueron el contador, `PHASE_LABEL`, la barra, el cronómetro (`now`), el
+  aviso de "sin avance" y el botón Detener.
+- El `AbortController` queda solo para cortar el request si desmontan la
+  página.
+- Los avisos de rate limit/lock y los errores **siguen apareciendo debajo**: no
+  son controles, explican por qué la vuelta no avanzó.
+- El loop conserva sus topes: `MAX_ROUNDS` y `decideAfterRound` (5 vueltas sin
+  request). Sin Detener, esos son los frenos.
+- Se borró `batchProgress` y sus tests (ya no lo usaba nadie); en
+  `src/lib/sync-progress.ts` quedan `formatElapsed` y `decideAfterRound`.
+
+### Consecuencias
+- El hero queda limpio: una sola acción y un solo estado visible.
+- No se puede cancelar a mano. Si una cuenta tiene un backlog enorme, el usuario
+  puede navegar (el abort corta el fetch) y retomar después: el sync es
+  resumible y el avance queda en la base.
+- La regla de ADR-018 no cambia: "Actualizado" sigue dependiendo de
+  `upToDate === true`.
+
+---
+
 ## Pendientes (no decididos todavía)
 
 - [x] Persistencia + ingesta (fase 2): SQLite/Turso con backfill resumible.
@@ -933,8 +975,8 @@ Había dos causas más, del mismo tipo:
       (participantes de partidas guardadas + perfiles visitados).
 - [x] "En partida ahora": hecho el 2026-11-25 (ADR-015) con SPECTATOR-V5.
       Chip opcional en el perfil, caché de 60 s, 404 degradado sin romper nada.
-- [x] Botón "Actualizar ahora" en el hero del perfil (ADR-016), con luna
-      parpadeando, progreso compacto y `router.refresh()` al terminar.
+- [x] Botón "Actualizar ahora" en el hero del perfil (ADR-016), con "Actualizando…"
+      y `router.refresh()` al terminar. ADR-019: sin contador, barra ni Detener.
 - [ ] Páginas de comparación / ranking global (necesitaría Meraki `championrates`).
 - [ ] Gráficos (Recharts candidato).
 - [ ] Tests: unitarios del agregador + smoke test contra API real con mock de fixtures.
