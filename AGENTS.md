@@ -169,6 +169,14 @@ scripts/        verify-riot.mjs (verificación contra la API real)
   El **reloj avanza solo en el browser** desde `gameStartTime` (`src/lib/live.ts`):
   ningún request extra ni polling.
 
+- El botón **"Actualizar ahora"** vive en el hero del perfil
+  (`src/components/refresh-button.tsx`, ADR-016). Llama a `POST /api/sync` en
+  bucle hasta que no queden pendientes: el endpoint es incremental y resumible,
+  así que sube solo las partidas que faltan. Mientras corre muestra una luna
+  parpadeando y el avance de la tanda; al llegar a `done` hace `router.refresh()`
+  y el perfil se redibuja solo. El bloque "Progreso del análisis" ya no existe:
+  su info está en la línea del botón y en el pie.
+
 ---
 
 ## 5. Historial

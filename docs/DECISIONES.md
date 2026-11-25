@@ -710,6 +710,59 @@ resuelto en el server, con estas reglas:
   (rate limiting: no publica el límite por método).
 - Curl propio: `200`/`404`/`403`/`400` en `la2`, `na1`, `kr`, `me1`, `americas`.
 
+---
+
+## ADR-016 — "Actualizar ahora": una acción, en el hero del perfil
+
+**Estado:** aceptada · **Fecha:** 2026-11-25
+
+### Contexto
+El operador pidió un botón **al lado del perfil** que diga "Actualizar ahora",
+que traiga las partidas que todavía no están cargadas, muestre una **luna
+parpadeando** mientras trabaja y **refresque la página sola** al terminar.
+
+Hasta acá la acción vivía adentro del bloque "Progreso del análisis" (abajo,
+entre las estadísticas), con el label "Cargar todo el historial". El motor ya
+existía: `POST /api/sync` es **incremental y resumible** (descubre IDs nuevos y
+baja solo los detalles que faltan) y el cliente lo llamaba en bucle hasta
+`done`.
+
+### Decisión
+**Mover la acción al hero y dejar el panel de progreso como información.**
+
+1. `ProfileHero` acepta un slot `actions` (a la derecha del nombre; en mobile se
+   apila abajo). Ahí vive el botón.
+2. El botón es `src/components/refresh-button.tsx` (reemplaza a
+   `sync-button.tsx`, que se borra): mismo motor — bucle de tandas, `Detener`,
+   detección de "sin avance" a los 90 s, reintento con `retryAfterMs` cuando
+   Riot limita o hay lock — con feedback **compacto**: luna (`Moon` de lucide)
+   con `animate-pulse` mientras corre, `Actualizar ahora` / `Actualizando…`, una
+   línea `34 de 361 · 9% · 0:42` y una barra de 1 px.
+3. Se **elimina el bloque "Progreso del análisis"** de la página: sus dos datos
+   (`X de Y` y "Riot permite ~1.000") ya están en la línea del botón y en el
+   pie de la página. Queda solo el banner de "Historial completo".
+4. Al llegar a `done`: `finish()` + `router.refresh()`. La página se redibuja
+   sola con las partidas nuevas y el botón **vuelve a quedar disponible** (antes
+   se quedaba mostrando "Historial completo" para siempre, que con el botón en
+   el hero dejaría la página sin acción).
+5. El contador no guarda `known`/`detailed` como verdad: guarda un **snapshot
+   con los props con los que se generó** y en render solo se usa si los props no
+   cambiaron. Cuando el refresh trae números nuevos, el snapshot se descarta
+   solo — sin `setState` dentro de un `useEffect` (que el linter de React
+   rechaza por cascada de renders).
+6. En modo demo no se renderiza: sin `RIOT_API_KEY`, `/api/sync` devuelve 503.
+
+### Consecuencias
+- Una sola acción por página (antes estaba abajo y competía con el panel).
+- `done` puede tardar minutos en una cuenta con backlog grande (con dev key son
+  ~27 partidas por vuelta de ~15 s). Es el precio de cargar el historial de
+  verdad; hay `Detener` y el avance queda guardado.
+- Aritmética de la tanda extraída a `src/lib/sync-progress.ts` (puro) con tests:
+  tanda incremental, cuenta nueva, denominador que crece y el caso 0/0.
+
+---
+
+## Pendientes (no decididos todavía)
 
 - [x] Persistencia + ingesta (fase 2): SQLite/Turso con backfill resumible.
 - [x] Cron de ingesta en GitHub Actions (`.github/workflows/worker.yml`).
@@ -726,7 +779,9 @@ resuelto en el server, con estas reglas:
       Riot no tiene search de invocadores, así que sugiere cuentas ya indexadas
       (participantes de partidas guardadas + perfiles visitados).
 - [x] "En partida ahora": hecho el 2026-11-25 (ADR-015) con SPECTATOR-V5.
-      Chip opcional en el perfil, caché de 60 s, 404 degrado sin romper nada.
+      Chip opcional en el perfil, caché de 60 s, 404 degradado sin romper nada.
+- [x] Botón "Actualizar ahora" en el hero del perfil (ADR-016), con luna
+      parpadeando, progreso compacto y `router.refresh()` al terminar.
 - [ ] Páginas de comparación / ranking global (necesitaría Meraki `championrates`).
 - [ ] Gráficos (Recharts candidato).
 - [ ] Tests: unitarios del agregador + smoke test contra API real con mock de fixtures.

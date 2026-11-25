@@ -2,28 +2,24 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import {
-  AlertTriangle,
-  CheckCircle2,
-  Loader2,
-  RefreshCw,
-  Square,
-} from "lucide-react";
+import { AlertTriangle, Moon, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { batchProgress, formatElapsed } from "@/lib/sync-progress";
 import type { Platform } from "@/lib/riot/config";
 
 type Props = {
   platform: Platform;
   gameName: string;
   tagLine: string;
-  /** Progreso inicial que ya conoce el servidor. */
+  /** Progreso que ya conoce el servidor. */
   known: number;
   detailed: number;
 };
 
 /**
  * Respuesta de /api/sync. Todo opcional a propósito: un 429 o un error vuelve
- * SIN progreso, y el loader tiene que poder contarlo igual.
+ * SIN progreso, y el botón tiene que poder contarlo igual.
  */
 type SyncPayload = {
   ok?: boolean;
@@ -52,26 +48,29 @@ const PHASE_LABEL: Record<string, string> = {
 
 type State = {
   running: boolean;
-  detailed: number;
-  known: number;
+  /**
+   * Números que reportó el server en ESTA tanda, con los props que había cuando
+   * se guardaron. En render se usan solo si los props siguen siendo los mismos:
+   * así, cuando `router.refresh()` trae datos frescos, se descartan solos (sin
+   * setState en un effect).
+   */
+  batch: {
+    known: number;
+    detailed: number;
+    propsKnown: number;
+    propsDetailed: number;
+  } | null;
   /** Error que corta la carga (rojo). */
   error: string | null;
   /** Aviso que NO corta nada: lock, 429, tope de vueltas (gris). */
   notice: string | null;
-  done: boolean;
   round: number;
   requests: number;
   /** Qué estaba haciendo el server en la última vuelta. */
   phase: "ids" | "details" | "done" | "locked" | "throttled" | null;
   /** Partidas que Riot ya no tiene y se sacaron de la cola. */
   unavailable: number;
-  /**
-   * Analizadas que había cuando empezó la tanda.
-   *
-   * El contador se mide contra esto y no contra el total de la cuenta: si el
-   * jugador ya tenía 1.000 partidas y Riot trajo 5 nuevas, el progreso arranca
-   * en "0 de 5" en vez del inútil "1.000 de 1.005".
-   */
+  /** Analizadas cuando empezó la tanda (base del "0 de N"). */
   baselineDetailed: number;
   /** Pendientes al empezar la tanda (el denominador crece si aparecen más). */
   batchTotal: number;
@@ -83,23 +82,15 @@ type State = {
 };
 
 /**
- * Una vuelta del servidor (40 requests) tarda entre 18 y 60 s porque Riot
- * permite 100 requests cada 2 minutos con dev key. El cronómetro de la línea
- * de progreso muestra que está vivo; este umbral es para lo anormal: pasado
- * bastante más que una vuelta normal, avisamos en vez de girar en silencio.
+ * Una vuelta del servidor (30 requests) tarda entre 18 y 60 s porque Riot
+ * permite 100 requests cada 2 minutos con dev key. El cronómetro muestra que
+ * está vivo; este umbral es para lo anormal.
  */
 const STALL_MS = 90_000;
-/** Tope de vueltas: 60 × 40 requests = 2.400, más que el máximo real. */
+/** Tope de vueltas: 60 × 30 requests = 1.800, más que el máximo real. */
 const MAX_ROUNDS = 60;
-
-function formatElapsed(ms: number): string {
-  const total = Math.max(0, Math.round(ms / 1_000));
-  const minutes = Math.floor(total / 60);
-  const seconds = total % 60;
-  return minutes > 0
-    ? `${minutes}:${String(seconds).padStart(2, "0")}`
-    : `${seconds} s`;
-}
+/** Cuánto queda visible el "Listo" después de refrescar. */
+const FLASH_MS = 4_000;
 
 /** Sleep cancelable: si el usuario aprieta "Detener", despierta al toque. */
 function sleep(ms: number, signal: AbortSignal): Promise<void> {
@@ -119,11 +110,18 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
 }
 
 /**
- * Botón para completar el historial. Va pidiendo tandas al servidor y muestra
- * el progreso, el tiempo, la fase y por qué se está esperando; al terminar
- * refresca la página.
+ * Botón "Actualizar ahora", al lado del perfil.
+ *
+ * Pide tandas a `/api/sync` hasta que la base no tenga nada pendiente: el
+ * endpoint es incremental y resumible (descubre IDs nuevos y baja solo los
+ * detalles que faltan). Mientras corre muestra una luna que parpadea y el
+ * avance de la tanda; al terminar **refresca la página sola** para que el
+ * perfil, los agregados y las últimas partidas se redibujen con lo nuevo.
+ *
+ * Si el server corta por rate limit o porque otro proceso tiene el lock, el
+ * cliente espera lo que le dice `retryAfterMs` y reintenta en vez de fallar.
  */
-export function SyncButton({
+export function RefreshButton({
   platform,
   gameName,
   tagLine,
@@ -132,13 +130,12 @@ export function SyncButton({
 }: Props) {
   const router = useRouter();
   const abortRef = useRef<AbortController | null>(null);
+  const [flash, setFlash] = useState<string | null>(null);
   const [state, setState] = useState<State>({
     running: false,
-    detailed,
-    known,
+    batch: null,
     error: null,
     notice: null,
-    done: false,
     round: 0,
     requests: 0,
     phase: null,
@@ -152,6 +149,17 @@ export function SyncButton({
     now: 0,
   });
 
+  // Números vigentes: los de la tanda en curso o, si ya no aplican, los props
+  // que mandó el server (que después de `router.refresh()` son los frescos).
+  const usable =
+    state.batch !== null &&
+    state.batch.propsKnown === known &&
+    state.batch.propsDetailed === detailed
+      ? state.batch
+      : null;
+  const currentKnown = usable?.known ?? known;
+  const currentDetailed = usable?.detailed ?? detailed;
+
   // Cronómetro: un tick por segundo mientras corre, así se ve que está vivo
   // aunque una vuelta tarde un minuto en contestar.
   useEffect(() => {
@@ -162,6 +170,17 @@ export function SyncButton({
     return () => clearInterval(id);
   }, [state.running]);
 
+  // Después de `router.refresh()` llegan props nuevas y el `batch` de la tanda
+  // anterior deja de coincidir: se ignora solo (ver `usable`) y el contador
+  // arranca del valor fresco, sin efectos ni setState extra.
+
+  // El "Listo" se va solo.
+  useEffect(() => {
+    if (!flash) return;
+    const id = setTimeout(() => setFlash(null), FLASH_MS);
+    return () => clearTimeout(id);
+  }, [flash]);
+
   // Si desmontan la página, cortamos el request en curso.
   useEffect(() => () => abortRef.current?.abort(), []);
 
@@ -169,14 +188,15 @@ export function SyncButton({
     const controller = new AbortController();
     abortRef.current = controller;
     const startedAt = Date.now();
+    setFlash(null);
 
     // Copias locales: el loop no depende de `state` (que quedaría viejo).
-    let currentDetailed = state.detailed;
-    let currentKnown = state.known;
+    let detailedNow = currentDetailed;
+    let knownNow = currentKnown;
     // La tanda se mide desde acá: estos son los pendientes que el usuario ve
     // como "0 de N" al apretar el botón.
-    const baseline = state.detailed;
-    let batchTotal = Math.max(0, state.known - state.detailed);
+    const baseline = currentDetailed;
+    let batchTotal = Math.max(0, currentKnown - currentDetailed);
     let requests = 0;
     let lastProgressAt = startedAt;
     let notice: string | null = null;
@@ -184,44 +204,35 @@ export function SyncButton({
     let phase: State["phase"] = null;
     let unavailable = 0;
 
+    const snapshot = () => ({
+      batch: { known: knownNow, detailed: detailedNow, propsKnown: known, propsDetailed: detailed },
+      round: roundsDone,
+      requests,
+      phase,
+      unavailable,
+      baselineDetailed: baseline,
+      batchTotal,
+      startedAt,
+      lastProgressAt,
+      now: Date.now(),
+    });
+
     const publish = (extra: Partial<State> = {}) =>
       setState({
+        ...snapshot(),
         running: true,
-        detailed: currentDetailed,
-        known: currentKnown,
         error: null,
         notice,
-        done: false,
-        round: roundsDone,
-        requests,
-        phase,
-        unavailable,
-        baselineDetailed: baseline,
-        batchTotal,
-        startedAt,
-        lastProgressAt,
-        now: Date.now(),
         ...extra,
       });
 
     const finish = (extra: Partial<State>) =>
       setState((prev) => ({
         ...prev,
+        ...snapshot(),
         running: false,
         error: null,
         notice: null,
-        done: false,
-        detailed: currentDetailed,
-        known: currentKnown,
-        round: roundsDone,
-        requests,
-        phase,
-        unavailable,
-        baselineDetailed: baseline,
-        batchTotal,
-        startedAt,
-        lastProgressAt,
-        now: Date.now(),
         ...extra,
       }));
 
@@ -261,10 +272,10 @@ export function SyncButton({
       requests += typeof payload.requests === "number" ? payload.requests : 0;
 
       if (typeof payload.detailed === "number") {
-        if (payload.detailed > currentDetailed) lastProgressAt = Date.now();
-        currentDetailed = payload.detailed;
+        if (payload.detailed > detailedNow) lastProgressAt = Date.now();
+        detailedNow = payload.detailed;
       }
-      if (typeof payload.known === "number") currentKnown = payload.known;
+      if (typeof payload.known === "number") knownNow = payload.known;
       if (payload.phase) phase = payload.phase;
       if (typeof payload.unavailable === "number") {
         unavailable += payload.unavailable;
@@ -279,7 +290,10 @@ export function SyncButton({
       }
 
       if (payload.done) {
-        publish({ running: false, done: true, notice: null });
+        // Nada pendiente: se redibuja el perfil con lo nuevo y el botón queda
+        // listo para otra vez (no se queda en "historial completo").
+        finish({});
+        setFlash("Actualizado");
         router.refresh();
         return;
       }
@@ -329,52 +343,48 @@ export function SyncButton({
     abortRef.current?.abort();
   }
 
-  const { running, done, error, notice, round, requests, startedAt } = state;
-  // Progreso de la tanda: lo analizado desde que arrancó, sobre lo que faltaba.
-  const analyzedInBatch = Math.max(0, state.detailed - state.baselineDetailed);
-  const pending = Math.max(0, state.known - state.detailed);
-  // Si Riot trae más IDs en el camino, el denominador crece para que el
-  // porcentaje nunca mienta ni pase de 100.
-  const batchTotal = Math.max(state.batchTotal, analyzedInBatch + pending);
-  // Si todavía no se analizó nada, el denominador ya ES lo que falta: mostrarlo
-  // dos veces ("0 de 361 … faltan 361") solo hace ruido.
-  const pendingNote =
-    pending !== batchTotal ? ` · faltan ${pending}` : "";
-  const pct =
-    batchTotal > 0
-      ? Math.min(100, Math.round((analyzedInBatch / batchTotal) * 100))
-      : 0;
-  const elapsedMs = startedAt === null ? 0 : state.now - startedAt;
+  const { running, error, notice } = state;
+  const progress = batchProgress({
+    detailed: currentDetailed,
+    known: currentKnown,
+    baselineDetailed: state.baselineDetailed,
+    batchTotal: state.batchTotal,
+  });
+  const elapsedMs = state.startedAt === null ? 0 : state.now - state.startedAt;
   const sinceProgressMs =
     state.lastProgressAt === null ? 0 : state.now - state.lastProgressAt;
   const stalled = running && !error && sinceProgressMs >= STALL_MS;
   const phaseLabel = state.phase ? PHASE_LABEL[state.phase] : null;
+  const pendingGlobal = Math.max(0, currentKnown - currentDetailed);
 
-  if (done) {
-    return (
-      <div className="flex items-center gap-2 text-xs text-win">
-        <CheckCircle2 className="size-4" aria-hidden />
-        Historial completo: {state.detailed} partidas analizadas.
-      </div>
-    );
-  }
+  // Línea corta debajo del botón: una sola frase, sin párrafos en el hero.
+  const line = running
+    ? progress.total > 0
+      ? `${progress.analyzed} de ${progress.total} · ${progress.pct}% · ${formatElapsed(elapsedMs)}${phaseLabel ? ` · ${phaseLabel}` : ""}`
+      : "Buscando partidas nuevas…"
+    : pendingGlobal > 0
+      ? `${currentDetailed} analizadas · faltan ${pendingGlobal}`
+      : `${currentDetailed} partidas analizadas · sin pendientes`;
 
   return (
-    <div className="space-y-2">
-      <div className="flex flex-wrap items-center gap-3">
+    <div className="flex w-full flex-col items-start gap-1.5 sm:w-auto sm:items-end">
+      <div className="flex items-center gap-2">
         <Button
           type="button"
           size="sm"
-          variant="secondary"
+          variant="primary"
           onClick={run}
           disabled={running}
+          aria-busy={running}
         >
-          {running ? (
-            <Loader2 className="size-4 animate-spin" aria-hidden />
-          ) : (
-            <RefreshCw className="size-4" aria-hidden />
-          )}
-          {running ? "Analizando…" : "Cargar todo el historial"}
+          <Moon
+            className={cn(
+              "size-4",
+              running && "animate-pulse motion-reduce:animate-none",
+            )}
+            aria-hidden
+          />
+          {running ? "Actualizando…" : "Actualizar ahora"}
         </Button>
 
         {running ? (
@@ -383,68 +393,58 @@ export function SyncButton({
             Detener
           </Button>
         ) : null}
-
-        <span className="tabular text-[11px] text-muted" aria-live="polite">
-          {batchTotal > 0 ? (
-            <>
-              {analyzedInBatch} de {batchTotal} partidas
-              {analyzedInBatch === 0 ? " por analizar" : " analizadas"}
-              {running
-                ? ` · ${pct}% · ${formatElapsed(elapsedMs)} · vuelta ${round}${phaseLabel ? ` · ${phaseLabel}` : ""}${requests > 0 ? ` · ${requests} req` : ""}${pendingNote}`
-                : pendingNote}
-            </>
-          ) : (
-            "Sin partidas pendientes: se sigue recorriendo el historial de Riot"
-          )}
-        </span>
       </div>
 
-      {batchTotal > 0 ? (
-        <div className="h-1.5 overflow-hidden rounded-full bg-soft">
+      {running && progress.total > 0 ? (
+        <div className="h-1 w-full min-w-[180px] overflow-hidden rounded-full bg-soft">
           <div
             className="h-full rounded-full bg-primary transition-all"
-            style={{ width: `${Math.max(pct, analyzedInBatch > 0 ? 2 : 0)}%` }}
+            style={{ width: `${Math.max(progress.pct, progress.analyzed > 0 ? 2 : 0)}%` }}
             role="progressbar"
-            aria-valuenow={pct}
+            aria-valuenow={progress.pct}
             aria-valuemin={0}
             aria-valuemax={100}
+            aria-label="Avance de la actualización"
           />
         </div>
       ) : null}
 
-      <div className="space-y-1 text-[11px] leading-relaxed">
-        {error ? <p className="text-loss">{error}</p> : null}
+      <p className="tabular text-[10px] leading-tight text-muted">
+        {flash && !running ? (
+          <span className="font-semibold text-win">{flash}</span>
+        ) : (
+          line
+        )}
+      </p>
 
-        {stalled ? (
-          <p className="flex items-start gap-1.5 text-gold">
-            <AlertTriangle className="mt-px size-3.5 shrink-0" aria-hidden />
-            <span>
-              Sin avance hace {formatElapsed(sinceProgressMs)}. Una vuelta normal
-              tarda hasta ~60 s, así que esto ya es más de lo esperado: puede ser
-              el rate limit de Riot (100 requests cada 2 minutos con dev key) o un
-              request colgado. Sigue esperando o apretá Detener; el avance queda
-              guardado igual.
-            </span>
-          </p>
-        ) : null}
+      {error ? (
+        <p className="max-w-[280px] text-[10px] leading-snug text-loss">{error}</p>
+      ) : null}
 
-        {notice && !error ? <p className="text-muted">{notice}</p> : null}
+      {stalled ? (
+        <p className="flex max-w-[280px] items-start gap-1 text-[10px] leading-snug text-gold">
+          <AlertTriangle className="mt-px size-3 shrink-0" aria-hidden />
+          <span>
+            Sin avance hace {formatElapsed(sinceProgressMs)}. Una vuelta normal
+            tarda hasta ~60 s: puede ser el rate limit de Riot o un request
+            colgado. Esperá o apretá Detener; el avance queda guardado igual.
+          </span>
+        </p>
+      ) : null}
 
-        {!running && !error && !notice && state.unavailable > 0 ? (
-          <p className="text-muted">
-            {state.unavailable === 1
-              ? "Se descartó 1 partida que Riot ya no tiene."
-              : `Se descartaron ${state.unavailable} partidas que Riot ya no tiene.`}
-          </p>
-        ) : null}
+      {notice && !error && !stalled ? (
+        <p className="max-w-[280px] text-[10px] leading-snug text-muted">
+          {notice}
+        </p>
+      ) : null}
 
-        {!running && !error && !notice ? (
-          <p className="text-muted">
-            Se puede cerrar la página: el avance queda guardado y se retoma
-            donde quedó.
-          </p>
-        ) : null}
-      </div>
+      {!running && !error && !notice && state.unavailable > 0 ? (
+        <p className="text-[10px] leading-snug text-muted">
+          {state.unavailable === 1
+            ? "Se descartó 1 partida que Riot ya no tiene."
+            : `Se descartaron ${state.unavailable} partidas que Riot ya no tiene.`}
+        </p>
+      ) : null}
     </div>
   );
 }

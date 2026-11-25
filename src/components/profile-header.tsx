@@ -16,6 +16,8 @@ type HeroProps = {
   demo: boolean;
   /** Chip de "en partida ahora" (SPECTATOR-V5). Opcional: si Riot no responde, no hay. */
   live?: React.ReactNode;
+  /** Acción principal a la derecha (hoy: "Actualizar ahora"). */
+  actions?: React.ReactNode;
   /** Barra de tabs (filtro por cola), pegada abajo como en dpm. */
   tabs?: React.ReactNode;
 };
@@ -47,6 +49,7 @@ export function ProfileHero({
   version,
   demo,
   live,
+  actions,
   tabs,
 }: HeroProps) {
   return (
@@ -76,7 +79,7 @@ export function ProfileHero({
           ) : null}
         </div>
 
-        <div className="min-w-0">
+        <div className="min-w-0 sm:mr-auto">
           <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1.5">
             <h1 className="flex min-w-0 items-baseline gap-1.5">
               <span className="max-w-[200px] truncate text-[22px] font-semibold leading-tight tracking-[-0.02em] text-fg lg:max-w-[420px]">
@@ -97,6 +100,10 @@ export function ProfileHero({
             {live}
           </div>
         </div>
+
+        {actions ? (
+          <div className="w-full shrink-0 sm:w-auto">{actions}</div>
+        ) : null}
       </div>
 
       {tabs}

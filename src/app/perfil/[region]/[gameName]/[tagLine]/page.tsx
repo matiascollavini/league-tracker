@@ -11,7 +11,7 @@ import { Pagination } from "@/components/pagination";
 import { ProfileHero, RankSummary } from "@/components/profile-header";
 import { RoleStrip } from "@/components/role-strip";
 import { StatCard } from "@/components/stat-card";
-import { SyncButton } from "@/components/sync-button";
+import { RefreshButton } from "@/components/refresh-button";
 import { WinrateBar } from "@/components/winrate-bar";
 import {
   formatDate,
@@ -229,8 +229,6 @@ export default async function ProfilePage({
         live={
           liveGame ? (
             <LiveBadge
-              // El chip cuenta el reloj en el cliente desde estos dos datos:
-              // no hace falta ningún request extra a Riot.
               startedAt={liveGame.startedAt}
               base={elapsedSeconds(liveGame)}
               queueLabel={
@@ -249,6 +247,18 @@ export default async function ProfilePage({
               }
             />
           ) : null
+        }
+        actions={
+          // En demo no hay key: /api/sync devolvería 503.
+          demo ? null : (
+            <RefreshButton
+              platform={effectivePlatform}
+              gameName={account.gameName ?? gameName}
+              tagLine={account.tagLine ?? tagLine}
+              known={progress.known}
+              detailed={progress.detailed}
+            />
+          )
         }
         tabs={
           <nav
@@ -379,8 +389,8 @@ export default async function ProfilePage({
             </p>
           ) : null}
 
-          {/* Con el historial completo no hay nada que cargar: el bloque de
-              sincronización desaparece y queda solo la confirmación. */}
+          {/* La acción vive en el hero ("Actualizar ahora"): acá queda solo la
+              confirmación de que no hay nada pendiente. */}
           {complete ? (
             <p className="panel flex flex-wrap items-center gap-x-2 gap-y-1 px-3 py-2.5 text-[11px] text-muted">
               <CheckCircle2 className="size-3.5 shrink-0 text-win" aria-hidden />
@@ -398,41 +408,13 @@ export default async function ProfilePage({
                 Riot permite hasta ~1.000 por jugador.
               </span>
             </p>
-          ) : (
-            <section
-              className="panel px-3 py-3"
-              aria-label="Progreso del análisis"
-            >
-              <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
-                <p className="text-[11px] font-medium text-muted">
-                  Historial analizado:{" "}
-                  <strong className="font-bold text-fg">
-                    {progress.detailed} de {progress.known}
-                  </strong>{" "}
-                  partidas
-                </p>
-                <span className="text-[10px] font-medium text-dim">
-                  Riot permite hasta ~1.000 por jugador
-                </span>
-              </div>
-
-              <SyncButton
-                platform={effectivePlatform}
-                gameName={account.gameName ?? gameName}
-                tagLine={account.tagLine ?? tagLine}
-                known={progress.known}
-                detailed={progress.detailed}
-              />
-            </section>
-          )}
+          ) : null}
 
           {source === "live" ? (
             <p className="rounded-md border border-primary/20 bg-primary/8 px-3 py-2.5 text-[11px] leading-relaxed text-muted">
               Este jugador todavía no está en la base: se muestran las últimas{" "}
               {matches.length} partidas pedidas en vivo. Usá{" "}
-              <strong className="font-bold text-fg">
-                Cargar todo el historial
-              </strong>{" "}
+              <strong className="font-bold text-fg">Actualizar ahora</strong>{" "}
               para analizar los últimos dos años.
             </p>
           ) : null}
