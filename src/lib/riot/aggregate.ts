@@ -288,12 +288,22 @@ export function timeAgo(timestamp: number, now = Date.now()): string {
   return `hace ${months} mes${months === 1 ? "" : "es"}`;
 }
 
-/** Hora de la partida en formato 24 h ("19:45"), en la zona del server. */
+/**
+ * Zona horaria con la que se muestran horas y fechas.
+ *
+ * Se fija explícitamente (no se usa la del server) porque la lista de partidas
+ * es un client component: si el server formatea en UTC y el navegador en la
+ * zona del usuario, React detecta una diferencia de texto al hidratar.
+ */
+export const DISPLAY_TIME_ZONE = "America/Argentina/Buenos_Aires";
+
+/** Hora de la partida en formato 24 h ("19:45"). */
 export function formatClock(timestamp: number): string {
   return new Intl.DateTimeFormat("es-AR", {
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
+    timeZone: DISPLAY_TIME_ZONE,
   }).format(new Date(timestamp));
 }
 
@@ -313,5 +323,22 @@ export function formatDate(timestamp: number): string {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
+    timeZone: DISPLAY_TIME_ZONE,
   }).format(new Date(timestamp));
+}
+
+/**
+ * Hora, "hace cuánto" y fecha de una partida, tal como las muestra la lista.
+ *
+ * Se arman en el server porque `timeAgo` depende de "ahora": si lo calculara el
+ * navegador, el texto cambiaría entre el HTML del server y la hidratación.
+ */
+export type MatchTimes = { clock: string; ago: string; date: string };
+
+export function matchTimes(playedAt: number): MatchTimes {
+  return {
+    clock: formatClock(playedAt),
+    ago: timeAgo(playedAt),
+    date: formatDate(playedAt),
+  };
 }

@@ -13,9 +13,11 @@ import { SyncButton } from "@/components/sync-button";
 import { WinrateBar } from "@/components/winrate-bar";
 import {
   formatDate,
+  matchTimes,
   percent,
   summarize,
   toMatchSummaries,
+  type MatchTimes,
 } from "@/lib/riot/aggregate";
 import { loadProfile } from "@/lib/profile";
 import {
@@ -30,6 +32,7 @@ import {
 import { getChampionCatalog } from "@/lib/ddragon/champions";
 import { MissingApiKeyError, RiotApiError } from "@/lib/riot/http";
 import { analyzeCount } from "@/lib/riot/matches";
+import { groupTeams, toPanelPlayer, type PanelTeam } from "@/lib/riot/panel";
 import { profileHref } from "@/lib/links";
 import { decodeParam } from "@/lib/params";
 import { cn } from "@/lib/utils";
@@ -147,6 +150,28 @@ export default async function ProfilePage({
   const top = summary.champions[0];
   const recent = rows.slice(0, 20);
   const recentWins = recent.filter((row) => row.win).length;
+
+  // Horas de cada fila, formateadas acá: la lista es un client component y no
+  // puede calcular "hace 2 h" sin arriesgar diferencias de hidratación.
+  const times: Record<string, MatchTimes> = {};
+  for (const row of visible) times[row.matchId] = matchTimes(row.playedAt);
+
+  // Si la partida llegó con su roster completo (vía directa a Riot o demo), el
+  // desplegable arranca con los 10 jugadores y no pide nada. Lo que se lee de la
+  // base en esta página trae solo al jugador del perfil: eso se pide al abrir,
+  // contra `/api/partida/[matchId]` (lee match_participants, no va a Riot).
+  const matchById = new Map(
+    inQueue.map((match) => [match.metadata.matchId, match]),
+  );
+  const teamsByMatch: Record<string, PanelTeam[]> = {};
+  for (const row of visible) {
+    const match = matchById.get(row.matchId);
+    if (match && match.info.participants.length > 1) {
+      teamsByMatch[row.matchId] = groupTeams(
+        match.info.participants.map(toPanelPlayer),
+      );
+    }
+  }
 
   const queueLabelText =
     queueFilter === "all"
@@ -460,6 +485,8 @@ export default async function ProfilePage({
           </div>
           <MatchList
             matches={visible}
+            times={times}
+            teamsByMatch={teamsByMatch}
             version={catalog.version}
             names={names}
             puuid={puuid}

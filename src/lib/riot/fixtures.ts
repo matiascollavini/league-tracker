@@ -133,6 +133,51 @@ function mulberry32(seed: number): () => number {
 const GAME_VERSION = "16.23.541.1234";
 const HOUR = 3_600_000;
 
+const ROLES = ["TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY"] as const;
+
+/** Campeones de relleno: azul y rojo por línea, para el resto del roster. */
+const BOT_POOL: Record<(typeof ROLES)[number], [Pick, Pick]> = {
+  TOP: [
+    { id: "Garen", key: 86, role: "TOP" },
+    { id: "Malphite", key: 54, role: "TOP" },
+  ],
+  JUNGLE: [
+    { id: "Warwick", key: 19, role: "JUNGLE" },
+    { id: "Amumu", key: 32, role: "JUNGLE" },
+  ],
+  MIDDLE: [
+    { id: "Annie", key: 1, role: "MIDDLE" },
+    { id: "Veigar", key: 45, role: "MIDDLE" },
+  ],
+  BOTTOM: [
+    { id: "Ashe", key: 22, role: "BOTTOM" },
+    { id: "Caitlyn", key: 51, role: "BOTTOM" },
+  ],
+  UTILITY: [
+    { id: "Soraka", key: 16, role: "UTILITY" },
+    { id: "Blitzcrank", key: 53, role: "UTILITY" },
+  ],
+};
+
+/** Nombres de los bots, deterministas para que el roster no cambie. */
+const BOT_NAMES = [
+  "TopGapEnjoyer",
+  "JunglaSinSmite",
+  "MidOSRS",
+  "AdcConPapas",
+  "SoporteDeHierro",
+  "GarenMain2009",
+  "ElQueRobaJungla",
+  "MidOtp",
+  "AutoFillAdc",
+  "WardBot",
+] as const;
+
+/** Puuid de bot: estable por equipo y línea (no colisiona con el del perfil). */
+function botPuuid(teamId: number, roleIndex: number): string {
+  return `bot${teamId}${roleIndex}${"0".repeat(68)}`;
+}
+
 export function mockMatches(): Match[] {
   const rng = mulberry32(20261124);
   const base = Date.now() - 3 * HOUR;
@@ -148,6 +193,45 @@ export function mockMatches(): Match[] {
     const kills = Math.floor(rng() * 14);
     const deaths = Math.floor(rng() * 9);
     const assists = Math.floor(rng() * 18);
+    // ARAM y demás modos sin posiciones fijas: nadie tiene línea.
+    const playerRole = queueId === 450 ? "" : pick.role;
+
+    // La base real guarda cada partida con sus 10 jugadores, así que el modo
+    // demo también los trae: si no, el desplegable de la lista se ve a medias.
+    const roster = ROLES.flatMap((role, roleIndex) =>
+      [100, 200].flatMap((teamId) => {
+        // El jugador del perfil ocupa su línea en el equipo azul.
+        if (teamId === 100 && role === playerRole) return [];
+
+        const [bluePick, redPick] = BOT_POOL[role];
+        const botPick = teamId === 100 ? bluePick : redPick;
+        const nameIndex = roleIndex + (teamId === 100 ? 0 : ROLES.length);
+
+        return [
+          {
+            puuid: botPuuid(teamId, roleIndex),
+            championId: botPick.key,
+            championName: botPick.id,
+            teamId,
+            teamPosition: playerRole === "" ? "" : role,
+            individualPosition: playerRole === "" ? "" : role,
+            win: teamId === 100 ? win : !win,
+            kills: Math.floor(rng() * 13),
+            deaths: Math.floor(rng() * 10),
+            assists: Math.floor(rng() * 16),
+            champLevel: Math.floor(9 + rng() * 9),
+            goldEarned: Math.floor(8_000 + rng() * 8_000),
+            totalMinionsKilled: Math.floor(60 + rng() * 200),
+            neutralMinionsKilled: Math.floor(rng() * 40),
+            visionScore: Math.floor(5 + rng() * 28),
+            totalDamageDealtToChampions: Math.floor(6_000 + rng() * 20_000),
+            timePlayed: duration,
+            riotIdGameName: BOT_NAMES[nameIndex % BOT_NAMES.length] ?? "Bot",
+            riotIdTagline: "LAS",
+          },
+        ];
+      }),
+    );
 
     return {
       metadata: {
@@ -170,8 +254,8 @@ export function mockMatches(): Match[] {
             championId: pick.key,
             championName: pick.id,
             teamId: 100,
-            teamPosition: queueId === 450 ? "" : pick.role,
-            individualPosition: queueId === 450 ? "" : pick.role,
+            teamPosition: playerRole,
+            individualPosition: playerRole,
             win,
             kills,
             deaths,
@@ -187,6 +271,7 @@ export function mockMatches(): Match[] {
             profileIcon: mockSummoner.profileIconId,
             summonerLevel: mockSummoner.summonerLevel,
           },
+          ...roster,
         ],
         teams: [
           { teamId: 100, win },

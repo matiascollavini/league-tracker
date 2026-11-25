@@ -1,15 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowLeft, Swords } from "lucide-react";
-import { getChampionCatalog, championIconUrl } from "@/lib/ddragon/champions";
+import { MatchTeams } from "@/components/match-teams";
+import { getChampionCatalog } from "@/lib/ddragon/champions";
 import { getMatchDetail, getPlayerLabel } from "@/lib/db/matches";
-import {
-  formatDuration,
-  kdaOf,
-  roleOrderIndex,
-  timeAgo,
-} from "@/lib/riot/aggregate";
+import { formatDuration, timeAgo } from "@/lib/riot/aggregate";
 import { queueLabel } from "@/lib/riot/config";
+import { groupTeams } from "@/lib/riot/panel";
 import { cn } from "@/lib/utils";
 
 export const revalidate = 86_400;
@@ -23,14 +20,6 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { matchId } = await params;
   return { title: `Partida ${matchId}` };
 }
-
-const ROLE_LABEL: Record<string, string> = {
-  TOP: "Top",
-  JUNGLE: "Jungla",
-  MIDDLE: "Mid",
-  BOTTOM: "ADC",
-  UTILITY: "Support",
-};
 
 export default async function MatchPage({ params, searchParams }: Props) {
   const { matchId } = await params;
@@ -73,15 +62,6 @@ export default async function MatchPage({ params, searchParams }: Props) {
   const backHref = label
     ? `/perfil/${label.platform}/${encodeURIComponent(label.gameName)}/${encodeURIComponent(label.tagLine)}`
     : "/";
-
-  const teams = [100, 200]
-    .map((teamId) => ({
-      teamId,
-      participants: detail.participants
-        .filter((p) => p.teamId === teamId)
-        .sort((a, b) => roleOrderIndex(a.position) - roleOrderIndex(b.position)),
-    }))
-    .filter((team) => team.participants.length > 0);
 
   // El resultado del encabezado es el del jugador cuyo perfil estamos viendo,
   // no el de cualquier participante de la partida (siempre hay uno que ganó).
@@ -139,114 +119,12 @@ export default async function MatchPage({ params, searchParams }: Props) {
         </div>
       </header>
 
-      {teams.map((team) => {
-        const teamWin = team.participants[0]?.win ?? false;
-        return (
-          <section
-            key={team.teamId}
-            className="panel overflow-hidden"
-          >
-            <div className="flex items-center justify-between border-b border-line/70 px-3 py-2">
-              <h2 className="section-title">
-                {team.teamId === 100 ? "Equipo azul" : "Equipo rojo"}
-              </h2>
-              <span
-                className={cn(
-                  "text-[10px] font-bold uppercase tracking-wide",
-                  teamWin ? "text-primary" : "text-loss",
-                )}
-              >
-                {teamWin ? "Victoria" : "Derrota"}
-              </span>
-            </div>
-
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-[10px] font-bold uppercase tracking-wider text-dim">
-                  <th className="px-3 py-1.5 text-left font-medium">Jugador</th>
-                  <th className="px-2 py-1.5 text-right font-medium">KDA</th>
-                  <th className="hidden px-2 py-1.5 text-right font-medium sm:table-cell">
-                    CS
-                  </th>
-                  <th className="hidden px-2 py-1.5 text-right font-medium sm:table-cell">
-                    Oro
-                  </th>
-                  <th className="hidden px-2 py-1.5 text-right font-medium sm:table-cell">
-                    Visión
-                  </th>
-                  <th className="px-3 py-1.5 text-right font-medium">Daño</th>
-                </tr>
-              </thead>
-              <tbody>
-                {team.participants.map((p) => {
-                  const isMe = p.puuid === me?.puuid;
-                  return (
-                    <tr
-                      key={p.puuid}
-                      className={cn(
-                        "border-t border-line/60",
-                        isMe && "bg-primary/8",
-                      )}
-                    >
-                      <td className="px-3 py-1.5">
-                        <div className="flex min-w-0 items-center gap-2">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={championIconUrl(catalog.version, p.championName)}
-                            alt=""
-                            width={28}
-                            height={28}
-                            className="size-7 shrink-0 rounded-sm bg-soft"
-                          />
-                          <div className="min-w-0">
-                            <p
-                              className={cn(
-                                "truncate text-[12px] font-semibold",
-                                isMe ? "text-primary" : "text-fg",
-                              )}
-                            >
-                              {p.riotId ?? "Jugador"}
-                              {isMe ? (
-                                <span className="ml-1 text-[9px] font-bold uppercase text-primary">
-                                  vos
-                                </span>
-                              ) : null}
-                            </p>
-                            <p className="truncate text-[11px] text-muted">
-                              {names[p.championName] ?? p.championName}
-                              {p.position && ROLE_LABEL[p.position]
-                                ? ` · ${ROLE_LABEL[p.position]}`
-                                : ""}
-                            </p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="whitespace-nowrap px-2 py-1.5 text-right tabular text-[12px] font-bold text-fg">
-                        {p.kills}/{p.deaths}/{p.assists}
-                        <span className="ml-1 hidden text-[11px] text-muted sm:inline">
-                          {kdaOf(p.kills, p.deaths, p.assists).toFixed(1)}
-                        </span>
-                      </td>
-                      <td className="hidden px-2 py-1.5 text-right tabular text-muted sm:table-cell">
-                        {p.cs}
-                      </td>
-                      <td className="hidden px-2 py-1.5 text-right tabular text-muted sm:table-cell">
-                        {(p.gold / 1000).toFixed(1)}k
-                      </td>
-                      <td className="hidden px-2 py-1.5 text-right tabular text-muted sm:table-cell">
-                        {p.vision}
-                      </td>
-                      <td className="px-3 py-1.5 text-right tabular text-muted">
-                        {(p.damage / 1000).toFixed(1)}k
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </section>
-        );
-      })}
+      <MatchTeams
+        teams={groupTeams(detail.participants)}
+        version={catalog.version}
+        names={names}
+        mePuuid={me?.puuid ?? null}
+      />
 
       <p className="flex items-center gap-1.5 text-[10px] font-medium text-dim">
         <Swords className="size-3" aria-hidden />
