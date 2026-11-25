@@ -993,6 +993,15 @@ Fuentes: https://developer.riotgames.com/policies/general  (rev. 2025-05-29)
                       mastery deben pegar al host de PLATAFORMA (kr.api...), no al
                       regional (asia.api...). Con el host equivocado Riot
                       devuelve 200 sin datos útiles para el flujo.
+  2026-11-25  Dev key rotada (la anterior venció) y re-verificada con
+                    `npm run verify:riot -- "Carlos#RHLMC" la2`:
+                    - account-v1, summoner-v4, league-v4 y mastery-v4 -> 200.
+                    - x-app-rate-limit = 100:120,20:1.
+                    - x-method-rate-limit = 1000:60 en match-v5 (en summoner-v4
+                      sigue 2000:60: el límite por método es por endpoint).
+                    - count=101 -> 400, count=0 -> [] se mantienen.
+                    - Historial observado: ~473 partidas en 5 páginas. Sigue
+                      pendiente medir el tope real: esta cuenta no llega a ~1.000.
 
 ================================================================================
 18. VERIFICACIÓN EMPÍRICA (ejecutada el 2026-11-24 con dev key)
