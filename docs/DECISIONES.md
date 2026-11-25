@@ -434,6 +434,62 @@ reconstruyó desde esa fuente primaria (tokens + markup), no de memoria.
 
 ---
 
+## ADR-012 — La fila de partida despliega el detalle en la misma página
+
+**Estado:** aceptada · **Fecha:** 2026-11-24
+
+### Contexto
+La lista de "Últimas partidas" linkeaba cada fila a `/partida/[matchId]`, una
+página aparte. Para ver qué pasó en una partida había que salir del perfil,
+perder el scroll y volver. El operador pidió que la fila se despliegue hacia
+abajo con la información de la partida; además, que las filas queden un poco
+más separadas, que no aparezca el badge "V/D" ni el cartel "Victoria/Derrota"
+(el tinte de la fila ya lo dice y el color no es el único indicador: la fila
+también se lee en el KDA y en el resultado del desplegable).
+
+### Decisión
+- `MatchList` pasa a **client component** (`useState` con el id abierto: se abre
+  de a una partida por vez). La fila es un `<button aria-expanded aria-controls>`,
+  no un `<Link>`.
+- **El detalle se carga al desplegar** (`GET /api/partida/[matchId]`), no en el
+  render del perfil. Motivo: `getPlayerMatchesWithProgress` trae una sola fila por
+  partida (el participante del jugador) — es la consulta que permite listar 1.000
+  partidas en un viaje —, así que el roster completo no está en memoria. El
+  endpoint lee `match_participants` (donde `saveMatch` guardó los 10) y arma
+  `{ teams: PanelTeam[] }`. **Nunca sale a Riot**: desplegar no gasta rate limit.
+  `Cache-Control: s-maxage=86400` porque las partidas son inmutables.
+- Mientras carga, la fila muestra un esqueleto ("Cargando los 10 jugadores…");
+  si la partida no está en la base, un aviso + link a `/partida/[matchId]`.
+- Cuando la partida **sí** llegó con sus 10 jugadores (vía directa a Riot o modo
+  demo), `teamsByMatch` viene pre-armado y el desplegable no pide nada.
+- La tabla de los dos equipos se extrajo a `src/components/match-teams.tsx`, que
+  usan tanto el desplegable como `/partida/[matchId]` (una sola fuente de markup).
+- La ruta `/partida/[matchId]` **se mantiene**: la usan los cuadraditos de "forma
+  reciente" y sirve para compartir una partida.
+
+### Horas y fechas: zona horaria fija
+`MatchList` ahora renderiza en el navegador, y `Intl` con la zona del server (UTC
+en Vercel) no coincide con la del usuario → React detecta diferencia al hidratar.
+Dos medidas:
+1. `DISPLAY_TIME_ZONE` (`America/Argentina/Buenos_Aires`) fija en `formatClock()` y
+   `formatDate()` (`src/lib/riot/aggregate.ts`), así el server y el navegador
+   formatean igual.
+2. Las horas, fechas y el "hace 2 h" de cada fila se **pre-formatean en el server**
+   (`matchTimes`, prop `times`): el cliente no calcula nada dependiente de "ahora".
+   El único formateo que queda del lado del cliente es `formatDuration`, que es
+   aritmética pura (mm:ss) y no depende del locale.
+
+### Consecuencias
+- Abrir una partida no navega, no pierde el scroll y no gasta requests a Riot;
+  el detalle completo cuesta **una** lectura a la base la primera vez, y después
+  la cachea el navegador (estado) y el borde (`s-maxage`).
+- El HTML del perfil ya no incluye 10 filas × 20 partidas: el payload de la lista
+  volvió a ser el de antes.
+- Si algún día se agrega el timeline de la partida, va por el mismo endpoint y hay
+  que revisar el TTL de caché.
+
+---
+
 ## Registro de auditoría
 
 **2026-11-24 — auditoría de `docs/API-LOL.txt` v1.0.** Un `evidence-auditor` sin

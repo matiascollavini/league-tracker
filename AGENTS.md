@@ -109,9 +109,10 @@ retención), y no existe endpoint de "partidas totales". Por eso:
 ## 4. Mapa del repositorio
 
 ```
-src/app/        páginas (landing, perfil, legales)
-src/components/ UI server-first + buscador (client)
-src/lib/riot/   capa de datos: config, http, account, matches, aggregate, types
+src/app/api/    endpoints (health, sync, partida/[matchId])
+src/app/        páginas (landing, perfil, detalle de partida, legales)
+src/components/ UI server-first + buscador y lista de partidas (client)
+src/lib/riot/   capa de datos: config, http, account, matches, aggregate, panel, types
 docs/           API-LOL.txt (referencia de la API), DECISIONES.md (ADRs)
 research/       briefs crudos de investigación + crawled/ (fuentes)
 workflows/      scripts de orquestación de subagentes
@@ -140,6 +141,12 @@ scripts/        verify-riot.mjs (verificación contra la API real)
   1. **Deploy**: crear cuenta gratis en Turso + Vercel (paso a paso en
      `docs/DEPLOY.md`) y pedir la production key de Riot.
   2. Más UI: gráficos (winrate por campeón, evolución temporal).
+
+- La lista de "Últimas partidas" **no navega**: el click despliega el detalle de
+  la partida en la misma página (ADR-012). El roster de los 10 jugadores se pide
+  recién al abrir, a `GET /api/partida/[matchId]` (lee `match_participants`, no va
+  a Riot). La ruta `/partida/[matchId]` sigue viva para compartir y para "forma
+  reciente".
 
 ---
 
