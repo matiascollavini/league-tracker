@@ -150,6 +150,15 @@ scripts/        verify-riot.mjs (verificación contra la API real)
   cada partida y con cada perfil visitado; el desplegable siempre ofrece ir al
   `Nombre#TAG` exacto, que sí resuelve contra Riot al abrir el perfil.
 
+- La tabla **"Por campeón"** tiene un **buscador propio** (client component
+  `src/components/champion-table.tsx` + lógica pura en `src/lib/champion-search.ts`).
+  Filtra sobre los campeones ya jugados en la selección activa (ignora acentos y
+  apóstrofes: "kaisa" = "Kai'Sa") y, si el nombre existe en Data Dragon pero el
+  jugador nunca lo jugó, lo dice: "Todavía no jugó con X". Si no coincide con
+  ningún campeón del catálogo: "No se encuentran campeones disponibles con ese
+  nombre". Las filas se arman en el servidor (link e ícono incluidos) porque el
+  componente es cliente y no puede recibir `hrefFor` ni importar la capa de Riot.
+
 - La lista de "Últimas partidas" **no navega**: el click despliega el detalle de
   la partida en la misma página (ADR-012). El roster de los 10 jugadores se pide
   recién al abrir, a `GET /api/partida/[matchId]` (lee `match_participants`, no va

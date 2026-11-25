@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AlertTriangle, ArrowLeftRight, Info } from "lucide-react";
 import { ChampionPool } from "@/components/champion-pool";
-import { ChampionTable } from "@/components/champion-table";
+import { ChampionTable, type ChampionRow } from "@/components/champion-table";
 import { ChampionPicks } from "@/components/champion-picks";
 import { FrequentTeammates } from "@/components/frequent-teammates";
 import { LiveBadge } from "@/components/live-badge";
@@ -225,6 +225,23 @@ export default async function ProfilePage({
       // Los cambios de filtro no arrastran la página: vuelven al principio.
       page: options.page,
     });
+
+  // La tabla es un client component (tiene buscador): le pasamos filas planas
+  // con todo ya resuelto, incluidos los links y los íconos.
+  const championRows: ChampionRow[] = summary.champions.map((champion) => ({
+    championName: champion.championName,
+    name: names[champion.championName] ?? champion.championName,
+    iconUrl: championIconUrl(catalog.version, champion.championName),
+    games: champion.games,
+    wins: champion.wins,
+    losses: champion.losses,
+    winrate: champion.winrate,
+    href: hrefFor({ champion: champion.championName }),
+  }));
+  // Para distinguir "no lo jugó" de "ese nombre no existe" en el buscador.
+  const catalogNames = catalog.all
+    .map((champion) => champion.name)
+    .sort((a, b) => a.localeCompare(b));
 
   return (
     <div className="space-y-4">
@@ -507,14 +524,11 @@ export default async function ProfilePage({
           </div>
           <div className="pb-2">
             <ChampionTable
-              champions={summary.champions}
-              version={catalog.version}
-              names={names}
+              rows={championRows}
+              catalogNames={catalogNames}
               selected={selected?.championName}
               totalMatches={summary.matches}
-              hrefFor={(championName) =>
-                hrefFor({ champion: championName ?? null })
-              }
+              clearHref={hrefFor({ champion: null })}
               showAll={showAllChampions}
               allHref={hrefFor({ all: true })}
               lessHref={hrefFor({ all: false })}
