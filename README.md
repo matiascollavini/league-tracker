@@ -1,4 +1,7 @@
-# league-page
+# League Tracker
+
+> Nombre visible del producto: **League Tracker**. El repo y el paquete siguen
+> llamándose `league-page` (ADR-013).
 
 Estadísticas de League of Legends: buscás tu **Riot ID** y ves tus últimas 20
 partidas, tu **campeón más jugado** con su winrate, y podés **filtrar por campeón**

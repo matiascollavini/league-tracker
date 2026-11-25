@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "Términos",
-  description: "Condiciones de uso de league-page.",
+  description: "Condiciones de uso de League Tracker.",
 };
 
 export default function TerminosPage() {
@@ -18,7 +18,7 @@ export default function TerminosPage() {
       <section className="space-y-2">
         <h2 className="section-title">Qué es esto</h2>
         <p>
-          league-page es un proyecto independiente que muestra estadísticas
+          League Tracker es un proyecto independiente que muestra estadísticas
           públicas de League of Legends obtenidas de la API oficial de Riot
           Games. Es gratuito y no está afiliado, patrocinado ni avalado por Riot
           Games.
@@ -70,7 +70,7 @@ export default function TerminosPage() {
       </section>
 
       <p className="panel px-3 py-2.5 text-[11px] leading-relaxed">
-        league-page isn&apos;t endorsed by Riot Games and doesn&apos;t reflect the
+        League Tracker isn&apos;t endorsed by Riot Games and doesn&apos;t reflect the
         views or opinions of Riot Games or anyone officially involved in producing
         or managing Riot Games properties. Riot Games, and all associated
         properties are trademarks or registered trademarks of Riot Games, Inc.

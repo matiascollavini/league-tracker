@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "Privacidad",
-  description: "Qué datos usa league-page y cómo se tratan.",
+  description: "Qué datos usa League Tracker y cómo se tratan.",
 };
 
 export default function PrivacidadPage() {
@@ -20,7 +20,7 @@ export default function PrivacidadPage() {
           Qué datos tratamos
         </h2>
         <p>
-          league-page no tiene cuentas de usuario ni formularios de registro. No
+          League Tracker no tiene cuentas de usuario ni formularios de registro. No
           pedimos email, contraseña ni datos de pago. Cuando buscás un Riot ID,
           procesamos ese identificador público (nombre, tag, región) y los datos
           de partidas que la API de Riot expone públicamente: campeón jugado,

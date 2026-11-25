@@ -510,6 +510,40 @@ test propio para que no vuelva a pasar.
 
 ---
 
+## ADR-013 — Branding: el producto se llama League Tracker
+
+**Estado:** aceptada · **Fecha:** 2026-11-24
+
+### Contexto
+`league-page` era un nombre de trabajo (describía el repo). El operador pidió
+cambiar el branding visible del sitio a **League Tracker** y usar como logo una
+imagen provista por él.
+
+### Decisión
+- **Nombre visible:** `League Tracker` en `metadata.title` (`default` y
+  `template`), header, footer y páginas legales. El nombre del repo y el `name`
+  de `package.json` siguen siendo `league-page`: renombrarlos no aporta nada
+  funcional y rompería rutas de deploy y documentación.
+- **Logo:** `public/logo.png` (256×256, PNG con paleta, ~30 KB) derivado de la
+  imagen original 2048×2048. Se sirve con `next/image` (28×28 en el header, con
+  `priority` porque está above the fold).
+- **Favicon e icono de app:** `src/app/icon.png` (192×192) y
+  `src/app/apple-icon.png` (180×180), derivados de la misma imagen. Next los
+  levanta por convención de file-based metadata, sin tocar `metadata.icons`.
+- El logo es cuadrado y de fondo oscuro, así que se muestra con `rounded-md` +
+  `ring-1 ring-white/10` para integrarse al panel sin recortar el emblema.
+- El wordmark queda como texto (`League` en `fg` + `Tracker` en `primary`) para no
+  depender de una imagen de texto y mantener el look de dpm.lol (ADR-011).
+- El aviso legal en inglés se reescribió con el nombre nuevo, sin cambiar el
+  resto del texto exigido por Riot.
+
+### Consecuencias
+- Cambiar el nombre o el logo en el futuro es editar `layout.tsx` + reemplazar
+  `public/logo.png`, `src/app/icon.png` y `src/app/apple-icon.png`.
+- Ninguna otra capa (datos, API, DB) se ve afectada.
+
+---
+
 ## Pendientes (no decididos todavía)
 
 - [x] Persistencia + ingesta (fase 2): SQLite/Turso con backfill resumible.
