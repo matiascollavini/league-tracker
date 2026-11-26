@@ -178,55 +178,94 @@ necesitan los mismos secretos de Riot y de la base.
 pendientes de `puuid_sync`, baja partidas con presupuesto y deadline) y
 devuelve qué hizo. Es idempotente y resumible: si se corta, la próxima sigue.
 
-1. Generá un secreto y cargalo en **Vercel → Settings → Environment Variables**
-   (Production y Preview):
+#### El secreto
 
-   ```bash
-   # Linux/Mac
-   openssl rand -hex 32
-   # Windows (PowerShell)
-   [Convert]::ToHexString((1..32 | % { Get-Random -Max 256 }))
-   ```
+Generá uno y cargalo en **Vercel → Settings → Environment Variables**
+(Production, y Preview si usás previews):
 
-   | Variable | Valor |
-   | --- | --- |
-   | `CRON_SECRET` | el hex que generaste (sin él el endpoint responde 503) |
+```bash
+openssl rand -hex 32        # Linux/Mac/Git Bash
+```
 
-   Opcionales: `CRON_BUDGET` (requests por tanda, default 40),
-   `CRON_PLAYERS` (jugadores por tanda, default 3), `CRON_DEADLINE_MS`
-   (default 45.000; Vercel Hobby corta la función a los 60 s).
+| Variable | Valor |
+| --- | --- |
+| `CRON_SECRET` | el hex que generaste (sin él el endpoint responde 503) |
 
-2. Probá el endpoint (con el deploy ya hecho):
+Opcionales: `CRON_BUDGET` (requests por tanda, default 40),
+`CRON_PLAYERS` (jugadores por tanda, default 3), `CRON_DEADLINE_MS`
+(default 45.000; Vercel Hobby corta la función a los 60 s).
 
-   ```bash
-   curl -fsS -X POST https://tu-sitio.vercel.app/api/cron \
-     -H "Authorization: Bearer $CRON_SECRET"
-   ```
+**Redeployá después de cargarla**: Vercel inyecta las variables en los
+deployments nuevos, y Vercel Cron/Schedules manda el `CRON_SECRET` que capturó
+ese build.
 
-   Devuelve algo así:
+#### El disparador: Schedules nativo de Vercel (sin terceros)
 
-   ```json
-   {"ok":true,"elapsedMs":5180,"requests":12,"pendingBefore":5,"pendingAfter":5,
-    "players":[{"label":"Ciro#KR10","platform":"kr","detailed":93,"known":663,
-                "requests":12,"phase":"details","done":false,"skipped":false}]}
-   ```
+`vercel.json` ya declara el schedule; no hay que crear cuentas ni tokens:
 
-3. Creá el cron externo (gratis) apuntando a ese endpoint **cada 5 minutos**:
+```json
+{
+  "schedules": {
+    "ingesta": { "schedule": "*/15 * * * *", "path": "/api/cron", "requestMethod": "POST" }
+  }
+}
+```
 
-   | Servicio | Cómo |
-   | --- | --- |
-   | cron-job.org | *Create cronjob* → URL `https://tu-sitio/api/cron`, método `POST`, *Advanced → Headers*: `Authorization: Bearer <CRON_SECRET>` |
-   | UptimeRobot | *New monitor* → HTTP(s) → URL con `?key=<CRON_SECRET>` (si no querés headers), intervalo 5 min |
-   | VPS propio | `*/5 * * * * curl -fsS -X POST https://tu-sitio/api/cron -H "Authorization: Bearer $SECRETO"` |
+Cómo lo invoca Vercel (`vercel.com/docs/schedules/migrate-from-cron-jobs`,
+consultado 2026-11-26): un schedule con `path` manda
+`User-Agent: vercel-cron/1.0`, `x-vercel-cron-schedule: <expresión>` y, si
+`CRON_SECRET` está seteado, **`Authorization: Bearer <CRON_SECRET>`** — el
+mismo chequeo que ya hace el endpoint.
 
-   Nunca hace falta un token de GitHub: el cron entra directo a la app.
+Límites del plan **Hobby** (`vercel.com/docs/schedules/limits`, 2026-11-26):
 
-4. Por qué así: cada tanda gasta `CRON_BUDGET` requests y **respeta el rate
-   limit** de Riot compartido con las visitas al sitio. Con dev key
-   (100 requests / 2 min) 40 requests son ~48 s: subí el presupuesto recién con
-   production key. El lock por jugador (`tryLockSync`) evita que dos tandas se
-   pisen y un jugador que Riot rechaza para siempre se manda al final de la cola
-   en vez de consumir un request por tanda.
+| Límite | Hobby |
+| --- | --- |
+| Intervalo más corto | **cada 15 minutos** (con jitter de 15 min: la corrida cae en algún minuto de la ventana) |
+| Schedules estáticos por deployment | 100 |
+| Corridas por período de facturación | **5.000** (un `*/15` son ~2.880/mes: entra) |
+
+Verificalo en **Vercel → tu proyecto → Schedules**: ahí se ven las corridas con
+su historial y se pueden disparar a mano.
+
+#### Alternativas (si querés otra cadencia)
+
+| Opción | Cadencia | Notas |
+| --- | --- | --- |
+| **Schedules (`vercel.json`)** | 15 min (Hobby) / 1 min (Pro) | nativo, cero cuentas, es lo que está configurado |
+| Cron Jobs legado (`"crons": [...]`) | **1 vez por día** en Hobby | igual manda `CRON_SECRET`; sirve de red de seguridad |
+| cron externo gratis (cron-job.org, UptimeRobot) | 5 min | entra por HTTP con `Authorization: Bearer` o `?key=` |
+| Tu máquina (Task Scheduler / `crontab`) | 5 min | sólo mientras la PC esté prendida |
+
+Ojo: no declares `crons` y `schedules` con el mismo path, la ruta corre dos
+veces por ocurrencia.
+
+#### Probarlo a mano
+
+```bash
+curl -fsS -X POST https://tu-sitio.vercel.app/api/cron \
+  -H "Authorization: Bearer $CRON_SECRET"
+```
+
+Devuelve algo así:
+
+```json
+{"ok":true,"elapsedMs":5180,"requests":12,"pendingBefore":5,"pendingAfter":5,
+ "players":[{"label":"Ciro#KR10","platform":"kr","detailed":93,"known":663,
+             "requests":12,"phase":"details","done":false,"skipped":false}]}
+```
+
+Señales de que anda: `requests > 0` y el `detailed` de un jugador subiendo entre
+llamadas (35 → 44 → 100…). `pendingBefore/pendingAfter` cuenta **jugadores con
+trabajo pendiente**, no partidas: queda igual mientras los jugadores están a
+mitad de backfill y baja recién cuando alguno termina todo su historial.
+
+Cada tanda gasta `CRON_BUDGET` requests y **respeta el rate limit** de Riot
+compartido con las visitas al sitio: con dev key (100 requests / 2 min) 40
+requests son ~48 s, así que subí el presupuesto recién con production key. El
+lock por jugador (`tryLockSync`) evita que dos tandas se pisen y un jugador que
+Riot rechaza para siempre se manda al final de la cola en vez de consumir un
+request por tanda.
 
 > **Ojo con la dev key**: se vence cada 24 h y todo falla con 401/403 (el log de
 > `ranks` lo dice explícito y `/api/cron` devuelve el error del jugador).
@@ -254,8 +293,8 @@ DATABASE_URL="libsql://..." DATABASE_AUTH_TOKEN="eyJ..." npm run db:stats
 ```
 
 Y en el sitio: buscá una cuenta nueva → debería mostrar datos al toque y la
-barra de progreso; a los ~5 minutos la barra avanza sin que hagas nada
-(la tanda de `/api/cron`, ver §4.2).
+barra de progreso; cada 15 minutos la barra avanza sin que hagas nada
+(la tanda de `/api/cron` que dispara Vercel, ver §4.2).
 
 ---
 

@@ -1667,3 +1667,25 @@ avanzó un jugador sin errores.
 - Tests: `src/lib/cron.test.ts` (auth, presupuestos, slices) y
   `src/app/api/cron/route.test.ts` (503 sin secreto configurado, 401 sin/con
   secreto inválido, 503 sin key de Riot, tanda vacía, `GET ?key=`).
+
+### Corrección (2026-11-26) — disparador nativo de Vercel, sin cron de terceros
+
+El operador no quiere depender de un servicio de cron externo tipo
+cron-job.org. Se verificaron las dos vías nativas de Vercel
+(`vercel.com/docs/cron-jobs/usage-and-pricing` y
+`vercel.com/docs/schedules/*`, consultadas 2026-11-26):
+
+| Vía | Límite en Hobby | Manda `CRON_SECRET` |
+| --- | --- | --- |
+| Cron Jobs (legacy, `"crons"`) | **1 corrida por día** (±59 min de precisión) | sí |
+| **Schedules (beta, `"schedules"`)** | **cada 15 minutos** (jitter 15 min), 100 estáticos por deployment, **5.000 corridas por período** | sí: `Authorization: Bearer <CRON_SECRET>`, más `User-Agent: vercel-cron/1.0` y `x-vercel-cron-schedule` |
+
+Decisión: **`vercel.json` con `schedules.ingesta` = `*/15 * * * *` → `POST
+/api/cron`**. No se declara `crons` para el mismo path (la ruta correría dos
+veces por ocurrencia). Un `*/15` son ~2.880 corridas/mes: entra en las 5.000 de
+Hobby, y como el target es `path` el endpoint no cambia (ya acepta `POST` y el
+`Bearer`). Con Pro se puede bajar a 1 minuto cambiando solo la expresión.
+
+Consecuencias: cero cuentas y cero tokens nuevas; el secreto se captura en el
+build, así que cargar `CRON_SECRET` exige redeployar; y el cron externo (o
+`crontab` propio) sigue disponible para quien quiera 5 minutos en Hobby.

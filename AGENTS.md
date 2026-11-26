@@ -251,9 +251,12 @@ scripts/        verify-riot, ingest, worker, db:copy (local→Turso), db:pull (T
   (6 corridas en 48 h, medido el 2026-11-26): el workflow `worker` quedó para
   backfills largos a mano (`workflow_dispatch`) y `ranks` sigue en Actions.
   `GET|POST /api/cron` hace una tanda corta del worker (`CRON_PLAYERS` jugadores,
-  `CRON_BUDGET` requests, `CRON_DEADLINE_MS` = 45 s) y la dispara un cron externo
-  gratis cada 5 min. Requiere `CRON_SECRET`: sin él responde 503 y **no toca la
-  base**; la auth se valida antes de cualquier consulta. Si un jugador da 400
+  `CRON_BUDGET` requests, `CRON_DEADLINE_MS` = 45 s) y la dispara el **schedule
+  nativo de Vercel** (`vercel.json` → `schedules.ingesta`, `*/15` en Hobby porque
+  es el mínimo del plan; Vercel manda solo el `Authorization: Bearer
+  $CRON_SECRET`). Nada de cron de terceros. Requiere `CRON_SECRET`: sin él
+  responde 503 y **no toca la base**; la auth se valida antes de cualquier
+  consulta. Si un jugador da 400
   "Exception decrypting" (puuid que no descifra en el clúster, típico de
   transfers viejos) se lo manda al final de la cola en vez de reintentarlo cada
   tanda.
