@@ -15,6 +15,8 @@ type Props = {
   /** "best" tiñe el título de verde; "worst", de rojo. */
   tone: "best" | "worst";
   emptyLabel: string;
+  /** Aclaración de la regla al pie (muestra mínima, umbral de WR). */
+  hint?: string;
 };
 
 /**
@@ -31,6 +33,7 @@ export function ChampionPicks({
   hrefFor,
   tone,
   emptyLabel,
+  hint,
 }: Props) {
   return (
     <section className="panel overflow-hidden">
@@ -95,6 +98,12 @@ export function ChampionPicks({
           })}
         </ul>
       )}
+
+      {hint ? (
+        <p className="mt-1 border-t border-line/50 px-3 pb-2 pt-2 text-[10px] leading-relaxed text-dim">
+          {hint}
+        </p>
+      ) : null}
     </section>
   );
 }

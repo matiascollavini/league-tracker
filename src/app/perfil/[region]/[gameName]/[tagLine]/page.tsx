@@ -469,7 +469,8 @@ export default async function ProfilePage({
               hrefFor={(championName) =>
                 hrefFor({ champion: championName ?? null })
               }
-              emptyLabel="Todavía no hay partidas suficientes para recomendar un pick."
+              emptyLabel="Ningún campeón con muestra suficiente llega a 45% de winrate."
+              hint="Solo campeones con muestra suficiente, ordenados por winrate ajustado a la cantidad de partidas."
             />
             <ChampionPicks
               title="No pickees más esto"
@@ -481,7 +482,8 @@ export default async function ProfilePage({
               hrefFor={(championName) =>
                 hrefFor({ champion: championName ?? null })
               }
-              emptyLabel="Sin picks para desaconsejar por ahora."
+              emptyLabel="Ningún campeón con muestra suficiente está por debajo de 45% de winrate."
+              hint="Solo campeones bajo 45% de WR; primero los que más jugaste."
             />
           </section>
 

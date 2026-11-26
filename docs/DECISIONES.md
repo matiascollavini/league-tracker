@@ -1187,3 +1187,58 @@ significar "elegir entre lo que ya tenemos indexado".
 - El ranking es de **datos disponibles**, no de habilidad: la UI lo dice
   ("Cuentas con más partidas analizadas"). Revisar si algún día hay un índice de
   cuentas real (requiere producción key y otro enfoque, ADR-014).
+
+---
+
+## ADR-024 — Mejores/peores picks con muestra mínima y umbral de 45%
+
+**Estado:** aceptada · **Fecha:** 2026-11-26
+
+### Contexto
+`pickHighlights` elegía "mejores" y "peores" por winrate crudo dentro de los 8
+campeones más jugados. Eso producía dos ruidos clásicos:
+
+- Un campeón con 3 partidas y 2 victorias (67%) aparecía como mejor pick, por
+  encima de uno con 20 partidas y 60%.
+- Un 0/1 o un 0/2 aparecía como peor pick, y la lista "No pickees más esto"
+  mostraba campeones con winrate alto (50-60%) solo porque eran los siguientes
+  en el orden.
+
+Pedido del operador: en peores, priorizar campeones **muy jugados con bajo
+winrate** y mostrar **solo si el WR es menor a 45%**; en mejores, evitar los que
+se jugaron pocas veces y ganaron esas pocas veces.
+
+### Opciones evaluadas
+| Opción | A favor | En contra |
+|---|---|---|
+| Piso fijo de partidas (ej. 10) + WR crudo | simple de explicar | con historial chico vacía el panel; con historial grande deja pasar 10/10 |
+| Piso relativo solo + WR crudo | escala con el volumen | un 5/5 (100%) sigue ganándole a un 20/12 (60%) |
+| **Piso relativo + cota inferior de Wilson (best) + derrotas (worst)** | castiga muestra chica sin números mágicos en el orden | la cota es menos intuitiva que "WR" (la UI sigue mostrando el WR real) |
+
+### Decisión
+- **Muestra mínima** (`pickSampleFloor`): 10% de las partidas del campeón más
+  jugado, con piso de 4 y techo de 20. Con 20 partidas analizadas alcanza con 4;
+  con 200 en el campeón principal hacen falta 20. Un campeón con 3 partidas
+  nunca entra (el caso reportado).
+- **`best`** se ordena por `wilsonLowerBound(wins, games)` (95%), no por winrate:
+  es el winrate del que te podés hacer cargo con esa muestra. 12/20 (60%) queda
+  por encima de 3/5 (60%) y de 2/3 (67%). El WR que se muestra sigue siendo el
+  real; el ajuste es solo de orden.
+- **`worst`** filtra `winrate < 0.45` (estricto: 45% exacto no entra) y ordena
+  por **derrotas** (`games - wins`), que es volumen × mal winrate: 40 partidas al
+  40% (24 D) va antes que 10 partidas al 20% (8 D).
+- `worst` se calcula **primero**: un campeón bajo 45% nunca se recomienda como
+  "mejor pick" (antes se repartían y un 30% podía salir como mejor del pool).
+- Ambas tarjetas muestran una aclaración al pie con la regla, y los estados
+  vacíos dicen el umbral en vez de un genérico "no hay partidas".
+- Las listas ya no se "reparten" cuando hay pocos campeones: si nadie llega a la
+  muestra mínima o al 45%, la tarjeta queda vacía (es información, no un bug).
+
+### Consecuencias
+- `pickHighlights` es pura y sigue sin tocar `summary.champions`; el perfil no
+  cambia sus requests (todo se calcula en memoria sobre el agregado).
+- Costo cero en Riot/DB: no hay query nueva.
+- Si un jugador tiene todo su pool bajo 45%, "Mejores picks" queda vacío: es
+  correcto y la etiqueta lo explica.
+- Tests en `src/lib/riot/aggregate.test.ts`: piso de muestra, 2 de 3, 45% exacto,
+  orden por derrotas, no repetición entre listas.

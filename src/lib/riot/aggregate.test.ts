@@ -9,6 +9,7 @@ import {
   roleOrderIndex,
   summarize,
   toMatchSummaries,
+  wilsonLowerBound,
 } from "./aggregate";
 import type { ChampionStat } from "./aggregate";
 import type { Match } from "./types";
@@ -180,7 +181,7 @@ function stat(championName: string, games: number, wins: number): ChampionStat {
 }
 
 describe("pickHighlights", () => {
-  it("elige los mejores y peores winrates entre los más jugados", () => {
+  it("ordena los mejores por winrate ajustado y deja los peores bajo 45%", () => {
     const champions = [
       stat("Ahri", 20, 12),
       stat("Lux", 18, 8),
@@ -194,45 +195,121 @@ describe("pickHighlights", () => {
 
     const { best, worst } = pickHighlights(champions);
 
-    // Jinx 11/16 (69%), Ahri 12/20 (60%), Nami 7/12 (58%).
+    // Jinx 11/16 (69%), Ahri 12/20 (60%), Nami 7/12 (58%) por cota de Wilson.
     expect(best.map((c) => c.championName)).toEqual(["Jinx", "Ahri", "Nami"]);
-    expect(worst.map((c) => c.championName)).toEqual(["Sona", "Riven", "Darius"]);
+    // Lux (44%) entra por poco; el orden es por derrotas: 10, 9 y 7.
+    expect(worst.map((c) => c.championName)).toEqual(["Lux", "Darius", "Riven"]);
   });
 
-  it("ignora campeones con pocas partidas aunque tengan 0% u 100% WR", () => {
+  it("no recomienda un campeón por ganar 2 de 3 partidas", () => {
     const champions = [
-      stat("Ahri", 30, 18),
-      stat("Lux", 25, 14),
-      stat("Jinx", 22, 13),
-      stat("Darius", 20, 6),
-      stat("Nami", 18, 11),
-      stat("Riven", 16, 7),
-      stat("Zed", 15, 9),
-      stat("Sona", 14, 4),
-      stat("Yuumi", 1, 0),
-      stat("Kaisa", 1, 1),
+      stat("Ahri", 40, 22),
+      stat("Lux", 30, 16),
+      stat("Jinx", 25, 13),
+      stat("Darius", 20, 10),
+      stat("Kaisa", 3, 2),
+      stat("Yuumi", 1, 1),
     ];
 
     const { best, worst } = pickHighlights(champions);
     const names = [...best, ...worst].map((c) => c.championName);
 
-    expect(names).not.toContain("Yuumi");
     expect(names).not.toContain("Kaisa");
+    expect(names).not.toContain("Yuumi");
+  });
+
+  it("un winrate alto con pocas partidas no le gana a uno menor con muestra", () => {
+    // Los cuatro con 60% o más: gana el que tiene más partidas, no el 3/5.
+    const champions = [
+      stat("Ahri", 20, 12), // 60% en 20
+      stat("Jinx", 10, 6), // 60% en 10
+      stat("Darius", 16, 8), // 50% en 16
+      stat("Lux", 5, 3), // 60% en 5
+    ];
+
+    const { best } = pickHighlights(champions);
+    expect(best.map((c) => c.championName)).toEqual(["Ahri", "Jinx", "Darius"]);
+  });
+
+  it("la muestra mínima crece con el volumen del jugador", () => {
+    const champions = [
+      stat("Ahri", 200, 110),
+      stat("Lux", 120, 70),
+      stat("Jinx", 100, 60),
+      stat("Darius", 8, 8), // 100% en 8 partidas: no alcanza (piso = 20)
+    ];
+
+    const { best } = pickHighlights(champions);
+    expect(best.map((c) => c.championName)).not.toContain("Darius");
+  });
+
+  it("no muestra como peor pick un campeón con pocas partidas en 0%", () => {
+    const champions = [
+      stat("Ahri", 40, 25),
+      stat("Nami", 18, 12),
+      stat("Jinx", 20, 14),
+      stat("Darius", 15, 5),
+      stat("Yuumi", 2, 0),
+    ];
+
+    const { best, worst } = pickHighlights(champions);
+    expect(worst.map((c) => c.championName)).not.toContain("Yuumi");
+    expect(worst.map((c) => c.championName)).toEqual(["Darius"]);
+    expect(best.map((c) => c.championName)).toEqual(["Jinx", "Ahri", "Nami"]);
+  });
+
+  it("descarta el winrate exactamente en 45%", () => {
+    const champions = [stat("Ahri", 40, 30), stat("Lux", 20, 9)];
+
+    const { worst } = pickHighlights(champions);
+    expect(worst).toEqual([]);
+  });
+
+  it("prioriza por derrotas, no por el peor winrate suelto", () => {
+    const champions = [
+      stat("Ahri", 40, 16), // 40% → 24 derrotas
+      stat("Lux", 10, 2), // 20% → 8 derrotas
+    ];
+
+    const { best, worst } = pickHighlights(champions);
+    expect(worst.map((c) => c.championName)).toEqual(["Ahri", "Lux"]);
+    // Un campeón bajo 45% nunca aparece como "mejor pick".
+    expect(best).toEqual([]);
   });
 
   it("no repite un campeón entre mejores y peores", () => {
-    const champions = [stat("Ahri", 5, 3), stat("Lux", 5, 3), stat("Jinx", 5, 3)];
+    const champions = [
+      stat("Ahri", 10, 2), // 20%
+      stat("Lux", 10, 8), // 80%
+      stat("Jinx", 10, 7), // 70%
+    ];
 
     const { best, worst } = pickHighlights(champions);
     const names = [...best, ...worst].map((c) => c.championName);
 
+    expect(best.map((c) => c.championName)).toEqual(["Lux", "Jinx"]);
+    expect(worst.map((c) => c.championName)).toEqual(["Ahri"]);
     expect(new Set(names).size).toBe(names.length);
-    expect(best).toHaveLength(2);
-    expect(worst).toHaveLength(1);
+  });
+
+  it("sin muestra suficiente no hay picks de ningún lado", () => {
+    const champions = [stat("Ahri", 3, 2), stat("Lux", 2, 2)];
+
+    expect(pickHighlights(champions)).toEqual({ best: [], worst: [] });
   });
 
   it("sin campeones devuelve listas vacías", () => {
     expect(pickHighlights([])).toEqual({ best: [], worst: [] });
+  });
+});
+
+describe("wilsonLowerBound", () => {
+  it("castiga las muestras chicas", () => {
+    expect(wilsonLowerBound(2, 3)).toBeLessThan(wilsonLowerBound(12, 20));
+  });
+
+  it("con 0 partidas devuelve 0", () => {
+    expect(wilsonLowerBound(0, 0)).toBe(0);
   });
 });
 

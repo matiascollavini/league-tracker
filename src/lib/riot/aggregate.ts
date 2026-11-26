@@ -192,19 +192,71 @@ export function summarize(
 /**
  * Picks destacados del perfil: los mejores y los que conviene dejar.
  *
- * Solo se miran los campeones más jugados (`poolSize`), así una partida suelta
- * con 0% u 100% de winrate no se cuela como "mejor" ni "peor" pick. Dentro de
- * ese grupo, `best` ordena por winrate descendente y `worst` por ascendente.
- * Los dos listados no se repiten: si hay pocos campeones el grupo se parte.
+ * Solo se miran los campeones más jugados (`poolSize`): una partida suelta no
+ * decide nada. Dentro de ese pool:
+ *
+ * - `worst` solo admite winrate **menor a `worstMaxWinrate`** (45%) y ordena por
+ *   **derrotas** (volumen × mal winrate): primero lo que más jugaste y peor te
+ *   sale, no el 0% de dos partidas. Si ganaste, no es un mal pick.
+ * - `best` exige **muestra suficiente** (ver `pickSampleFloor`), nunca repite un
+ *   campeón de `worst` y ordena por `wilsonLowerBound` en vez de winrate crudo:
+ *   un 2/3 (67%) queda por debajo de un 12/20 (60%) porque el intervalo de
+ *   confianza del 2/3 es enorme. Así no se recomienda un campeón por haber
+ *   ganado "esas pocas veces".
  */
 export type PickHighlights = {
   best: ChampionStat[];
   worst: ChampionStat[];
 };
 
+/** Partidas mínimas para recomendar o desaconsejar un pick. */
+const MIN_PICK_GAMES = 4;
+/** Techo de la muestra mínima: pedir 200 partidas vaciaría el panel. */
+const MAX_PICK_GAMES = 20;
+/** La muestra mínima escala con el volumen del campeón más jugado (10%). */
+const PICK_SAMPLE_SHARE = 0.1;
+/** `worst` solo muestra campeones por debajo de este winrate (0..1). */
+export const WORST_MAX_WINRATE = 0.45;
+
+/**
+ * Cota inferior del intervalo de Wilson (95%) para una proporción.
+ *
+ * Es el winrate "con el que te podés comprometer": con muestra chica el
+ * intervalo es ancho y la cota baja. `games === 0` devuelve 0.
+ */
+export function wilsonLowerBound(
+  wins: number,
+  games: number,
+  z = 1.96,
+): number {
+  if (games <= 0) return 0;
+  const p = wins / games;
+  const z2 = z * z;
+  const denominator = 1 + z2 / games;
+  const center = p + z2 / (2 * games);
+  const margin = z * Math.sqrt((p * (1 - p)) / games + z2 / (4 * games * games));
+  return Math.max(0, (center - margin) / denominator);
+}
+
+/**
+ * Muestra mínima para que un campeón entre en `best`/`worst`: el 10% del
+ * campeón más jugado, entre 4 y 20 partidas. Con 200 partidas en Ahri hacen
+ * falta 20 con el campeón; con un historial de 20 partidas alcanza con 4.
+ */
+function pickSampleFloor(mostPlayed: number): number {
+  return Math.min(
+    MAX_PICK_GAMES,
+    Math.max(MIN_PICK_GAMES, Math.ceil(mostPlayed * PICK_SAMPLE_SHARE)),
+  );
+}
+
 export function pickHighlights(
   champions: readonly ChampionStat[],
-  { limit = 3, poolSize = 8 }: { limit?: number; poolSize?: number } = {},
+  {
+    limit = 3,
+    poolSize = 8,
+    worstMaxWinrate = WORST_MAX_WINRATE,
+  }: { limit?: number; poolSize?: number; worstMaxWinrate?: number } = {},
 ): PickHighlights {
   const byGames = [...champions].sort(
     (a, b) =>
@@ -213,32 +265,38 @@ export function pickHighlights(
       a.championName.localeCompare(b.championName),
   );
   const pool = byGames.slice(0, Math.max(poolSize, limit));
+  if (pool.length === 0) return { best: [], worst: [] };
 
-  const byBest = [...pool].sort(
-    (a, b) =>
-      b.winrate - a.winrate ||
-      b.games - a.games ||
-      a.championName.localeCompare(b.championName),
-  );
-  const byWorst = [...pool].sort(
-    (a, b) =>
-      a.winrate - b.winrate ||
-      b.games - a.games ||
-      a.championName.localeCompare(b.championName),
-  );
+  const floor = pickSampleFloor(pool[0]?.games ?? 0);
+  const sample = pool.filter((champion) => champion.games >= floor);
 
-  // Con 6+ candidatos alcanza para dos listas de 3; con menos se reparte.
-  const bestCount = pool.length >= limit * 2 ? limit : Math.ceil(pool.length / 2);
-  const best = byBest.slice(0, bestCount);
-  const taken = new Set(best.map((champion) => champion.championName));
+  const lossesOf = (champion: ChampionStat) => champion.games - champion.wins;
 
-  return {
-    best,
-    // Se excluyen los de `best` para no recomendar y desaconsejar el mismo pick.
-    worst: byWorst
-      .filter((champion) => !taken.has(champion.championName))
-      .slice(0, limit),
-  };
+  // `worst` se resuelve primero: un campeón bajo el umbral nunca se recomienda.
+  const worst = sample
+    .filter((champion) => champion.winrate < worstMaxWinrate)
+    .sort(
+      (a, b) =>
+        lossesOf(b) - lossesOf(a) ||
+        a.winrate - b.winrate ||
+        b.games - a.games ||
+        a.championName.localeCompare(b.championName),
+    )
+    .slice(0, limit);
+
+  const best = sample
+    .filter((champion) => champion.winrate >= worstMaxWinrate)
+    .sort(
+      (a, b) =>
+        wilsonLowerBound(b.wins, b.games) -
+          wilsonLowerBound(a.wins, a.games) ||
+        b.winrate - a.winrate ||
+        b.games - a.games ||
+        a.championName.localeCompare(b.championName),
+    )
+    .slice(0, limit);
+
+  return { best, worst };
 }
 
 export function toMatchSummaries(
