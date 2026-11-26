@@ -24,6 +24,21 @@ jobs:
 
       - run: npm ci
 
+      - name: Verificar secretos
+        run: |
+          missing=0
+          for name in RIOT_API_KEY DATABASE_URL DATABASE_AUTH_TOKEN; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Falta el secret $name en Settings → Secrets and variables → Actions (Repository secrets)."
+              missing=1
+            fi
+          done
+          exit $missing
+        env:
+          RIOT_API_KEY: ${{ secrets.RIOT_API_KEY }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_AUTH_TOKEN: ${{ secrets.DATABASE_AUTH_TOKEN }}
+
       - name: Bajar partidas pendientes
         run: npm run worker -- --minutes=8 --budget=900 --players=5
         env:

@@ -32,6 +32,24 @@ jobs:
 
       - run: npm ci
 
+      # Si falta un secret, GitHub lo entrega como string vacío y el script
+      # muere con "Falta RIOT_API_KEY" sin decir cuál. Este chequeo lo anota
+      # como error del step, con el nombre exacto y sin imprimir valores.
+      - name: Verificar secretos
+        run: |
+          missing=0
+          for name in RIOT_API_KEY DATABASE_URL DATABASE_AUTH_TOKEN; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Falta el secret $name en Settings → Secrets and variables → Actions (Repository secrets)."
+              missing=1
+            fi
+          done
+          exit $missing
+        env:
+          RIOT_API_KEY: ${{ secrets.RIOT_API_KEY }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_AUTH_TOKEN: ${{ secrets.DATABASE_AUTH_TOKEN }}
+
       - name: Tomar fotos de rango
         run: npm run snapshot:ranks -- --minutes=6 --budget=400
         env:

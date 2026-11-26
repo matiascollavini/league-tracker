@@ -33,7 +33,9 @@ async function main() {
   loadEnv();
 
   if (!process.env.RIOT_API_KEY?.trim()) {
-    console.error("Falta RIOT_API_KEY");
+    console.error(
+      "Falta RIOT_API_KEY (en CI: Settings → Secrets and variables → Actions → Repository secrets).",
+    );
     process.exit(1);
   }
 
