@@ -246,6 +246,20 @@ scripts/        verify-riot, ingest, worker, db:copy (local→Turso), db:pull (T
     Ojo: el piso relativo de `best` es el que puede tapar un campeón con pocas
     partidas; para `worst` el piso es fijo (5) y no hay pool que recorte.
 
+- **Presupuesto de lecturas de Turso** (ADR-027, esquema v8): el plan gratis
+  son 500 M filas leídas/mes y 10 M escritas/mes, y "fila leída" = fila
+  **escaneada** (joins, subconsultas y agregados cuentan). Medido: una vista de
+  perfil costaba ~16 k filas; ahora ~3,7 k porque hay dos cachés propias:
+  `featured_cache` (recomendados de la home, se recalcula cada `FEATURED_TTL_MS`
+  = 6 h) y `teammates_cache` (una fila JSON por jugador con los compañeros, se
+  rehace cuando `covered` no coincide con `progress.known`, con freno
+  `TEAMMATES_REFRESH_MS` = 10 min). El buscador usa rango sobre
+  `idx_accounts_name` en vez de `substr()` (42 k → cientos de filas) y
+  `countAccounts` se cachea 5 min en `meta`. Tope gratis: ~135 k vistas de
+  perfil/mes, ~100 cuentas completas por mes (escrituras) y 5 GB de storage.
+  **Regla: ninguna consulta nueva puede escanear `accounts`, `match_participants`
+  ni `matches` enteras por visita.**
+
 - El perfil tiene un **filtro por rol** (ADR-025): el panel `RoleBreakdown`
   (`src/components/role-breakdown.tsx`) vive en la barra lateral, entre "Forma
   reciente" y "Compañeros frecuentes", con los roles ordenados **del más jugado

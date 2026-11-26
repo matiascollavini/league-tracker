@@ -1496,3 +1496,104 @@ descarta.
   intenso genera decenas por mes). Si molesta, se recorta por temporada.
 - Recharts sigue reservado para gráficos grandes (evolución de winrate, etc.);
   para una línea de 56 px no se justifica el bundle.
+
+---
+
+## ADR-027 — Presupuesto de lecturas del plan gratis de Turso (y las tres cachés que lo sostienen)
+
+**Estado:** aceptada · **Fecha:** 2026-11-26
+
+### Contexto
+El operador preguntó cuánto entra en el plan gratis de Turso para este sitio. La
+respuesta no se podía dar mirando solo los límites publicados: hay que cruzarlos
+con lo que el código **realmente** lee y escribe por visita. Se auditó cada
+consulta contra la base local (5.364 partidas, 59.640 participantes, 42.739
+cuentas indexadas) con `EXPLAIN QUERY PLAN` y conteo de filas escaneadas.
+
+**Límites verificados (2026-11-26, plan Free):**
+
+| Métrica | Límite | Fuente |
+| --- | --- | --- |
+| Bases | 100 | `turso.tech/pricing` |
+| Almacenamiento | 5 GB (se mide en páginas de 4 KB, `dbstat`) | `turso.tech/pricing` + `docs.turso.tech/help/usage-and-billing` |
+| Rows **read** / mes | 500 M | `turso.tech/pricing` |
+| Rows **written** / mes | 10 M | `turso.tech/pricing` |
+| "Monthly syncs" | 3 GB (no aplica: no usamos embedded replicas) | `turso.tech/pricing` |
+
+Cómo se cuenta (`docs.turso.tech/help/usage-and-billing`, 2026-11-26): "row read"
+= **row scan**; joins, subconsultas y agregados suman una lectura por cada fila
+**considerada**; un `INSERT`/`UPDATE` con índices cuenta **más de una** fila
+escrita (la fila + cada índice). Al exceder cualquier métrica, el plan Free
+**bloquea las bases** (error `BLOCKED`): no hay "overage" ni factura sorpresa
+(FAQ de `turso.tech/pricing`). Riesgo de plataforma: el 2026-10-02 Turso fue
+adquirida por Supabase y el anuncio dice que la plataforma sigue igual
+(`turso.tech/blog/turso-is-joining-supabase`); límites futuros: `UNVERIFIED`.
+
+**Costo medido por visita, antes de este ADR:**
+
+| Consulta | Filas leídas por ejecución | Frecuencia |
+| --- | --- | --- |
+| `getPlayerMatchesWithProgress` (panel del perfil) | ~3,6 k (883 + 883 + 883 + 933) | cada render |
+| `getTopTeammates` (compañeros) | ~12,4 k (883 × 3 + 883 partidas × 11 participantes) | cada render |
+| `featuredAccounts` (recomendados) | ~106 k (scan de 42,7 k cuentas + 63 k links) | cada revalidación del CDN (300 s) |
+| `searchAccounts` (buscador) | 42,7 k (scan completo: `substr()` anula el índice) | 1 por búsqueda única |
+| `countAccounts` | 42,7 k | 1 por minuto de actividad |
+
+Con esos números el plan gratis se rompía **por tiempo, no por tráfico**:
+`featuredAccounts` con visitas sostenidas son ~900 M reads/mes, casi el doble de
+la cuota, aunque nadie usara el sitio.
+
+### Opciones evaluadas
+| Opción | A favor | En contra |
+| --- | --- | --- |
+| No tocar nada | cero trabajo | se excede la cuota con poco tráfico y las bases se bloquean |
+| Pasar a plan pago (Developer, US$ 4,99) | simple | el pedido es "gratis o casi gratis"; se puede evitar |
+| Bajar TTLs y confiar en el CDN de Vercel | sin cambios de código | el primer hit de cada ventana sigue pagando el costo completo; el CDN no protege de un cold cache |
+| **Cachés propias en la base + consultas indexables** | costo acotado y predecible; sigue gratis | suma 2 tablas y 3 variables de entorno; un poco más de código |
+
+### Decisión
+Esquema **v8** con dos tablas nuevas y tres cambios:
+
+1. **`featured_cache`** (≤24 filas): la consulta cara de recomendados corre una
+   vez cada `FEATURED_TTL_MS` (6 h por defecto) y el resto del tiempo se sirve de
+   la tabla. De ~106 k lecturas por revalidación a ≤24.
+2. **`teammates_cache`** (1 fila JSON por jugador): el agregado de compañeros se
+   calcula **una vez por tanda de partidas nuevas** y el render lo filtra en
+   memoria. De ~12,4 k lecturas a 1 (+ la consulta de nombres/iconos, ~50 filas).
+   Se invalida comparando `covered` (partidas plegadas) contra
+   `progress.known`, que el panel ya trae gratis; `TEAMMATES_REFRESH_MS` (10 min)
+   evita recalcular en cada visita durante un backfill. El JSON se poda
+   (`trimCachedRows`): se tiran los compañeros de una sola partida que no pueden
+   entrar en ningún top 5 (450 KB → 32 KB medidos).
+3. **Buscador indexable**: `name_lower >= ? AND name_lower < ?` (rango sobre
+   `idx_accounts_name`) + `substr()` como chequeo exacto del prefijo. De 42.739
+   filas por búsqueda a las del rango (434 para "ka", 51 para "kai"). Se mantiene
+   el comportamiento literal de `%` y `_`.
+4. **`countAccounts`** se cachea 5 min en `meta` (`ACCOUNTS_COUNT_TTL_MS`): es un
+   dato informativo de la UI, no vale 42,7 k lecturas por minuto.
+
+### Consecuencias
+- **Costo por vista de perfil: ~16 k → ~3,7 k filas leídas** (medido sobre una
+  cuenta de 889 partidas). Con la cuota de 500 M/mes eso son **~135 k vistas de
+  perfil/mes** (~4.500/día) en vez de ~31 k.
+- **Recomendados: ~900 M/mes → ~13 M/mes** con tráfico sostenido (120
+  ejecuciones/mes de la consulta cara).
+- **Escrituras sin cambio**: ~90-120 filas escritas por partida nueva entre
+  `matches`, `puuid_matches`, `match_participants` (con sus dos índices) y
+  `accounts`; el tope de 10 M/mes da **~100 cuentas completas por mes** (antes
+  esta nota decía "÷ 12", que subestimaba los índices). El almacenamiento (5 GB)
+  sigue holgado: ~1.500 cuentas.
+- **Hallazgo de datos**: 4.862 de las partidas guardadas tienen **dos puuids del
+  mismo Riot ID** (Riot reasigna puuids y la base acumuló ambos), así que sumar
+  por puuid inflaba "partidas juntas" (un compañero de 7 partidas aparecía con
+  14). El agregado nuevo cuenta por `(partida, Riot ID)`, así que el número es el
+  real; el nombre y el icono salen de la partida más nueva.
+- **Lo que queda caro** es el panel (`~3,6 k`), el 95% del costo restante del
+  perfil. Si algún día hace falta más margen, el siguiente paso es cachear el
+  agregado por jugador (como los compañeros) o bajar el `LIMIT` de partidas que
+  el perfil trae de una vez; hoy no hace falta.
+- Tests: `src/lib/db/accounts.test.ts` (prefijo por rango, foto de recomendados y
+  su TTL) y `src/lib/db/teammates.test.ts` (poda de la caché, invalidación por
+  `known`, filtro de cola sin recalcular). La equivalencia de los compañeros se
+  verificó contra la consulta vieja sobre la base real en los cinco tabs
+  (Todas, Solo/Duo, Flex, Normal, ARAM): misma salida.

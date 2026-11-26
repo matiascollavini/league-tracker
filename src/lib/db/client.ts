@@ -118,6 +118,30 @@ const SCHEMA = [
    )`,
   `CREATE INDEX IF NOT EXISTS idx_accounts_name
      ON accounts (name_lower)`,
+  // Foto de "recomendados" para la landing (ADR-027). La consulta original
+  // escanea TODAS las cuentas y hace join con 63 k links: ~106 k filas leídas
+  // por ejecución. Se calcula cada `FEATURED_TTL_MS` y después se sirve de acá
+  // (≤24 filas).
+  `CREATE TABLE IF NOT EXISTS featured_cache (
+     rank           INTEGER PRIMARY KEY,
+     puuid          TEXT NOT NULL,
+     platform_id    TEXT NOT NULL,
+     game_name      TEXT NOT NULL,
+     tag_line       TEXT NOT NULL,
+     profile_icon   INTEGER,
+     summoner_level INTEGER,
+     last_seen_ts   INTEGER NOT NULL,
+     games          INTEGER NOT NULL
+   )`,
+  // Compañeros frecuentes precalculados (ADR-027). `payload` es un JSON con una
+  // fila por (cola, compañero); el render lo filtra en memoria en vez de
+  // recorrer 883 partidas × 11 participantes en SQL.
+  `CREATE TABLE IF NOT EXISTS teammates_cache (
+     player_puuid TEXT PRIMARY KEY,
+     covered      INTEGER NOT NULL,
+     computed_at  INTEGER NOT NULL,
+     payload      TEXT NOT NULL
+   )`,
 ];
 
 /**
@@ -225,7 +249,25 @@ export function db(): Client {
   return client;
 }
 
-const SCHEMA_VERSION = 7;
+const SCHEMA_VERSION = 8;
+
+/** Lee una clave de `meta` (1 viaje). Devuelve null si no existe. */
+export async function getMeta(key: string): Promise<string | null> {
+  const result = await db().execute({
+    sql: "SELECT value FROM meta WHERE key = ?",
+    args: [key],
+  });
+  const value = result.rows[0]?.value;
+  return value == null ? null : String(value);
+}
+
+/** Escribe una clave de `meta` (1 viaje, sin esperar a `ensureSchema`). */
+export async function setMeta(key: string, value: string): Promise<void> {
+  await db().execute({
+    sql: "INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)",
+    args: [key, value],
+  });
+}
 
 /**
  * Crea las tablas si no existen. Idempotente y barato: en Turso cada statement

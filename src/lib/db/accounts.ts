@@ -1,4 +1,4 @@
-import { db, ensureSchema } from "./client";
+import { db, ensureSchema, getMeta, setMeta } from "./client";
 
 /**
  * Índice de cuentas para el buscador del header.
@@ -129,8 +129,22 @@ export async function searchAccounts(
   const nameLower = name.toLowerCase();
   const limit = Math.min(Math.max(options.limit ?? SEARCH_LIMIT, 1), MAX_LIMIT);
 
-  const where = ["substr(name_lower, 1, ?) = ?"];
-  const args: (string | number)[] = [nameLower.length, nameLower];
+  // Prefijo indexable (ADR-027): un rango sobre `idx_accounts_name` recorre solo
+  // las entradas que empiezan con el nombre, en vez de escanear las 42 k cuentas
+  // que hacía `substr(name_lower, 1, n) = ?` a secas. El `substr` se queda como
+  // chequeo exacto del prefijo (se evalúa sobre las filas ya filtradas, no
+  // cuesta lecturas) y no interpreta `%` ni `_` como comodines.
+  const prefixEnd = `${nameLower}${String.fromCodePoint(0x10ffff)}`;
+  const where = [
+    "name_lower >= ? AND name_lower < ?",
+    "substr(name_lower, 1, ?) = ?",
+  ];
+  const args: (string | number)[] = [
+    nameLower,
+    prefixEnd,
+    nameLower.length,
+    nameLower,
+  ];
 
   if (tag) {
     where.push("substr(lower(tag_line), 1, ?) = ?");
@@ -169,17 +183,80 @@ export type FeaturedAccount = AccountHit & {
 };
 
 /**
+ * Cuánto vive la foto de recomendados. La consulta que la calcula es cara
+ * (~106 k filas leídas, ADR-027) y el ranking cambia lento: se relee de la base
+ * cada 6 h por defecto (`FEATURED_TTL_MS`), y el resto del tiempo son ≤24 filas.
+ */
+function featuredTtl(): number {
+  const raw = Number(process.env.FEATURED_TTL_MS ?? 6 * 60 * 60 * 1000);
+  if (!Number.isFinite(raw)) return 6 * 60 * 60 * 1000;
+  return Math.min(Math.max(Math.floor(raw), 0), 24 * 60 * 60 * 1000);
+}
+
+const FEATURED_KEY = "featured_cache_at";
+const FEATURED_MAX = 24;
+
+/**
  * Cuentas "recomendadas" para la landing: las que más partidas guardadas
  * tienen, desempatando por la más reciente.
  *
  * El `JOIN` con `match_participants` es a propósito: solo se recomiendan
  * cuentas con partidas propias. Una fila de `accounts` sin partidas (creada al
  * visitar un perfil, por ejemplo) no tiene nada interesante que mostrar.
+ *
+ * Esa consulta escanea `accounts` entero y recorre los 63 k links de
+ * `puuid_matches`, así que NO se ejecuta por visita: se guarda en
+ * `featured_cache` y se refresca cada `FEATURED_TTL_MS` (ADR-027).
  */
 export async function featuredAccounts(limit = 8): Promise<FeaturedAccount[]> {
-  const max = Math.min(Math.max(Math.trunc(limit), 1), 24);
+  const max = Math.min(Math.max(Math.trunc(limit), 1), FEATURED_MAX);
   await ensureSchema();
 
+  const cached = await readFeaturedCache();
+  if (cached && Date.now() - cached.at < featuredTtl()) {
+    return cached.rows.slice(0, max);
+  }
+
+  const fresh = await computeFeatured(FEATURED_MAX);
+  await writeFeaturedCache(fresh);
+  return fresh.slice(0, max);
+}
+
+async function readFeaturedCache(): Promise<{
+  rows: FeaturedAccount[];
+  at: number;
+} | null> {
+  const [at, result] = await Promise.all([
+    getMeta(FEATURED_KEY),
+    db().execute({
+      sql: `SELECT puuid, platform_id, game_name, tag_line, profile_icon,
+                   summoner_level, last_seen_ts, games
+              FROM featured_cache
+             ORDER BY rank ASC`,
+      args: [],
+    }),
+  ]);
+  if (at == null || result.rows.length === 0) return null;
+  const stamp = Number(at);
+  if (!Number.isFinite(stamp)) return null;
+
+  return {
+    at: stamp,
+    rows: result.rows.map((row) => ({
+      puuid: str(row.puuid),
+      gameName: str(row.game_name),
+      tagLine: str(row.tag_line),
+      platformId: str(row.platform_id),
+      profileIcon: numOrNull(row.profile_icon),
+      level: numOrNull(row.summoner_level),
+      lastSeenTs: numOrNull(row.last_seen_ts) ?? 0,
+      games: Number(row.games ?? 0),
+    })),
+  };
+}
+
+/** Consulta cara: una vez cada TTL, nunca por visita. */
+async function computeFeatured(max: number): Promise<FeaturedAccount[]> {
   const result = await db().execute({
     sql: `SELECT a.puuid, a.platform_id, a.game_name, a.tag_line,
                  a.profile_icon, a.summoner_level, a.last_seen_ts,
@@ -204,9 +281,64 @@ export async function featuredAccounts(limit = 8): Promise<FeaturedAccount[]> {
   }));
 }
 
+async function writeFeaturedCache(rows: readonly FeaturedAccount[]): Promise<void> {
+  const statements = [
+    { sql: "DELETE FROM featured_cache", args: [] },
+    ...rows.map((row, index) => ({
+      sql: `INSERT OR REPLACE INTO featured_cache
+              (rank, puuid, platform_id, game_name, tag_line, profile_icon,
+               summoner_level, last_seen_ts, games)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [
+        index,
+        row.puuid,
+        row.platformId,
+        row.gameName,
+        row.tagLine,
+        row.profileIcon,
+        row.level,
+        row.lastSeenTs,
+        row.games,
+      ],
+    })),
+  ];
+
+  // La foto y su marca de tiempo van en el mismo batch: si se corta, la próxima
+  // visita recalcula (peor caso: una consulta cara de más), nunca sirve vacío.
+  statements.push({
+    sql: "INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)",
+    args: [FEATURED_KEY, String(Date.now())],
+  });
+
+  await db().batch(statements, "write");
+}
+
+const ACCOUNTS_COUNT_KEY = "accounts_count";
+
 /** Cuántas cuentas hay indexadas (para el estado del buscador y /api/health). */
 export async function countAccounts(): Promise<number> {
   await ensureSchema();
+
+  // `COUNT(*)` sobre `accounts` recorre el índice entero (42 k lecturas). El
+  // número solo se usa como dato informativo de la UI: se cachea en `meta`
+  // unos minutos (ADR-027).
+  const raw = await getMeta(ACCOUNTS_COUNT_KEY);
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw) as { n?: unknown; at?: unknown };
+      const n = Number(parsed.n);
+      const at = Number(parsed.at);
+      const ttl = Number(process.env.ACCOUNTS_COUNT_TTL_MS ?? 300_000);
+      if (Number.isFinite(n) && Number.isFinite(at) && Date.now() - at < ttl) {
+        return n;
+      }
+    } catch {
+      // Valor viejo o corrupto: se recalcula abajo.
+    }
+  }
+
   const result = await db().execute("SELECT COUNT(*) AS n FROM accounts");
-  return Number(result.rows[0]?.n ?? 0);
+  const total = Number(result.rows[0]?.n ?? 0);
+  await setMeta(ACCOUNTS_COUNT_KEY, JSON.stringify({ n: total, at: Date.now() }));
+  return total;
 }

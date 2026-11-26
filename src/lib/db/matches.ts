@@ -803,9 +803,15 @@ export async function resetDbForTests(): Promise<void> {
     "matches",
     "puuid_sync",
     "accounts",
+    // Cachés del presupuesto de lecturas (ADR-027).
+    "featured_cache",
+    "teammates_cache",
   ]) {
     await c.execute(`DELETE FROM ${table}`);
   }
+  await c.execute(
+    "DELETE FROM meta WHERE key IN ('featured_cache_at', 'accounts_count')",
+  );
 }
 
 export type MatchDetailParticipant = {

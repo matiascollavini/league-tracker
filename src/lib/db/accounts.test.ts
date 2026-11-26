@@ -108,6 +108,17 @@ describe("searchAccounts", () => {
     expect(await searchAccounts("f")).toEqual([]);
   });
 
+  it("el prefijo solo matchea desde el principio (rango indexado, ADR-027)", async () => {
+    await saveAccount(account("p1", "Akali", "LAS"));
+    await saveAccount(account("p2", "Ka", "LAS"));
+    await saveAccount(account("p3", "Kai'Sa", "LAS"));
+
+    // `name_lower >= 'ka' AND name_lower < 'ka\uffff'` no puede traer "Akali":
+    // si la consulta se rompiera (o cayera a un LIKE mal escapado), aparecería.
+    const hits = await searchAccounts("ka");
+    expect(hits.map((hit) => hit.gameName).sort()).toEqual(["Ka", "Kai'Sa"]);
+  });
+
   it("acota a una plataforma si se pide", async () => {
     await saveAccount(account("p1", "Faker", "KR1", { platformId: "kr" }));
     await saveAccount(account("p2", "Faker", "LAS"));
@@ -275,5 +286,37 @@ describe("featuredAccounts", () => {
 
     expect(await featuredAccounts(1)).toHaveLength(1);
     expect(await featuredAccounts(999)).toHaveLength(2);
+  });
+
+  it("sirve la foto guardada y no recalcula en cada visita (ADR-027)", async () => {
+    await saveMatch(
+      matchWith("LA2_4", 1_700_000_300_000, [
+        [first, "Uno"],
+        [second, "Dos"],
+      ]),
+      "la2",
+    );
+
+    const snapshot = await featuredAccounts();
+    expect(snapshot.map((hit) => hit.games)).toEqual([1, 1]);
+
+    // Partida nueva: con el TTL puesto, la lista se sirve de la foto anterior.
+    await saveMatch(
+      matchWith("LA2_5", 1_700_000_400_000, [[snapshot[0]!.puuid, "Uno"]]),
+      "la2",
+    );
+    const cached = await featuredAccounts();
+    expect(cached.map((hit) => hit.games)).toEqual([1, 1]);
+
+    // TTL 0 = recalcular siempre: el ranking ya ve la partida nueva.
+    const previous = process.env.FEATURED_TTL_MS;
+    process.env.FEATURED_TTL_MS = "0";
+    try {
+      const fresh = await featuredAccounts();
+      expect(fresh.map((hit) => hit.games)).toEqual([2, 1]);
+    } finally {
+      if (previous === undefined) delete process.env.FEATURED_TTL_MS;
+      else process.env.FEATURED_TTL_MS = previous;
+    }
   });
 });

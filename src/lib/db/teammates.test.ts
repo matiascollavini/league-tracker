@@ -7,7 +7,7 @@ process.env.DATABASE_URL = `file:${TEST_DB}`;
 
 import { closeDb, ensureSchema } from "./client";
 import { resetDbForTests, saveMatch } from "./matches";
-import { getTopTeammates } from "./teammates";
+import { getTopTeammates, trimCachedRows, type CachedTeammateRow } from "./teammates";
 import type { Match, Participant } from "@/lib/riot/types";
 
 const ME = "me-000000000000";
@@ -74,6 +74,50 @@ afterAll(async () => {
       // En Windows el archivo puede seguir bloqueado un instante.
     }
   }
+});
+
+describe("trimCachedRows", () => {
+  const row = (
+    p: string,
+    q: number,
+    g: number,
+    t = 0,
+  ): CachedTeammateRow => ({
+    p,
+    q,
+    g,
+    w: 0,
+    t,
+    r: null,
+    i: null,
+    c: null,
+    a: null,
+  });
+
+  it("deja pasar las cachés chicas sin tocarlas", () => {
+    const rows = [row("a", 420, 1), row("b", 420, 1)];
+    expect(trimCachedRows(rows, { minRows: 10 })).toEqual(rows);
+  });
+
+  it("conserva a los de 2+ partidas y el top de cada cola", () => {
+    const rows = [
+      // Un compañero repetido (2 partidas): se queda aunque no esté en el top.
+      row("repetido", 420, 2),
+      // Una sola partida, pero es el único de esa cola: se queda por el top.
+      row("unico-aram", 450, 1),
+      // Ruido: una partida y fuera del top de su cola.
+      ...Array.from({ length: 20 }, (_, i) => row(`ruido-${i}`, 420, 1, i)),
+    ];
+
+    const trimmed = trimCachedRows(rows, { minRows: 5, maxPerQueue: 2 });
+    const names = trimmed.map((r) => r.p);
+
+    expect(names).toContain("repetido");
+    expect(names).toContain("unico-aram");
+    // Del ruido solo sobrevive el top 2 de la cola 420, que se lleva
+    // `repetido` (2 partidas) y el de `t` más alto.
+    expect(names.filter((n) => n.startsWith("ruido-"))).toEqual(["ruido-19"]);
+  });
 });
 
 describe("getTopTeammates", () => {
@@ -209,5 +253,93 @@ describe("getTopTeammates", () => {
 
     expect(await getTopTeammates(ME, { limit: 5 })).toHaveLength(5);
     expect(await getTopTeammates(ME, { limit: 20 })).toHaveLength(7);
+  });
+
+  it("guarda el agregado en caché y lo sirve sin volver a recorrer las partidas", async () => {
+    await saveMatch(
+      match({
+        matchId: "LA2_1",
+        participants: [player({ puuid: ME }), duo()],
+      }),
+      "la2",
+    );
+
+    await getTopTeammates(ME);
+
+    // El agregado queda guardado como una fila JSON por jugador (ADR-027).
+    const { db } = await import("./client");
+    const rows = await db().execute("SELECT player_puuid, covered FROM teammates_cache");
+    expect(rows.rows).toHaveLength(1);
+    expect(Number(rows.rows[0]?.covered)).toBe(1);
+
+    // Con una partida nueva y el refresco frenado, se sirve lo cacheado: el
+    // compañero que recién aparece no está todavía.
+    await saveMatch(
+      match({
+        matchId: "LA2_2",
+        participants: [
+          player({ puuid: ME }),
+          duo({ puuid: "duo-2", riotIdGameName: "DuoDos" }),
+        ],
+        startTs: 1_700_000_100_000,
+      }),
+      "la2",
+    );
+
+    const throttled = await getTopTeammates(ME, { known: 2 });
+    expect(throttled.map((t) => t.gameName)).toEqual(["DuoUno"]);
+
+    // Sin freno, el cambio de `known` dispara el recálculo y aparece el nuevo.
+    const previous = process.env.TEAMMATES_REFRESH_MS;
+    process.env.TEAMMATES_REFRESH_MS = "0";
+    try {
+      const fresh = await getTopTeammates(ME, { known: 2 });
+      expect(fresh.map((t) => t.gameName).sort()).toEqual(["DuoDos", "DuoUno"]);
+    } finally {
+      if (previous === undefined) delete process.env.TEAMMATES_REFRESH_MS;
+      else process.env.TEAMMATES_REFRESH_MS = previous;
+    }
+  });
+
+  it("el filtro de cola se resuelve sobre la caché, no contra la base", async () => {
+    await saveMatch(
+      match({
+        matchId: "LA2_solo",
+        participants: [player({ puuid: ME }), duo()],
+        queueId: 420,
+      }),
+      "la2",
+    );
+    await saveMatch(
+      match({
+        matchId: "LA2_aram",
+        participants: [
+          player({ puuid: ME }),
+          duo({ puuid: "duo-aram", riotIdGameName: "AramDuo" }),
+        ],
+        queueId: 450,
+      }),
+      "la2",
+    );
+
+    const all = await getTopTeammates(ME);
+    expect(all).toHaveLength(2);
+
+    // Con la caché ya escrita, las dos consultas por cola no recalculan nada:
+    // el `computed_at` no cambia entre llamadas.
+    const { db } = await import("./client");
+    const before = await db().execute(
+      "SELECT computed_at FROM teammates_cache WHERE player_puuid = ?",
+      [ME],
+    );
+
+    expect(await getTopTeammates(ME, { queueIds: [420], known: 2 })).toHaveLength(1);
+    expect(await getTopTeammates(ME, { queueIds: [450], known: 2 })).toHaveLength(1);
+
+    const after = await db().execute(
+      "SELECT computed_at FROM teammates_cache WHERE player_puuid = ?",
+      [ME],
+    );
+    expect(after.rows[0]?.computed_at).toBe(before.rows[0]?.computed_at);
   });
 });

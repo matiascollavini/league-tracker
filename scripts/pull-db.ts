@@ -114,6 +114,15 @@ async function main() {
     console.log(`  ✓ ${table.name.padEnd(20)} ${copied} filas`);
   }
 
+  // Las cachés (ADR-027) son propias del proceso que las calculó: si no se
+  // tiran, dev seguiría sirviendo recomendados/compañeros de antes del pull.
+  for (const table of ["featured_cache", "teammates_cache"]) {
+    await target.execute(`DELETE FROM ${table}`);
+  }
+  await target.execute(
+    "DELETE FROM meta WHERE key IN ('featured_cache_at', 'accounts_count')",
+  );
+
   console.log(`\nListo: ${totalRows} filas copiadas a ${LOCAL_URL}\n`);
   console.log("Ahora `npm run dev` ve los mismos datos que producción.\n");
   process.exit(0);

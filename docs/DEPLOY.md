@@ -14,7 +14,7 @@ Vercel (Next.js)  ──►  Turso (SQLite en la nube)
 | Pieza | Plan gratis | Alcanza para |
 | --- | --- | --- |
 | Vercel Hobby | 1M invocaciones/mes | el sitio |
-| Turso | 5 GB, 500M lecturas, 10M escrituras/mes | ~800 cuentas completas |
+| Turso | 5 GB, 500M lecturas, 10M escrituras/mes | ~100 cuentas completas por mes + ~135 k vistas de perfil/mes (medido, ADR-027) |
 | GitHub Actions | gratis en repo público | worker cada 10 min + rango cada 30 min |
 
 Costo total: **USD 0**.
@@ -220,8 +220,12 @@ Se paga **una sola vez** por cuenta. Después, actualizarla cuesta 1 request
 (página 0). El botón **"Cargar todo el historial"** del perfil hace esto mismo
 desde la web, en tandas, con barra de progreso y sin bloquear la página.
 
-El tope real de cuentas es Turso: 10M escrituras/mes ÷ 12 por partida ≈ **830
-cuentas completas por mes** (y 5 GB dan para ~1.900).
+El tope real de cuentas es Turso: ~90-120 filas escritas por partida (la fila de la
+partida + sus índices, los 11 links, los 11 participantes con sus índices y los upserts
+del índice de cuentas), así que 10M escrituras/mes dan para **~100 cuentas completas
+por mes** (5 GB dan para ~1.500). Del lado de las lecturas, con las cachés de ADR-027
+cada vista de perfil cuesta ~3,7 k filas: 500M/mes alcanzan para ~135 k vistas. El
+detalle y las fuentes están en `docs/DECISIONES.md` (ADR-027).
 
 ## Problemas típicos
 

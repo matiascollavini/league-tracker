@@ -153,7 +153,7 @@ export default async function ProfilePage({
     getChampionCatalog(),
     findActiveGame(playerPuuids, effectivePlatform),
     source === "db"
-      ? getTopTeammates(playerPuuids, { queueIds, limit: 5 })
+      ? getTopTeammates(playerPuuids, { queueIds, limit: 5, known: progress.known })
       : Promise.resolve(topTeammatesFromMatches(inQueue, playerPuuids, 5)),
   ]);
   const liveGame = live?.game ?? null;
