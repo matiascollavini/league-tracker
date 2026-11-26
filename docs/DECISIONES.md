@@ -1598,6 +1598,16 @@ Esquema **v8** con dos tablas nuevas y tres cambios:
   verificó contra la consulta vieja sobre la base real en los cinco tabs
   (Todas, Solo/Duo, Flex, Normal, ARAM): misma salida.
 
+### Fuentes (consultadas 2026-11-26)
+- <https://turso.tech/pricing> — plan Free: 100 bases, 5 GB, 500 M rows read/mes,
+  10 M rows written/mes, 3 GB de syncs, PITR 1 día. Snapshot en
+  `research/crawled/turso-tech/https-turso-tech-pricing.md`.
+- <https://docs.turso.tech/help/usage-and-billing> — qué cuenta como fila leída
+  (row **scan**) y escrita (la fila + cada índice). Snapshot en
+  `research/crawled/docs-turso-tech/https-docs-turso-tech-help-usage-and-billing.md`.
+- <https://turso.tech/blog/turso-is-joining-supabase> — adquisición por Supabase
+  (2026-10-02); la plataforma sigue igual.
+
 ---
 
 ## ADR-028 — Cron propio (`/api/cron`) porque GitHub Actions no sostiene la cadencia
