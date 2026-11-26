@@ -16,7 +16,8 @@
     "repair:names": "tsx scripts/repair-names.ts",
     "worker": "tsx scripts/worker.ts",
     "db:migrate": "tsx scripts/migrate.ts",
-    "db:copy": "tsx scripts/copy-db.ts"
+    "db:copy": "tsx scripts/copy-db.ts",
+    "db:pull": "tsx scripts/pull-db.ts"
   },
   "dependencies": {
     "@libsql/client": "^0.18.0",

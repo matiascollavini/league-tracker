@@ -1270,3 +1270,44 @@ Cambios:
   de 45% de WR; primero los que más jugaste" y el estado vacío nombra el piso.
 - Tests nuevos: mal pick fuera del top de más jugados (caso Warwick) y piso de 5
   (4 partidas no alcanzan).
+
+### Corrección 2 (2026-11-26, mismo día) — orden por volumen
+Verificado contra producción (`league-tracker-phi.vercel.app`), la cuenta
+AMO LAS TET4S#6293 tiene este pool bajo 45%:
+
+| campeón | PJ | V-D | WR |
+|---|---|---|---|
+| Warwick | 11 | 4-7 | 36% |
+| Aurora | 9 | 4-5 | 44% |
+| Kayle / Wukong / Yone | 7 | 2-5 | 29% |
+| Jinx | 6 | 1-5 | 17% |
+| Garen | 5 | 1-4 | 20% |
+| Teemo | 5 | 2-3 | 40% |
+
+El panel mostraba **Warwick, Jinx, Kayle**: el desempate por derrotas
+(`games - wins`) dejaba al 1/6 de Jinx (5 derrotas) por delante de Aurora
+(9 partidas, 5 derrotas) y de los de 7 partidas. El operador espera
+**Warwick, Aurora y después uno de los de 7**: o sea, **volumen primero**.
+
+- `worst` ordena por `games` desc, después `winrate` asc, después derrotas y
+  nombre. La lista queda [Warwick, Aurora, Kayle] (los de 7 empatan en todo).
+- Se sacaron los textos explicativos al pie de las dos tarjetas (muestra mínima
+  y umbral): el operador pidió que el panel muestre sólo título, filas y el
+  estado vacío.
+- Test de regresión con los números reales de esa cuenta
+  (`reproduce el caso AMO LAS TET4S…`).
+
+### Dev vs producción: bases distintas (misma sesión)
+El desvío entre `npm run dev` y la web no era de lógica: **dev lee
+`data/league.db`** (96 partidas de esa cuenta) y **producción lee Turso** (432).
+Con menos historial cambia el pool, la tabla "Por campeón" y los picks.
+
+- Nuevo `npm run db:pull` (`scripts/pull-db.ts`): copia Turso → `data/league.db`
+  con `INSERT OR REPLACE` por lotes, leyendo las credenciales de
+  `.env.turso.local`. Sólo hace SELECT contra producción y es idempotente.
+- `scripts/env.ts` ya existía con el flag `--prod` para tocar Turso; `db:pull`
+  lo reutiliza (mismo criterio de credenciales).
+- No conviene apuntar dev directo a Turso: el sync on-demand del perfil
+  **escribe** en la base y se mezclarían pruebas con datos reales.
+- Verificado: después del pull, dev agrega 432 partidas para esa cuenta y el
+  panel devuelve exactamente [Warwick, Aurora, Kayle].

@@ -62,6 +62,18 @@ URL y el token de Turso. Para el worker en producción:
 npm run worker -- --prod --minutes=8 --budget=250
 ```
 
+### Bajar producción al SQLite local (paridad dev/prod)
+
+`npm run dev` lee `data/league.db`; la web lee Turso. Si el local está atrasado,
+el mismo perfil muestra otro pool de campeones y otros picks. Para que dev vea
+exactamente lo que hay en producción:
+
+```bash
+npm run db:pull     # Turso -> data/league.db (sólo SELECT a prod, idempotente)
+```
+
+No apuntes dev a Turso: el sync on-demand del perfil **escribe** en la base.
+
 ## 3. Deploy en Vercel
 
 1. Subí el repo a GitHub (privado o público).

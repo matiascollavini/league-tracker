@@ -95,6 +95,7 @@ _(Detalle y justificación en `docs/DECISIONES.md`.)_
 | Caché caliente | `fetch` de Next (sin Redis: la DB hace de caché y de lock) | decidido |
 | Persistencia | **SQLite** local / **Turso** free en prod (ADR-007) | implementado |
 | Ingest | `npm run ingest` + `npm run worker` (cola con cursor) + cron en Actions | implementado |
+| Paridad dev/prod | `npm run db:pull` (Turso → `data/league.db`) | implementado |
 | Estado del código | v1 funcionando con **datos reales** (dev key en `.env.local`) | implementado |
 
 ### Regla de producto derivada del ADR-002
@@ -114,11 +115,11 @@ src/app/api/    endpoints (health, sync, buscar, recomendados, en-vivo,
 src/app/        páginas (landing, perfil, detalle de partida, legales)
 src/components/ UI server-first + header-search y lista de partidas (client)
 src/lib/riot/   capa de datos: config, http, account, matches, aggregate, panel, types
-src/lib/db/     SQLite/Turso: client, matches, accounts (índice del buscador)
-docs/           API-LOL.txt (referencia de la API), DECISIONES.md (ADRs)
+src/lib/db/     SQLite/Turso: client, matches, accounts (índice del buscador), teammates
+docs/           API-LOL.txt (referencia de la API), DECISIONES.md (ADRs), DEPLOY.md
 research/       briefs crudos de investigación + crawled/ (fuentes)
 workflows/      scripts de orquestación de subagentes
-scripts/        verify-riot.mjs (verificación contra la API real)
+scripts/        verify-riot, ingest, worker, db:copy (local→Turso), db:pull (Turso→local)
 ```
 
 ---
@@ -131,6 +132,13 @@ scripts/        verify-riot.mjs (verificación contra la API real)
   Corre en modo demo sin key (`npm run dev`).
 - Datos reales: **verificado** el 2026-11-24 (`npm run verify:riot`). La dev key
   se vence cada 24 h: si aparece 401/403, regenerarla en el portal.
+- **Dev y prod leen bases distintas**: dev usa `data/league.db` (solo lo que se
+  ingirió localmente) y producción usa **Turso** (lo que mantiene el worker).
+  Por eso un mismo perfil puede mostrar otro pool, otra tabla "Por campeón" y
+  otros picks. Para ver en dev lo mismo que en la web: `npm run db:pull`
+  (Turso → local, sólo SELECT a prod, idempotente; credenciales en
+  `.env.turso.local`). No apuntar dev a Turso: el sync on-demand escribe en la
+  base.
 - Regla dura: `account-v1` y `match-v5` van al host **regional**; `summoner`,
   `league` y `mastery` al host de **plataforma**. El tipo `RiotTarget` lo hace
   imposible de confundir.
@@ -229,9 +237,11 @@ scripts/        verify-riot.mjs (verificación contra la API real)
     (95%), no por WR crudo, así un 3/5 o un 2/3 no le gana a un 12/20; el WR que
     se muestra es el real;
   - **peores**: mira **todo el historial** (no el top de más jugados), exige
-    `winrate < 0.45` y ordena por **derrotas** (volumen × mal WR); se calculan
-    primero, así un campeón bajo 45% jamás sale como "mejor pick";
-  - cada tarjeta muestra la regla al pie y un estado vacío que nombra el umbral.
+    `winrate < 0.45` y ordena **por partidas jugadas** y, entre volúmenes
+    parecidos, por peor WR (no por derrotas: un 1/6 no puede adelantar a un 4/9);
+    se calculan primero, así un campeón bajo 45% jamás sale como "mejor pick";
+  - cada tarjeta muestra solo el título, las filas y un estado vacío que nombra
+    el umbral (sin textos explicativos debajo: se sacaron a pedido del operador).
     Ojo: el piso relativo de `best` es el que puede tapar un campeón con pocas
     partidas; para `worst` el piso es fijo (5) y no hay pool que recorte.
 

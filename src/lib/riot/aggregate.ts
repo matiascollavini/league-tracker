@@ -195,9 +195,11 @@ export function summarize(
  * - `worst` mira **todo el historial** (no solo los más jugados: un campeón con
  *   6 partidas al 30% tiene que aparecer aunque haya 20 campeones con más
  *   volumen), exige **mínimo `minWorstGames` partidas** (5), solo admite winrate
- *   **menor a `worstMaxWinrate`** (45%) y ordena por **derrotas**
- *   (volumen × mal winrate): primero lo que más jugaste y peor te sale, no el
- *   0% de dos partidas. Si ganaste, no es un mal pick.
+ *   **menor a `worstMaxWinrate`** (45%) y ordena **por partidas jugadas** (los
+ *   que más jugaste primero) y, entre volúmenes parecidos, por peor winrate.
+ *   No se ordena por "derrotas": eso dejaba un 1/6 adelante de un 4/9 sólo por
+ *   tener peor WR, y el operador espera primero los campeones de más volumen.
+ *   Si ganaste, no es un mal pick.
  * - `best` mira los `poolSize` campeones más jugados y exige **muestra
  *   suficiente** (ver `pickSampleFloor`); ordena por `wilsonLowerBound` en vez de
  *   winrate crudo: un 2/3 (67%) queda por debajo de un 12/20 (60%) porque el
@@ -279,6 +281,8 @@ export function pickHighlights(
 
   // `worst` se resuelve primero y sobre TODO el historial: un campeón con 6
   // partidas al 30% no puede quedar afuera por no entrar en el top del pool.
+  // Orden: más partidas primero (el que más jugaste y peor te sale pesa más
+  // que el 1/6 de una semana), después peor winrate y después derrotas.
   const worst = byGames
     .filter(
       (champion) =>
@@ -287,9 +291,9 @@ export function pickHighlights(
     )
     .sort(
       (a, b) =>
-        lossesOf(b) - lossesOf(a) ||
-        a.winrate - b.winrate ||
         b.games - a.games ||
+        a.winrate - b.winrate ||
+        lossesOf(b) - lossesOf(a) ||
         a.championName.localeCompare(b.championName),
     )
     .slice(0, limit);

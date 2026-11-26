@@ -300,16 +300,42 @@ describe("pickHighlights", () => {
     expect(worst).toEqual([]);
   });
 
-  it("prioriza por derrotas, no por el peor winrate suelto", () => {
+  it("ordena los malos picks por volumen, no por el peor winrate suelto", () => {
     const champions = [
-      stat("Ahri", 40, 16), // 40% → 24 derrotas
-      stat("Lux", 10, 2), // 20% → 8 derrotas
+      stat("Ahri", 40, 16), // 40%, el que más jugaste
+      stat("Lux", 10, 2), // 20%, muchos menos partidas
     ];
 
     const { best, worst } = pickHighlights(champions);
     expect(worst.map((c) => c.championName)).toEqual(["Ahri", "Lux"]);
     // Un campeón bajo 45% nunca aparece como "mejor pick".
     expect(best).toEqual([]);
+  });
+
+  it("reproduce el caso AMO LAS TET4S: Warwick, Aurora y recién después Kayle", () => {
+    const champions = [
+      stat("Fiora", 103, 53), // 51%
+      stat("Sett", 52, 31), // 60%
+      stat("Mordekaiser", 29, 16), // 55%
+      stat("MasterYi", 15, 10), // 67%
+      stat("Warwick", 11, 4), // 36%
+      stat("Aurora", 9, 4), // 44%
+      stat("Kayle", 7, 2), // 29%
+      stat("Wukong", 7, 2), // 29%
+      stat("Yone", 7, 2), // 29%
+      stat("Jinx", 6, 1), // 17% pero sólo 6 partidas
+      stat("Teemo", 5, 2), // 40%
+    ];
+
+    const { worst } = pickHighlights(champions);
+
+    // Warwick (11) y Aurora (9) pesan más que el 1/6 de Jinx; los de 7 partidas
+    // empatan y sale el primero por nombre.
+    expect(worst.map((c) => c.championName)).toEqual([
+      "Warwick",
+      "Aurora",
+      "Kayle",
+    ]);
   });
 
   it("no repite un campeón entre mejores y peores", () => {

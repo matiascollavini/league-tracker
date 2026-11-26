@@ -470,7 +470,6 @@ export default async function ProfilePage({
                 hrefFor({ champion: championName ?? null })
               }
               emptyLabel="Ningún campeón con muestra suficiente llega a 45% de winrate."
-              hint="Solo campeones con muestra suficiente (5 partidas o más), ordenados por winrate ajustado a la cantidad de partidas."
             />
             <ChampionPicks
               title="No pickees más esto"
@@ -483,7 +482,6 @@ export default async function ProfilePage({
                 hrefFor({ champion: championName ?? null })
               }
               emptyLabel="Ningún campeón con 5 partidas o más está por debajo de 45% de winrate."
-              hint="Solo campeones con 5 partidas o más y menos de 45% de WR; primero los que más jugaste."
             />
           </section>
 
