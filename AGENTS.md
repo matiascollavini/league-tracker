@@ -237,9 +237,10 @@ scripts/        verify-riot, ingest, worker, db:copy (local→Turso), db:pull (T
     (95%), no por WR crudo, así un 3/5 o un 2/3 no le gana a un 12/20; el WR que
     se muestra es el real;
   - **peores**: mira **todo el historial** (no el top de más jugados), exige
-    `winrate < 0.45` y ordena **por partidas jugadas** y, entre volúmenes
-    parecidos, por peor WR (no por derrotas: un 1/6 no puede adelantar a un 4/9);
-    se calculan primero, así un campeón bajo 45% jamás sale como "mejor pick";
+    `winrate <= 0.45` (el 45% entra) y ordena **por partidas jugadas** y, entre
+    volúmenes parecidos, por peor WR (no por derrotas: un 1/6 no puede adelantar
+    a un 4/9); se calculan primero, así un campeón de 45% o menos jamás sale
+    como "mejor pick" (ahí la vara es `> 0.45`);
   - cada tarjeta muestra solo el título, las filas y un estado vacío que nombra
     el umbral (sin textos explicativos debajo: se sacaron a pedido del operador).
     Ojo: el piso relativo de `best` es el que puede tapar un campeón con pocas

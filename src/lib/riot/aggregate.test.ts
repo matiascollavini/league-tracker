@@ -293,11 +293,13 @@ describe("pickHighlights", () => {
     expect(best.map((c) => c.championName)).not.toContain("Warwick");
   });
 
-  it("descarta el winrate exactamente en 45%", () => {
+  it("incluye el winrate exactamente en 45% como mal pick", () => {
     const champions = [stat("Ahri", 40, 30), stat("Lux", 20, 9)];
 
-    const { worst } = pickHighlights(champions);
-    expect(worst).toEqual([]);
+    const { best, worst } = pickHighlights(champions);
+    // 20/9 = 45% justo: entra en peores y no se repite en mejores.
+    expect(worst.map((c) => c.championName)).toEqual(["Lux"]);
+    expect(best.map((c) => c.championName)).toEqual(["Ahri"]);
   });
 
   it("ordena los malos picks por volumen, no por el peor winrate suelto", () => {
@@ -308,7 +310,7 @@ describe("pickHighlights", () => {
 
     const { best, worst } = pickHighlights(champions);
     expect(worst.map((c) => c.championName)).toEqual(["Ahri", "Lux"]);
-    // Un campeón bajo 45% nunca aparece como "mejor pick".
+    // Un campeón de 45% o menos nunca aparece como "mejor pick".
     expect(best).toEqual([]);
   });
 

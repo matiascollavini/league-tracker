@@ -195,10 +195,10 @@ export function summarize(
  * - `worst` mira **todo el historial** (no solo los más jugados: un campeón con
  *   6 partidas al 30% tiene que aparecer aunque haya 20 campeones con más
  *   volumen), exige **mínimo `minWorstGames` partidas** (5), solo admite winrate
- *   **menor a `worstMaxWinrate`** (45%) y ordena **por partidas jugadas** (los
- *   que más jugaste primero) y, entre volúmenes parecidos, por peor winrate.
- *   No se ordena por "derrotas": eso dejaba un 1/6 adelante de un 4/9 sólo por
- *   tener peor WR, y el operador espera primero los campeones de más volumen.
+ *   **hasta `worstMaxWinrate`** (45% incluido) y ordena **por partidas jugadas**
+ *   (los que más jugaste primero) y, entre volúmenes parecidos, por peor
+ *   winrate. No se ordena por "derrotas": eso dejaba un 1/6 adelante de un 4/9
+ *   sólo por tener peor WR, y el operador espera primero los de más volumen.
  *   Si ganaste, no es un mal pick.
  * - `best` mira los `poolSize` campeones más jugados y exige **muestra
  *   suficiente** (ver `pickSampleFloor`); ordena por `wilsonLowerBound` en vez de
@@ -217,7 +217,7 @@ const MIN_PICK_GAMES = 5;
 const MAX_PICK_GAMES = 20;
 /** La muestra mínima de `best` escala con el campeón más jugado (10%). */
 const PICK_SAMPLE_SHARE = 0.1;
-/** `worst` solo muestra campeones por debajo de este winrate (0..1). */
+/** `worst` muestra campeones con este winrate o menos (45% incluido, 0..1). */
 export const WORST_MAX_WINRATE = 0.45;
 /** Partidas mínimas para marcar un campeón como mal pick. */
 export const MIN_WORST_GAMES = 5;
@@ -281,13 +281,15 @@ export function pickHighlights(
 
   // `worst` se resuelve primero y sobre TODO el historial: un campeón con 6
   // partidas al 30% no puede quedar afuera por no entrar en el top del pool.
+  // El 45% entra (el operador lo pidió como vara "hasta 45%"), así que `best`
+  // exige estrictamente más que el umbral para no repetirlo.
   // Orden: más partidas primero (el que más jugaste y peor te sale pesa más
   // que el 1/6 de una semana), después peor winrate y después derrotas.
   const worst = byGames
     .filter(
       (champion) =>
         champion.games >= minWorstGames &&
-        champion.winrate < worstMaxWinrate,
+        champion.winrate <= worstMaxWinrate,
     )
     .sort(
       (a, b) =>
@@ -302,7 +304,7 @@ export function pickHighlights(
   const best = pool
     .filter(
       (champion) =>
-        champion.games >= floor && champion.winrate >= worstMaxWinrate,
+        champion.games >= floor && champion.winrate > worstMaxWinrate,
     )
     .sort(
       (a, b) =>

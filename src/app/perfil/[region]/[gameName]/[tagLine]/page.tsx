@@ -469,7 +469,7 @@ export default async function ProfilePage({
               hrefFor={(championName) =>
                 hrefFor({ champion: championName ?? null })
               }
-              emptyLabel="Ningún campeón con muestra suficiente llega a 45% de winrate."
+              emptyLabel="Ningún campeón con muestra suficiente supera el 45% de winrate."
             />
             <ChampionPicks
               title="No pickees más esto"
@@ -481,7 +481,7 @@ export default async function ProfilePage({
               hrefFor={(championName) =>
                 hrefFor({ champion: championName ?? null })
               }
-              emptyLabel="Ningún campeón con 5 partidas o más está por debajo de 45% de winrate."
+              emptyLabel="Ningún campeón con 5 partidas o más está en 45% de winrate o menos."
             />
           </section>
 

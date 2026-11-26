@@ -1311,3 +1311,14 @@ Con menos historial cambia el pool, la tabla "Por campeón" y los picks.
   **escribe** en la base y se mezclarían pruebas con datos reales.
 - Verificado: después del pull, dev agrega 432 partidas para esa cuenta y el
   panel devuelve exactamente [Warwick, Aurora, Kayle].
+
+### Corrección 3 (2026-11-26) — el 45% entra en "mal pick"
+Pedido del operador: la vara de mal winrate es **45% incluido**.
+
+- `worst` filtra `winrate <= 0.45` (antes `< 0.45`, que dejaba afuera un 9/20).
+- `best` pasa a exigir `winrate > 0.45` para que un campeón de 45% justo nunca
+  aparezca en las dos tarjetas (antes `>= 0.45`).
+- Estados vacíos actualizados: "…está en 45% de winrate o menos" (peores) y
+  "…supera el 45% de winrate" (mejores).
+- Test renombrado a `incluye el winrate exactamente en 45% como mal pick`:
+  20/9 (45%) sale en peores y Ahri 40/30 (75%) queda como mejor.
