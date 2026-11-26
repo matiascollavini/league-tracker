@@ -6,7 +6,13 @@ const TEST_DB = "./data/vitest-rank-history.db";
 process.env.DATABASE_URL = `file:${TEST_DB}`;
 
 import { closeDb, db, ensureSchema } from "./client";
-import { getLeagueHistory, recordLeagueHistory } from "./rank-history";
+import { touchSyncState } from "./matches";
+import {
+  getLeagueHistory,
+  listRankSnapshotTargets,
+  recordLeagueHistory,
+  recordRankPoll,
+} from "./rank-history";
 import type { LeagueEntry } from "@/lib/riot/types";
 
 const ME = "me-000000000000";
@@ -40,6 +46,8 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await db().execute("DELETE FROM league_history");
+  await db().execute("DELETE FROM rank_polls");
+  await db().execute("DELETE FROM puuid_sync");
 });
 
 describe("recordLeagueHistory", () => {
@@ -115,5 +123,55 @@ describe("recordLeagueHistory", () => {
     const flex = await getLeagueHistory(ME, ["RANKED_FLEX_SR"]);
     expect(flex).toHaveLength(1);
     expect(flex[0]?.tier).toBe("GOLD");
+  });
+});
+
+describe("listRankSnapshotTargets", () => {
+  const seed = async (puuid: string, name: string, platform = "la2") => {
+    await touchSyncState(puuid, platform, { gameName: name, tagLine: "LAS" });
+  };
+
+  it("prioriza a quien hace más que no se le consulta el rango", async () => {
+    await seed("p1", "Uno");
+    await seed("p2", "Dos");
+    await seed("p3", "Tres");
+    await recordRankPoll("p1", 5_000);
+    await recordRankPoll("p3", 1_000);
+
+    const targets = await listRankSnapshotTargets(10);
+    expect(targets.map((t) => t.puuid)).toEqual(["p2", "p3", "p1"]);
+    expect(targets[0]?.label).toBe("Dos#LAS");
+    expect(targets[0]?.polledAt).toBeNull();
+  });
+
+  it("respeta el límite (la cola rota entre corridas)", async () => {
+    await seed("p1", "Uno");
+    await seed("p2", "Dos");
+    expect(await listRankSnapshotTargets(1)).toHaveLength(1);
+  });
+
+  it("una cuenta sin rango también queda marcada como consultada", async () => {
+    await seed("p1", "Uno");
+    await recordRankPoll("p1", 1_000);
+    const [target] = await listRankSnapshotTargets(10);
+    expect(target?.polledAt).toBe(1_000);
+  });
+
+  it("no retrocede el timestamp si dos corridas se pisan", async () => {
+    await recordRankPoll("p1", 5_000);
+    await recordRankPoll("p1", 1_000);
+    const rows = await db().execute({
+      sql: "SELECT ts FROM rank_polls WHERE puuid = ?",
+      args: ["p1"],
+    });
+    expect(Number(rows.rows[0]?.ts)).toBe(5_000);
+  });
+
+  it("descarta plataformas desconocidas", async () => {
+    await seed("p1", "Uno");
+    await seed("p2", "Dos");
+    await db().execute("UPDATE puuid_sync SET platform_id = 'xx' WHERE puuid = 'p2'");
+    const targets = await listRankSnapshotTargets(10);
+    expect(targets.map((t) => t.puuid)).toEqual(["p1"]);
   });
 });

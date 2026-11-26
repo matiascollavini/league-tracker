@@ -15,6 +15,7 @@
     "db:stats": "tsx scripts/db-stats.ts",
     "repair:names": "tsx scripts/repair-names.ts",
     "worker": "tsx scripts/worker.ts",
+    "snapshot:ranks": "tsx scripts/snapshot-ranks.ts",
     "db:migrate": "tsx scripts/migrate.ts",
     "db:copy": "tsx scripts/copy-db.ts",
     "db:pull": "tsx scripts/pull-db.ts"

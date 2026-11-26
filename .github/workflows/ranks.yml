@@ -1,0 +1,40 @@
+name: ranks
+
+# Fotos de rango (LP) de las cuentas de la cola (ADR-026). Riot no expone
+# historial de rango, así que la serie del perfil la construyen estas corridas:
+# 1 request por cuenta (`entries/by-puuid` trae Solo/Duo y Flex juntas).
+#
+# Con secuencia cada 30 min alcanza para que un día de partidas se vea como
+# varios escalones en el gráfico. Con dev key (100 req/2 min) el worker y este
+# job comparten el límite: van a aparecer 429 y las corridas avanzan menos
+# cuentas. Con production key no hay problema.
+
+on:
+  schedule:
+    - cron: "5,35 * * * *" # desfasado del worker (*/10) para no arrancar juntos
+  workflow_dispatch: # botón para correrlo a mano
+
+concurrency:
+  group: ranks
+  cancel-in-progress: false
+
+jobs:
+  snapshots:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Tomar fotos de rango
+        run: npm run snapshot:ranks -- --minutes=6 --budget=400
+        env:
+          RIOT_API_KEY: ${{ secrets.RIOT_API_KEY }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_AUTH_TOKEN: ${{ secrets.DATABASE_AUTH_TOKEN }}

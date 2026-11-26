@@ -57,18 +57,35 @@ export async function getSummoner(
   }
 }
 
-/** LEAGUE-V4: rango actual. Un jugador sin rank devuelve [] (o 404). */
+/**
+ * LEAGUE-V4 crudo: rango actual de todas las colas en un request.
+ *
+ * A diferencia de `getLeagueEntries`, **no se traga el error**: la usa el cron
+ * de snapshots (ADR-026) para distinguir "sin rango" (404/[]) de "la key venció"
+ * (401/403) o "se acabó el tiempo", y no marcar como consultada una cuenta que
+ * en realidad falló. Un jugador sin rank devuelve [] (o 404, ver API-LOL §7.4).
+ */
+export async function fetchLeagueEntries(
+  puuid: string,
+  platform: Platform,
+  deadline?: number,
+): Promise<LeagueEntry[]> {
+  if (isMockMode()) return mockLeague;
+  return riotFetch(`/lol/league/v4/entries/by-puuid/${puuid}`, {
+    platform,
+    revalidate: 300,
+    schema: z.array(LeagueEntrySchema),
+    ...(deadline !== undefined ? { deadline } : {}),
+  });
+}
+
+/** LEAGUE-V4 con degradación: el perfil nunca se rompe por el rango. */
 export async function getLeagueEntries(
   puuid: string,
   platform: Platform,
 ): Promise<LeagueEntry[]> {
-  if (isMockMode()) return mockLeague;
   try {
-    return await riotFetch(`/lol/league/v4/entries/by-puuid/${puuid}`, {
-      platform,
-      revalidate: 300,
-      schema: z.array(LeagueEntrySchema),
-    });
+    return await fetchLeagueEntries(puuid, platform);
   } catch {
     return [];
   }

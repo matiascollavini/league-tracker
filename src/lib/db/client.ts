@@ -76,6 +76,14 @@ const SCHEMA = [
      losses      INTEGER,
      PRIMARY KEY (puuid, queue_type, ts)
    )`,
+  // Última vez que el cron consultó el rango de una cuenta (con o sin rango).
+  // Sirve para rotar la cola del job de snapshots: sin esto, las cuentas sin
+  // rank (league-v4 devuelve []) nunca generarían una fila en league_history y
+  // volverían a caer siempre al principio de la cola.
+  `CREATE TABLE IF NOT EXISTS rank_polls (
+     puuid TEXT PRIMARY KEY,
+     ts    INTEGER NOT NULL
+   )`,
   `CREATE TABLE IF NOT EXISTS puuid_matches (
      puuid    TEXT NOT NULL,
      match_id TEXT NOT NULL,
@@ -217,7 +225,7 @@ export function db(): Client {
   return client;
 }
 
-const SCHEMA_VERSION = 6;
+const SCHEMA_VERSION = 7;
 
 /**
  * Crea las tablas si no existen. Idempotente y barato: en Turso cada statement

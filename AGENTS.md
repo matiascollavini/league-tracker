@@ -275,7 +275,10 @@ scripts/        verify-riot, ingest, worker, db:copy (local→Turso), db:pull (T
   cuenta**: las cuentas viejas muestran un solo punto hasta que se acumulen
   visitas; con 0/1 punto la UI lo dice en vez de dibujar una curva falsa.
   `mockLeagueHistory()` mantiene el modo demo con dos series de 120 días. El
-  cron global de snapshots (1 request por cuenta/día) queda como pendiente.
+  cron `ranks` (`.github/workflows/ranks.yml` → `scripts/snapshot-ranks.ts`,
+  cada 30 min) toma la foto de rango de cada cuenta de `puuid_sync` (1 request
+  por cuenta) y `rank_polls` rota la cola. No es un punto por partida: Riot no
+  expone LP por partida, el cron muestrea.
 
 ---
 

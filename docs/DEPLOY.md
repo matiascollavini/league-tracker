@@ -8,14 +8,14 @@ Vercel (Next.js)  ──►  Turso (SQLite en la nube)
       ▲                        ▲
       │                        │
    usuario                 GitHub Actions
-                       (worker cada 10 min)
+                    (worker + snapshots de rango)
 ```
 
 | Pieza | Plan gratis | Alcanza para |
 | --- | --- | --- |
 | Vercel Hobby | 1M invocaciones/mes | el sitio |
 | Turso | 5 GB, 500M lecturas, 10M escrituras/mes | ~800 cuentas completas |
-| GitHub Actions | 2.000 min/mes (repo público) | 1 worker cada 10 min |
+| GitHub Actions | gratis en repo público | worker cada 10 min + rango cada 30 min |
 
 Costo total: **USD 0**.
 
@@ -136,10 +136,14 @@ con la URL y el token de la base que ya tiene los datos (esas variables ganan
 sobre las de la integración) y redeployar. Alternativa: dejar la base nueva y
 subirle los datos con `npm run db:copy` apuntando a ella.
 
-## 4. Activar el worker (GitHub Actions)
+## 4. Activar los crons (GitHub Actions)
 
-El cron ya está en `.github/workflows/worker.yml`. Solo hay que darle los
-secretos:
+Hay dos workflows y **los dos** necesitan los mismos tres secretos:
+
+| Workflow | Qué hace | Cuándo |
+| --- | --- | --- |
+| `worker.yml` | baja las partidas que faltan | cada 10 min |
+| `ranks.yml` | toma la foto de rango de cada cuenta (el gráfico de LP) | cada 30 min |
 
 1. En GitHub: **Settings → Secrets and variables → Actions → New repository
    secret**, tres veces:
@@ -150,12 +154,22 @@ secretos:
 | `DATABASE_URL` | `libsql://league-page-....turso.io` |
 | `DATABASE_AUTH_TOKEN` | `eyJ...` |
 
-2. Pestaña **Actions → worker → Run workflow** para probarlo a mano.
-3. Listo: cada 10 minutos baja lo pendiente. Si no hay nada, termina en 2 s.
+2. Pestaña **Actions**. Si es la primera vez, GitHub pide confirmar que querés
+   habilitar los workflows.
+3. **Actions → worker → Run workflow** para probarlo a mano. Después
+   **Actions → ranks → Run workflow**.
+4. Listo: el worker baja lo pendiente cada 10 min y `ranks` mantiene el
+   historial de rango de las cuentas de la cola (`puuid_sync`).
 
-> Con **dev key** el worker avanza ~250 partidas por corrida (la key permite
-> 100 requests cada 2 min). Con **production key** baja ~1.000 en una sola
-> corrida de 20 s.
+> **Ojo con la dev key**: se vence cada 24 h y el cron empieza a fallar con
+> 401/403 (el log de `ranks` lo dice explícito). Mientras tanto, regenerala en
+> el portal o corré `npm run snapshot:ranks -- --prod` a mano desde tu máquina.
+> Con dev key, además, `worker` y `ranks` comparten el límite de 100
+> requests/2 min: van a aparecer 429 y las corridas avanzan menos cuentas. Con
+> **production key** no hay problema.
+
+> GitHub desactiva los crons de un repo sin actividad durante 60 días; si pasa,
+> entrá a **Actions** y volvé a habilitarlos (o hacé un commit).
 
 ## 5. Pedir la production key de Riot
 

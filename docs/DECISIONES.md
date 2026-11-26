@@ -1483,9 +1483,15 @@ descarta.
   datos; queda documentado en la UI y acá.
 - Cero requests nuevos a Riot y cero dependencias nuevas. El costo por render son
   dos viajes chicos a la base (batch de inserts condicionales + SELECT).
-- La densidad del historial depende de que alguien abra el perfil. Un cron global
-  de snapshots (1 request por cuenta conocida, p. ej. 1 vez por día) es el
-  siguiente paso natural; no se implementó en esta tanda.
+- La densidad del historial no depende solo de las visitas: el job
+  `scripts/snapshot-ranks.ts` (workflow `.github/workflows/ranks.yml`, cada 30
+  min) recorre las cuentas de la cola (`puuid_sync`) y toma la foto de rango, 1
+  request por cuenta. `rank_polls` registra a quién ya se le consultó (con o sin
+  rango) para que la cola rote y las cuentas sin clasificar no la tapen. Cada
+  corrida tiene presupuesto y deadline, así que respeta el rate limit.
+- Lo que el gráfico **no puede** hacer es un punto por partida: Riot no expone
+  LP por partida y el cron muestrea (cada 30 min), así que un día de 10 rankeds
+  se ve como varios escalones según cuándo cayó cada muestra, no como 10.
 - Sin poda por ahora: una fila por cambio de LP es un volumen mínimo (un jugador
   intenso genera decenas por mes). Si molesta, se recorta por temporada.
 - Recharts sigue reservado para gráficos grandes (evolución de winrate, etc.);
