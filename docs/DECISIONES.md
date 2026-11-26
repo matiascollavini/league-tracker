@@ -1242,3 +1242,31 @@ se jugaron pocas veces y ganaron esas pocas veces.
   correcto y la etiqueta lo explica.
 - Tests en `src/lib/riot/aggregate.test.ts`: piso de muestra, 2 de 3, 45% exacto,
   orden por derrotas, no repetición entre listas.
+
+### Corrección (2026-11-26, mismo día)
+Reporte del operador: en la cuenta **AMO LAS TET4S#6293** el panel "No pickees
+más esto" decía que no había ningún campeón con muestra suficiente aunque
+Warwick tenía ~36% de WR. Dos causas, las dos del lado de `worst`:
+
+1. `worst` salía del **mismo pool de 8 campeones más jugados** que `best`, así
+   que un campeón con menos volumen que esos 8 nunca se miraba.
+2. `worst` heredaba la **muestra relativa** (10% del más jugado, hasta 20): con
+   un campeón principal de 200 partidas, se exigían 20 partidas para marcar a
+   cualquiera como mal pick.
+
+Cambios:
+- **`worst` mira todo el historial**, no el pool: el orden por derrotas ya se
+  encarga de priorizar a los que jugaste mucho (volumen × mal WR), así que no
+  hace falta recortar candidatos antes.
+- **`worst` exige un piso fijo de 5 partidas** (`MIN_WORST_GAMES`), sin la regla
+  relativa. Es lo que pidió el operador: "que cuenten a partir de que haya
+  jugado al menos 5 partidas".
+- `best` no cambia de criterio (pool de 8 + muestra relativa + Wilson), pero su
+  piso absoluto sube de 4 a 5 para que la regla sea una sola: **nunca menos de
+  5 partidas**.
+- El demo (`fixtures.ts`) pasa a tener Jinx 2/5 (40%) para que el modo demo siga
+  mostrando el panel de malos picks con la regla nueva.
+- Textos: la tarjeta de peores dice "Solo campeones con 5 partidas o más y menos
+  de 45% de WR; primero los que más jugaste" y el estado vacío nombra el piso.
+- Tests nuevos: mal pick fuera del top de más jugados (caso Warwick) y piso de 5
+  (4 partidas no alcanzan).

@@ -62,12 +62,14 @@ const POOL: Record<string, Pick> = {
   KaiSa: { id: "KaiSa", key: 145, role: "BOTTOM" },
 };
 
-// 24 partidas: 8 Ahri, 4 Jinx, 4 Lux, 3 Darius, 2 Thresh, 2 KaiSa, 1 LeeSin.
+// 24 partidas: 8 Ahri, 5 Jinx (2V/3D), 3 Lux, 3 Darius, 2 Thresh, 2 KaiSa,
+// 1 LeeSin. Jinx queda con 5 partidas para que el modo demo muestre un mal
+// pick (ADR-024: mínimo 5 partidas y menos de 45% de WR).
 const PICKS = [
   "Ahri",
   "Jinx",
   "Ahri",
-  "Lux",
+  "Jinx",
   "Thresh",
   "Ahri",
   "Darius",

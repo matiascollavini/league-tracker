@@ -192,31 +192,33 @@ export function summarize(
 /**
  * Picks destacados del perfil: los mejores y los que conviene dejar.
  *
- * Solo se miran los campeones más jugados (`poolSize`): una partida suelta no
- * decide nada. Dentro de ese pool:
- *
- * - `worst` solo admite winrate **menor a `worstMaxWinrate`** (45%) y ordena por
- *   **derrotas** (volumen × mal winrate): primero lo que más jugaste y peor te
- *   sale, no el 0% de dos partidas. Si ganaste, no es un mal pick.
- * - `best` exige **muestra suficiente** (ver `pickSampleFloor`), nunca repite un
- *   campeón de `worst` y ordena por `wilsonLowerBound` en vez de winrate crudo:
- *   un 2/3 (67%) queda por debajo de un 12/20 (60%) porque el intervalo de
- *   confianza del 2/3 es enorme. Así no se recomienda un campeón por haber
- *   ganado "esas pocas veces".
+ * - `worst` mira **todo el historial** (no solo los más jugados: un campeón con
+ *   6 partidas al 30% tiene que aparecer aunque haya 20 campeones con más
+ *   volumen), exige **mínimo `minWorstGames` partidas** (5), solo admite winrate
+ *   **menor a `worstMaxWinrate`** (45%) y ordena por **derrotas**
+ *   (volumen × mal winrate): primero lo que más jugaste y peor te sale, no el
+ *   0% de dos partidas. Si ganaste, no es un mal pick.
+ * - `best` mira los `poolSize` campeones más jugados y exige **muestra
+ *   suficiente** (ver `pickSampleFloor`); ordena por `wilsonLowerBound` en vez de
+ *   winrate crudo: un 2/3 (67%) queda por debajo de un 12/20 (60%) porque el
+ *   intervalo de confianza del 2/3 es enorme. Así no se recomienda un campeón
+ *   por haber ganado "esas pocas veces".
  */
 export type PickHighlights = {
   best: ChampionStat[];
   worst: ChampionStat[];
 };
 
-/** Partidas mínimas para recomendar o desaconsejar un pick. */
-const MIN_PICK_GAMES = 4;
+/** Partidas mínimas para recomendar un pick (`best`). */
+const MIN_PICK_GAMES = 5;
 /** Techo de la muestra mínima: pedir 200 partidas vaciaría el panel. */
 const MAX_PICK_GAMES = 20;
-/** La muestra mínima escala con el volumen del campeón más jugado (10%). */
+/** La muestra mínima de `best` escala con el campeón más jugado (10%). */
 const PICK_SAMPLE_SHARE = 0.1;
 /** `worst` solo muestra campeones por debajo de este winrate (0..1). */
 export const WORST_MAX_WINRATE = 0.45;
+/** Partidas mínimas para marcar un campeón como mal pick. */
+export const MIN_WORST_GAMES = 5;
 
 /**
  * Cota inferior del intervalo de Wilson (95%) para una proporción.
@@ -239,9 +241,9 @@ export function wilsonLowerBound(
 }
 
 /**
- * Muestra mínima para que un campeón entre en `best`/`worst`: el 10% del
- * campeón más jugado, entre 4 y 20 partidas. Con 200 partidas en Ahri hacen
- * falta 20 con el campeón; con un historial de 20 partidas alcanza con 4.
+ * Muestra mínima para entrar en `best`: el 10% del campeón más jugado, entre 5
+ * y 20 partidas. Con 200 partidas en Ahri hacen falta 20 con el campeón; con un
+ * historial de 20 partidas alcanza con 5.
  */
 function pickSampleFloor(mostPlayed: number): number {
   return Math.min(
@@ -256,7 +258,13 @@ export function pickHighlights(
     limit = 3,
     poolSize = 8,
     worstMaxWinrate = WORST_MAX_WINRATE,
-  }: { limit?: number; poolSize?: number; worstMaxWinrate?: number } = {},
+    minWorstGames = MIN_WORST_GAMES,
+  }: {
+    limit?: number;
+    poolSize?: number;
+    worstMaxWinrate?: number;
+    minWorstGames?: number;
+  } = {},
 ): PickHighlights {
   const byGames = [...champions].sort(
     (a, b) =>
@@ -267,14 +275,16 @@ export function pickHighlights(
   const pool = byGames.slice(0, Math.max(poolSize, limit));
   if (pool.length === 0) return { best: [], worst: [] };
 
-  const floor = pickSampleFloor(pool[0]?.games ?? 0);
-  const sample = pool.filter((champion) => champion.games >= floor);
-
   const lossesOf = (champion: ChampionStat) => champion.games - champion.wins;
 
-  // `worst` se resuelve primero: un campeón bajo el umbral nunca se recomienda.
-  const worst = sample
-    .filter((champion) => champion.winrate < worstMaxWinrate)
+  // `worst` se resuelve primero y sobre TODO el historial: un campeón con 6
+  // partidas al 30% no puede quedar afuera por no entrar en el top del pool.
+  const worst = byGames
+    .filter(
+      (champion) =>
+        champion.games >= minWorstGames &&
+        champion.winrate < worstMaxWinrate,
+    )
     .sort(
       (a, b) =>
         lossesOf(b) - lossesOf(a) ||
@@ -284,8 +294,12 @@ export function pickHighlights(
     )
     .slice(0, limit);
 
-  const best = sample
-    .filter((champion) => champion.winrate >= worstMaxWinrate)
+  const floor = pickSampleFloor(pool[0]?.games ?? 0);
+  const best = pool
+    .filter(
+      (champion) =>
+        champion.games >= floor && champion.winrate >= worstMaxWinrate,
+    )
     .sort(
       (a, b) =>
         wilsonLowerBound(b.wins, b.games) -

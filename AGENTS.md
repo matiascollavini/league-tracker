@@ -223,14 +223,17 @@ scripts/        verify-riot.mjs (verificación contra la API real)
 
 - Las tarjetas de **picks** del perfil (ADR-024) las resuelve
   `pickHighlights` (`src/lib/riot/aggregate.ts`), puro y en memoria:
-  - muestra mínima = 10% de las partidas del campeón más jugado, entre 4 y 20
-    (un 3/2 no entra nunca);
-  - **mejores** se ordenan por cota inferior de Wilson (95%), no por WR crudo,
-    así un 3/5 o un 2/3 no le gana a un 12/20; el WR que se muestra es el real;
-  - **peores** solo con `winrate < 0.45` y ordenados por **derrotas** (volumen ×
-    mal WR); se calculan primero, así un campeón bajo 45% jamás sale como
-    "mejor pick";
+  - **nunca menos de 5 partidas** para recomendar o desaconsejar un campeón;
+  - **mejores**: mira los 8 más jugados, exige una muestra que escala con el
+    volumen (10% del más jugado, tope 20) y ordena por cota inferior de Wilson
+    (95%), no por WR crudo, así un 3/5 o un 2/3 no le gana a un 12/20; el WR que
+    se muestra es el real;
+  - **peores**: mira **todo el historial** (no el top de más jugados), exige
+    `winrate < 0.45` y ordena por **derrotas** (volumen × mal WR); se calculan
+    primero, así un campeón bajo 45% jamás sale como "mejor pick";
   - cada tarjeta muestra la regla al pie y un estado vacío que nombra el umbral.
+    Ojo: el piso relativo de `best` es el que puede tapar un campeón con pocas
+    partidas; para `worst` el piso es fijo (5) y no hay pool que recorte.
 
 ---
 

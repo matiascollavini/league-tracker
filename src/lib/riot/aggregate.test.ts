@@ -258,6 +258,41 @@ describe("pickHighlights", () => {
     expect(best.map((c) => c.championName)).toEqual(["Jinx", "Ahri", "Nami"]);
   });
 
+  it("un mal pick necesita 5 partidas, no 4", () => {
+    expect(pickHighlights([stat("Ahri", 40, 30), stat("Warwick", 4, 1)]).worst)
+      .toEqual([]);
+
+    const { worst } = pickHighlights([
+      stat("Ahri", 40, 30),
+      stat("Warwick", 5, 1),
+      stat("Yone", 5, 0),
+    ]);
+    // Yone 0/5 (5 derrotas) va antes que Warwick 1/5 (4 derrotas).
+    expect(worst.map((c) => c.championName)).toEqual(["Yone", "Warwick"]);
+  });
+
+  it("un mal pick fuera del top de campeones más jugados igual aparece", () => {
+    // 9 campeones con mucho volumen y el off-pool al final: mismo caso que un
+    // Warwick con 6 partidas al 33% tapado por los más jugados.
+    const champions = [
+      stat("Fiora", 30, 18),
+      stat("Sett", 28, 17),
+      stat("Mordekaiser", 26, 15),
+      stat("MasterYi", 24, 13),
+      stat("Trundle", 22, 12),
+      stat("Lillia", 20, 11),
+      stat("Renekton", 18, 9),
+      stat("Nautilus", 16, 9),
+      stat("Malphite", 14, 8),
+      stat("Warwick", 6, 2),
+    ];
+
+    const { best, worst } = pickHighlights(champions);
+
+    expect(worst.map((c) => c.championName)).toEqual(["Warwick"]);
+    expect(best.map((c) => c.championName)).not.toContain("Warwick");
+  });
+
   it("descarta el winrate exactamente en 45%", () => {
     const champions = [stat("Ahri", 40, 30), stat("Lux", 20, 9)];
 
