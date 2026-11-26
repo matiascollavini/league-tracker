@@ -3,6 +3,12 @@ import { getLeagueEntries, getSummoner, resolveAccount } from "@/lib/riot/accoun
 import { getRecentMatches } from "@/lib/riot/matches";
 import { checkNewestMatch } from "@/lib/sync-status";
 import { isMockMode } from "@/lib/riot/http";
+import { mockLeagueHistory } from "@/lib/riot/fixtures";
+import {
+  extendRankHistory,
+  RANKED_QUEUE_TYPES,
+  type RankHistoryEntry,
+} from "@/lib/riot/rank-history";
 import {
   findSyncedPuuid,
   findSyncForPuuid,
@@ -12,6 +18,7 @@ import {
   saveLeagueSnapshot,
   type Progress,
 } from "@/lib/db/matches";
+import { getLeagueHistory, recordLeagueHistory } from "@/lib/db/rank-history";
 import { syncAccount } from "@/lib/ingest";
 import { saveAccount } from "@/lib/db/accounts";
 import type { Account, LeagueEntry, Match, Summoner } from "@/lib/riot/types";
@@ -44,6 +51,12 @@ export type ProfileData = {
   progress: Progress;
   summoner: Summoner | null;
   league: LeagueEntry[];
+  /**
+   * Fotos de rango guardadas (ADR-026). Riot no da historial: esto es lo que
+   * venimos observando nosotros, por cola. Puede estar vacío o tener un solo
+   * punto si el jugador es nuevo para nosotros.
+   */
+  rankHistory: RankHistoryEntry[];
   source: ProfileSource;
   /** El historial todavía se está bajando (detailed < known). */
   partial: boolean;
@@ -130,6 +143,7 @@ export async function loadProfile(
       progress: { known: matches.length, detailed: matches.length },
       summoner: summonerApi,
       league: leagueApi,
+      rankHistory: mockLeagueHistory(),
       source: "demo",
       partial: false,
       // Sin key no hay nada que sincronizar: el aviso de "cargar" no aplica.
@@ -172,7 +186,19 @@ export async function loadProfile(
   let league = leagueApi;
   let rankStale = false;
   if (league.length > 0) {
-    void saveLeagueSnapshot(puuid, effectivePlatform, league).catch(() => {});
+    // Además de la foto para el fallback (una fila por puuid), se guarda la
+    // foto en el historial. El insert es condicional: si tier/división/LP no
+    // cambiaron, no escribe nada. Se espera (es barato) para que el gráfico
+    // incluya la medición de esta misma visita.
+    try {
+      await Promise.all([
+        saveLeagueSnapshot(puuid, effectivePlatform, league),
+        recordLeagueHistory(puuid, effectivePlatform, league),
+      ]);
+    } catch {
+      // El rango actual ya está en memoria: si falla la escritura, la página
+      // sigue. Lo único que se pierde es un punto del gráfico.
+    }
   } else {
     const snapshot = await getLeagueSnapshot(puuid);
     if (snapshot && snapshot.entries.length > 0) {
@@ -180,6 +206,13 @@ export async function loadProfile(
       rankStale = true;
     }
   }
+  const rankHistory = extendRankHistory(
+    await getLeagueHistory(playerPuuids, RANKED_QUEUE_TYPES).catch(() => []),
+    Date.now(),
+    // Con la foto de fallback o sin rango actual no se puede afirmar que el
+    // último valor siga vigente.
+    { stale: rankStale || league.length === 0 },
+  );
 
   // El índice del buscador del header se entera de esta cuenta (y del icono y
   // nivel reales) en la primera visita. Es un upsert chico, fire-and-forget:
@@ -257,6 +290,7 @@ export async function loadProfile(
     progress,
     summoner,
     league,
+    rankHistory,
     source,
     partial: progress.detailed < progress.known,
     // Solo cuenta como completo si los datos salen de la base: la vía directa

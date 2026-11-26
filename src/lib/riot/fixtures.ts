@@ -1,3 +1,8 @@
+import {
+  absoluteLp,
+  fromAbsoluteLp,
+  type RankHistoryEntry,
+} from "./rank-history";
 import type { Account, LeagueEntry, Match, Summoner } from "./types";
 
 /**
@@ -286,4 +291,58 @@ export function mockMatches(): Match[] {
 
 export function mockMatchIds(): string[] {
   return mockMatches().map((match) => match.metadata.matchId);
+}
+
+/**
+ * Historial de rango de demo (ADR-026).
+ *
+ * La base real arranca vacía y el gráfico se llena con las fotos que se toman
+ * al visitar el perfil; sin esto el modo demo (sin API key) nunca podría
+ * mostrar el gráfico. Son series deterministas salvo las fechas, que son
+ * relativas a "ahora", y terminan exactamente en el rango de `mockLeague`.
+ */
+export function mockLeagueHistory(): RankHistoryEntry[] {
+  const now = Date.now();
+  const day = 86_400_000;
+  const rows: RankHistoryEntry[] = [];
+
+  const walk = (
+    queueType: string,
+    current: LeagueEntry,
+    startLp: number,
+    days: number,
+    seed: number,
+  ) => {
+    const endLp = absoluteLp(
+      current.tier ?? "IRON",
+      current.rank ?? "IV",
+      current.leaguePoints ?? 0,
+    );
+    if (endLp === null) return;
+
+    const rng = mulberry32(seed);
+    const points = 46;
+    for (let i = points; i >= 0; i -= 1) {
+      // 0 = hoy, `points` = hace `days` días.
+      const progress = 1 - i / points;
+      const trend = startLp + (endLp - startLp) * progress;
+      const noise = i === 0 ? 0 : (rng() - 0.5) * 80;
+      const lp = Math.max(0, Math.round(trend + noise));
+      const { tier, division, leaguePoints } = fromAbsoluteLp(i === 0 ? endLp : lp);
+      rows.push({
+        queueType,
+        ts: now - Math.round((i * days * day) / points),
+        tier,
+        division,
+        leaguePoints,
+      });
+    }
+  };
+
+  const solo = mockLeague[0];
+  const flex = mockLeague[1];
+  if (solo) walk(solo.queueType, solo, 1620, 120, 20261124); // Platino IV 20 LP
+  if (flex) walk(flex.queueType, flex, 1290, 120, 7741); // Oro IV 90 LP
+
+  return rows;
 }

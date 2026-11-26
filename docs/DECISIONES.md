@@ -1406,3 +1406,87 @@ cambios **solo visuales**, sin tocar datos ni requests:
 Consecuencias: el panel se lee como el de dpm pero conserva el orden por
 partidas, los links server-side y los filtros combinados. El único cambio de
 contrato interno es la eliminación del prop `total` de `RoleBreakdown`.
+
+---
+
+## ADR-026 — Historial de rango (LP) en el perfil, con snapshots propios
+
+**Estado:** aceptada · **Fecha:** 2026-11-26
+
+### Contexto
+El operador pidió que las tarjetas de rango de la barra lateral del perfil
+(Solo/Duo y Flex) muestren un gráfico de la evolución del elo, "tal cual dpm.lol":
+cómo fue subiendo y bajando con el tiempo.
+
+La pregunta de fondo es de dónde sale esa serie. La investigación está en
+`research/rank-history-sources.md` (2026-11-26) y el resumen es contundente:
+
+- **Riot no tiene endpoint de historial de rango.** `LEAGUE-V4` son cinco
+  operaciones y todas devuelven el estado **actual** (entries por puuid/league),
+  ninguna histórica; además la entry no trae timestamp. `MATCH-V5` no incluye tier
+  ni LP por partida.
+- La **LCU** (cliente local) sí tiene un endpoint de historial, pero Riot no lo
+  soporta, vive en la máquina del jugador y no sirve para un sitio web.
+- **No hay evidencia pública** de cómo arma dpm.lol su gráfico (su web devuelve
+  403 a curl y no hay declaración en changelog/FAQ). Atribuirle snapshots propios
+  sería especular: `UNVERIFIED`.
+
+Conclusión: **no existe backfill legítimo**. Se puede reconstruir una curva
+inventando +20/-20 LP por partida, pero eso es fabricar el dato central del
+gráfico (el LP real depende del MMR, de las rachas y de la división), así que se
+descarta.
+
+### Opciones evaluadas
+| Opción | A favor | En contra |
+|---|---|---|
+| No mostrar gráfico | cero riesgo | no responde al pedido |
+| Reconstruir LP desde las partidas con un delta fijo | curva llena desde el día 1 | dato inventado: el LP por partida no está en la API y no es constante |
+| Snapshots propios + gráfico con Recharts | serie real, librería ya decidida para gráficos | suma ~100 KB de JS para un sparkline de 56 px |
+| **Snapshots propios + SVG nativo** | dato real, 0 requests nuevos, 0 dependencias, primer paint server-side | arranca el día que arranca el tracker: las cuentas viejas empiezan con un punto |
+
+### Decisión
+- **Tabla `league_history`** (esquema v6), append-only:
+  `(puuid, queue_type, ts)` como PK + `platform_id, tier, division,
+  league_points, wins, losses`. Se escribe **solo cuando cambia** tier, división
+  o LP respecto de la última foto de esa cola (`INSERT ... WHERE NOT EXISTS` con
+  `division IS ?` para comparar NULL), así las visitas repetidas no inflan nada.
+- **Cuándo se toma la foto:** cada vez que el perfil pide el rango a Riot. Es el
+  mismo request que ya hacía `RankSummary` (cacheado 300 s), así que el feature
+  **no agrega ni un request**. Si el rango viene de la foto de fallback
+  (`rankStale`), no se registra: no es una observación nueva.
+- **Lectura:** `getLeagueHistory` por los alias del jugador (ADR-010), filtrada a
+  `RANKED_SOLO_5x5` y `RANKED_FLEX_SR`. El perfil la pasa a `RankSummary`.
+- **`src/lib/riot/rank-history.ts`** (puro y testeado) normaliza una foto a **LP
+  absoluto** para que el eje sea continuo: 400 LP por tier con divisiones
+  (Hierro→Diamante, 4 divisiones de 100) y Maestro+ desde 2800 LP. También arma
+  la serie ordenada, las etiquetas en español ("Platino II 64 LP") y el eje
+  redondeado a 50/100/200/400 LP para que las grillas caigan en divisiones.
+- **UI:** debajo de la barra de winrate de cada cola, `RankChart`
+  (`src/components/rank-chart.tsx`): área + línea del color del tier actual,
+  56 px, grillas rotuladas por división, punto del último dato y lectura al pasar
+  el mouse/dedo (punto, fecha y delta contra la medición anterior). El pie muestra
+  el saldo desde la primera medición (`+132 LP desde el 12/08`). La serie se
+  extiende hasta hoy con el último valor conocido (`extendRankHistory`) cuando
+  hay al menos dos mediciones, salvo que el rango venga de la foto de fallback:
+  la tarjeta ya muestra ese valor como el actual. Con 0 o 1 punto no se dibuja
+  una línea plana falsa: se explica que el historial recién arranca.
+- **Demo:** `mockLeagueHistory()` (fixtures) genera 47 fotos por cola en 120 días,
+  deterministas salvo las fechas, terminando en el rango de `mockLeague`. Sin
+  esto el modo sin API key no podría mostrar el gráfico.
+- El nombre visible del tier pasa a español ("Oro IV" en vez de "GOLD IV") para
+  coincidir con las etiquetas del eje y con el cliente del juego.
+
+### Consecuencias
+- El gráfico es **honesto pero arranca vacío**: en la primera visita hay un solo
+  punto y lo que se ve es el aviso, no una curva. Se llena con las visitas
+  siguientes (cada cambio de LP observado = un punto). Es el costo de no inventar
+  datos; queda documentado en la UI y acá.
+- Cero requests nuevos a Riot y cero dependencias nuevas. El costo por render son
+  dos viajes chicos a la base (batch de inserts condicionales + SELECT).
+- La densidad del historial depende de que alguien abra el perfil. Un cron global
+  de snapshots (1 request por cuenta conocida, p. ej. 1 vez por día) es el
+  siguiente paso natural; no se implementó en esta tanda.
+- Sin poda por ahora: una fila por cambio de LP es un volumen mínimo (un jugador
+  intenso genera decenas por mes). Si molesta, se recorta por temporada.
+- Recharts sigue reservado para gráficos grandes (evolución de winrate, etc.);
+  para una línea de 56 px no se justifica el bundle.

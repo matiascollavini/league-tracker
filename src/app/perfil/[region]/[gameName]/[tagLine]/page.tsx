@@ -128,6 +128,7 @@ export default async function ProfilePage({
     matches,
     summoner,
     league,
+    rankHistory,
     progress,
     source,
     partial,
@@ -364,7 +365,11 @@ export default async function ProfilePage({
             lg queda pegada arriba y scrollea por dentro para que "Compañeros
             frecuentes" nunca quede cortado. */}
         <aside className="space-y-4 lg:sticky lg:top-[76px] lg:max-h-[calc(100dvh-92px)] lg:self-start lg:overflow-y-auto lg:pr-0.5">
-          <RankSummary league={league} rankStale={rankStale} />
+          <RankSummary
+            league={league}
+            history={rankHistory}
+            rankStale={rankStale}
+          />
 
           <div className="panel px-3 py-3">
             <div className="flex items-baseline justify-between">

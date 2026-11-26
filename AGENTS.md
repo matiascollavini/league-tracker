@@ -263,6 +263,20 @@ scripts/        verify-riot, ingest, worker, db:copy (local→Turso), db:pull (T
   cola activa **sin** el filtro de rol (es el selector, tiene que mostrar los
   cinco). El viejo `RoleStrip` al pie de la tabla se eliminó.
 
+- Las tarjetas de rango (**Solo/Duo** y **Flex**) muestran un **gráfico de LP en
+  el tiempo** (ADR-026), como dpm. Riot **no tiene** endpoint de historial de
+  rango ni LP por partida (`league-v4` es solo el estado actual; ver
+  `research/rank-history-sources.md`), así que la serie son **fotos propias**:
+  tabla `league_history` (esquema v6) con una fila por cambio de tier/división/LP,
+  escrita cuando el perfil ya pide el rango (0 requests nuevos). El gráfico es
+  `src/components/rank-chart.tsx` (SVG nativo, sin Recharts: es una línea de
+  56 px) y la lógica pura está en `src/lib/riot/rank-history.ts` (LP absoluto:
+  400 por tier, Maestro+ desde 2800). **Arranca el día que empezamos a mirar la
+  cuenta**: las cuentas viejas muestran un solo punto hasta que se acumulen
+  visitas; con 0/1 punto la UI lo dice en vez de dibujar una curva falsa.
+  `mockLeagueHistory()` mantiene el modo demo con dos series de 120 días. El
+  cron global de snapshots (1 request por cuenta/día) queda como pendiente.
+
 ---
 
 ## 5. Historial

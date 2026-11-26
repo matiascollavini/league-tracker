@@ -3,6 +3,15 @@ import { FlaskConical } from "lucide-react";
 import { PLATFORM_LABEL, type Platform } from "@/lib/riot/config";
 import { profileIconUrl } from "@/lib/ddragon/champions";
 import type { LeagueEntry } from "@/lib/riot/types";
+import {
+  buildRankSeries,
+  RANKED_QUEUE_TYPES,
+  TIER_HEX,
+  TIER_LABEL,
+  type RankHistoryEntry,
+  type RankPoint,
+} from "@/lib/riot/rank-history";
+import { RankChart } from "@/components/rank-chart";
 import { WinrateBar } from "@/components/winrate-bar";
 import { cn } from "@/lib/utils";
 
@@ -20,20 +29,6 @@ type HeroProps = {
   actions?: React.ReactNode;
   /** Barra de tabs (filtro por cola), pegada abajo como en dpm. */
   tabs?: React.ReactNode;
-};
-
-/** Paleta de rangos de dpm (theme-rft: --rank-*). */
-const TIER_COLOR: Record<string, string> = {
-  IRON: "text-[#9a9b9e]",
-  BRONZE: "text-[#ca5e16]",
-  SILVER: "text-[#e8e9e9]",
-  GOLD: "text-gold",
-  PLATINUM: "text-[#9fe4f9]",
-  EMERALD: "text-[#4ac97f]",
-  DIAMOND: "text-[#7988ec]",
-  MASTER: "text-[#bd9bf8]",
-  GRANDMASTER: "text-[#f03b38]",
-  CHALLENGER: "text-[#82dcf7]",
 };
 
 /**
@@ -113,20 +108,37 @@ export function ProfileHero({
 
 type RankProps = {
   league: LeagueEntry[];
+  /** Fotos de rango guardadas (ADR-026). Puede venir vacío. */
+  history?: RankHistoryEntry[];
   /** El rango sale de una foto guardada: puede estar desactualizado. */
   rankStale?: boolean;
   className?: string;
 };
 
-/** Rango actual (Solo/Duo y Flex) como las tarjetas de rank de dpm. */
-export function RankSummary({ league, rankStale = false, className }: RankProps) {
-  const solo = league.find((entry) => entry.queueType === "RANKED_SOLO_5x5");
-  const flex = league.find((entry) => entry.queueType === "RANKED_FLEX_SR");
+/** Rango actual (Solo/Duo y Flex) con su historial de LP, como dpm. */
+export function RankSummary({
+  league,
+  history = [],
+  rankStale = false,
+  className,
+}: RankProps) {
+  const solo = league.find((entry) => entry.queueType === RANKED_QUEUE_TYPES[0]);
+  const flex = league.find((entry) => entry.queueType === RANKED_QUEUE_TYPES[1]);
+  const pointsFor = (queueType: string): RankPoint[] =>
+    buildRankSeries(history.filter((row) => row.queueType === queueType));
 
   return (
     <div className={cn("panel overflow-hidden", className)}>
-      <RankRow label="Solo/Duo" entry={solo} />
-      <RankRow label="Flex" entry={flex} />
+      <RankRow
+        label="Solo/Duo"
+        entry={solo}
+        points={pointsFor(RANKED_QUEUE_TYPES[0])}
+      />
+      <RankRow
+        label="Flex"
+        entry={flex}
+        points={pointsFor(RANKED_QUEUE_TYPES[1])}
+      />
       {rankStale ? (
         <p className="border-t border-line/70 px-3 py-2 text-[10px] leading-relaxed text-dim">
           Rango guardado: Riot no respondió en este momento, puede estar
@@ -140,15 +152,18 @@ export function RankSummary({ league, rankStale = false, className }: RankProps)
 function RankRow({
   label,
   entry,
+  points,
 }: {
   label: string;
   entry: LeagueEntry | undefined;
+  points: RankPoint[];
 }) {
   if (!entry?.tier) {
     return (
       <div className="border-t border-line/70 px-3 py-2.5 first:border-t-0">
         <p className="section-title">{label}</p>
         <p className="mt-1 text-[12px] font-medium text-dim">Sin clasificar</p>
+        <RankChart points={points} queueLabel={label} />
       </div>
     );
   }
@@ -157,6 +172,9 @@ function RankRow({
   const losses = entry.losses ?? 0;
   const total = wins + losses;
   const winrate = total > 0 ? wins / total : 0;
+  const tier = entry.tier.trim().toUpperCase();
+  const tierLabel = TIER_LABEL[tier] ?? tier;
+  const division = entry.rank ? ` ${entry.rank.toUpperCase()}` : "";
 
   return (
     <div className="border-t border-line/70 px-3 py-2.5 first:border-t-0">
@@ -168,12 +186,11 @@ function RankRow({
       </div>
 
       <p
-        className={cn(
-          "mt-0.5 text-[13px] font-bold uppercase leading-tight",
-          TIER_COLOR[entry.tier] ?? "text-gold",
-        )}
+        className="mt-0.5 text-[13px] font-bold leading-tight"
+        style={{ color: TIER_HEX[tier] ?? "var(--color-gold)" }}
       >
-        {entry.tier} {entry.rank ?? ""}
+        {tierLabel}
+        {division}
       </p>
 
       <p className="tabular text-[11px] font-medium text-muted">
@@ -181,6 +198,8 @@ function RankRow({
       </p>
 
       <WinrateBar value={winrate} size="sm" className="mt-1.5" />
+
+      <RankChart points={points} queueLabel={label} />
     </div>
   );
 }

@@ -450,6 +450,16 @@ GET https://{platform}.api.riotgames.com/lol/league/v4/entries/by-puuid/{puuid}
   histórico". Jugador sin rank -> array vacío. [UNVERIFIED] si puede devolver
   404 en vez de []; manejá ambos casos.
 
+  [NO HAY HISTORIAL] league-v4 es una FOTO del rango actual: no existe endpoint
+  de historial de rango/LP (verificado 2026-11-26 en la referencia oficial,
+  https://developer.riotgames.com/apis#league-v4: las únicas operaciones son
+  challengerleagues, entries/by-puuid, entries/{queue}/{tier}/{division},
+  grandmasterleagues y masterleagues). MATCH-V5 tampoco trae tier ni LP por
+  partida. La LCU del cliente tiene un "league-history", pero Riot no lo soporta
+  y es local. Por eso league-page construye su propia serie con snapshots
+  (tabla league_history, ADR-026): el gráfico arranca el día que arranca el
+  tracker, no se puede rellenar hacia atrás.
+
 --------------------------------------------------------------------------------
 7.5 CHAMPION-MASTERY-V4                    (host de PLATAFORMA)
 --------------------------------------------------------------------------------

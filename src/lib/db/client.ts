@@ -61,6 +61,21 @@ const SCHEMA = [
      payload    TEXT NOT NULL,
      updated_at INTEGER NOT NULL
    )`,
+  // Historial de rango (ADR-026). Riot solo devuelve el rango ACTUAL
+  // (league-v4), así que la serie se arma con fotos propias: una fila por
+  // cambio observado (mismo tier/división/LP = no se guarda nada).
+  `CREATE TABLE IF NOT EXISTS league_history (
+     puuid       TEXT NOT NULL,
+     platform_id TEXT NOT NULL,
+     queue_type  TEXT NOT NULL,
+     ts          INTEGER NOT NULL,
+     tier        TEXT NOT NULL,
+     division    TEXT,
+     league_points INTEGER NOT NULL,
+     wins        INTEGER,
+     losses      INTEGER,
+     PRIMARY KEY (puuid, queue_type, ts)
+   )`,
   `CREATE TABLE IF NOT EXISTS puuid_matches (
      puuid    TEXT NOT NULL,
      match_id TEXT NOT NULL,
@@ -202,7 +217,7 @@ export function db(): Client {
   return client;
 }
 
-const SCHEMA_VERSION = 5;
+const SCHEMA_VERSION = 6;
 
 /**
  * Crea las tablas si no existen. Idempotente y barato: en Turso cada statement
