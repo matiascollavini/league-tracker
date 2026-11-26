@@ -246,6 +246,18 @@ scripts/        verify-riot, ingest, worker, db:copy (local→Turso), db:pull (T
     Ojo: el piso relativo de `best` es el que puede tapar un campeón con pocas
     partidas; para `worst` el piso es fijo (5) y no hay pool que recorte.
 
+- **La ingesta de fondo la dispara `/api/cron`**, no GitHub Actions (ADR-028).
+  El `schedule` de Actions descartó ~98% de los eventos de un cron de 10 minutos
+  (6 corridas en 48 h, medido el 2026-11-26): el workflow `worker` quedó para
+  backfills largos a mano (`workflow_dispatch`) y `ranks` sigue en Actions.
+  `GET|POST /api/cron` hace una tanda corta del worker (`CRON_PLAYERS` jugadores,
+  `CRON_BUDGET` requests, `CRON_DEADLINE_MS` = 45 s) y la dispara un cron externo
+  gratis cada 5 min. Requiere `CRON_SECRET`: sin él responde 503 y **no toca la
+  base**; la auth se valida antes de cualquier consulta. Si un jugador da 400
+  "Exception decrypting" (puuid que no descifra en el clúster, típico de
+  transfers viejos) se lo manda al final de la cola en vez de reintentarlo cada
+  tanda.
+
 - **Presupuesto de lecturas de Turso** (ADR-027, esquema v8): el plan gratis
   son 500 M filas leídas/mes y 10 M escritas/mes, y "fila leída" = fila
   **escaneada** (joins, subconsultas y agregados cuentan). Medido: una vista de

@@ -85,6 +85,7 @@ No apuntes dev a Turso: el sync on-demand del perfil **escribe** en la base.
 | --- | --- |
 | `RIOT_API_KEY` | `RGAPI-...` (dev key para probar; production key para publicar) |
 | `DATABASE_URL` | `libsql://league-page-....turso.io` |
+| `CRON_SECRET` | secreto del cron propio (`/api/cron`, ver §4.2) |
 | `DATABASE_AUTH_TOKEN` | `eyJ...` |
 | `RIOT_DEFAULT_PLATFORM` | `la2` (o `la1`, `na1`, ...) |
 | `DD_LOCALE` | `es_ES` |
@@ -136,13 +137,17 @@ con la URL y el token de la base que ya tiene los datos (esas variables ganan
 sobre las de la integración) y redeployar. Alternativa: dejar la base nueva y
 subirle los datos con `npm run db:copy` apuntando a ella.
 
-## 4. Activar los crons (GitHub Actions)
+## 4. Activar los crons
 
-Hay dos workflows y **los dos** necesitan los mismos tres secretos:
+Hay dos piezas: **GitHub Actions** (backfills largos y snapshots de rango) y
+**`/api/cron`** (la tanda corta de ingesta que corre cada 5 minutos). Las dos
+necesitan los mismos secretos de Riot y de la base.
+
+### 4.1 Secrets de GitHub Actions
 
 | Workflow | Qué hace | Cuándo |
 | --- | --- | --- |
-| `worker.yml` | baja las partidas que faltan | cada 10 min |
+| `worker.yml` | baja las partidas que faltan | a mano (`workflow_dispatch`) |
 | `ranks.yml` | toma la foto de rango de cada cuenta (el gráfico de LP) | cada 30 min |
 
 1. En GitHub: **Settings → Secrets and variables → Actions → New repository
@@ -156,20 +161,77 @@ Hay dos workflows y **los dos** necesitan los mismos tres secretos:
 
 2. Pestaña **Actions**. Si es la primera vez, GitHub pide confirmar que querés
    habilitar los workflows.
-3. **Actions → worker → Run workflow** para probarlo a mano. Después
-   **Actions → ranks → Run workflow**.
-4. Listo: el worker baja lo pendiente cada 10 min y `ranks` mantiene el
-   historial de rango de las cuentas de la cola (`puuid_sync`).
+3. **Actions → ranks → Run workflow** para probarlo a mano. Para un backfill
+   grande, **Actions → worker → Run workflow**.
 
-> **Ojo con la dev key**: se vence cada 24 h y el cron empieza a fallar con
-> 401/403 (el log de `ranks` lo dice explícito). Mientras tanto, regenerala en
-> el portal o corré `npm run snapshot:ranks -- --prod` a mano desde tu máquina.
-> Con dev key, además, `worker` y `ranks` comparten el límite de 100
-> requests/2 min: van a aparecer 429 y las corridas avanzan menos cuentas. Con
-> **production key** no hay problema.
+> **GitHub no sirve como scheduler de 10 minutos.** Su `schedule` es "best
+> effort" y descarta corridas cuando hay carga (doc oficial: *"if the load is
+> sufficiently high enough, some queued jobs may be dropped"*). Medido en este
+> repo con `*/10`: **6 corridas en 48 h** (98% descartadas) y `ranks` con
+> `5,35 * * * *` no llegó a dispararse solo. Por eso el `worker` queda como
+> herramienta manual para backfills largos y la ingesta de fondo la sostiene
+> `/api/cron` (§4.2).
 
-> GitHub desactiva los crons de un repo sin actividad durante 60 días; si pasa,
-> entrá a **Actions** y volvé a habilitarlos (o hacé un commit).
+### 4.2 El cron que sostiene la ingesta: `/api/cron`
+
+`POST/GET /api/cron` hace **una tanda corta** del worker (lista los jugadores
+pendientes de `puuid_sync`, baja partidas con presupuesto y deadline) y
+devuelve qué hizo. Es idempotente y resumible: si se corta, la próxima sigue.
+
+1. Generá un secreto y cargalo en **Vercel → Settings → Environment Variables**
+   (Production y Preview):
+
+   ```bash
+   # Linux/Mac
+   openssl rand -hex 32
+   # Windows (PowerShell)
+   [Convert]::ToHexString((1..32 | % { Get-Random -Max 256 }))
+   ```
+
+   | Variable | Valor |
+   | --- | --- |
+   | `CRON_SECRET` | el hex que generaste (sin él el endpoint responde 503) |
+
+   Opcionales: `CRON_BUDGET` (requests por tanda, default 40),
+   `CRON_PLAYERS` (jugadores por tanda, default 3), `CRON_DEADLINE_MS`
+   (default 45.000; Vercel Hobby corta la función a los 60 s).
+
+2. Probá el endpoint (con el deploy ya hecho):
+
+   ```bash
+   curl -fsS -X POST https://tu-sitio.vercel.app/api/cron \
+     -H "Authorization: Bearer $CRON_SECRET"
+   ```
+
+   Devuelve algo así:
+
+   ```json
+   {"ok":true,"elapsedMs":5180,"requests":12,"pendingBefore":5,"pendingAfter":5,
+    "players":[{"label":"Ciro#KR10","platform":"kr","detailed":93,"known":663,
+                "requests":12,"phase":"details","done":false,"skipped":false}]}
+   ```
+
+3. Creá el cron externo (gratis) apuntando a ese endpoint **cada 5 minutos**:
+
+   | Servicio | Cómo |
+   | --- | --- |
+   | cron-job.org | *Create cronjob* → URL `https://tu-sitio/api/cron`, método `POST`, *Advanced → Headers*: `Authorization: Bearer <CRON_SECRET>` |
+   | UptimeRobot | *New monitor* → HTTP(s) → URL con `?key=<CRON_SECRET>` (si no querés headers), intervalo 5 min |
+   | VPS propio | `*/5 * * * * curl -fsS -X POST https://tu-sitio/api/cron -H "Authorization: Bearer $SECRETO"` |
+
+   Nunca hace falta un token de GitHub: el cron entra directo a la app.
+
+4. Por qué así: cada tanda gasta `CRON_BUDGET` requests y **respeta el rate
+   limit** de Riot compartido con las visitas al sitio. Con dev key
+   (100 requests / 2 min) 40 requests son ~48 s: subí el presupuesto recién con
+   production key. El lock por jugador (`tryLockSync`) evita que dos tandas se
+   pisen y un jugador que Riot rechaza para siempre se manda al final de la cola
+   en vez de consumir un request por tanda.
+
+> **Ojo con la dev key**: se vence cada 24 h y todo falla con 401/403 (el log de
+> `ranks` lo dice explícito y `/api/cron` devuelve el error del jugador).
+> Mientras tanto, regenerala en el portal o corré
+> `npm run worker -- --prod` a mano desde tu máquina.
 
 ## 5. Pedir la production key de Riot
 
@@ -192,7 +254,8 @@ DATABASE_URL="libsql://..." DATABASE_AUTH_TOKEN="eyJ..." npm run db:stats
 ```
 
 Y en el sitio: buscá una cuenta nueva → debería mostrar datos al toque y la
-barra de progreso; a los ~10 minutos la barra avanza sin que hagas nada.
+barra de progreso; a los ~5 minutos la barra avanza sin que hagas nada
+(la tanda de `/api/cron`, ver §4.2).
 
 ---
 

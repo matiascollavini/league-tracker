@@ -1597,3 +1597,73 @@ Esquema **v8** con dos tablas nuevas y tres cambios:
   `known`, filtro de cola sin recalcular). La equivalencia de los compañeros se
   verificó contra la consulta vieja sobre la base real en los cinco tabs
   (Todas, Solo/Duo, Flex, Normal, ARAM): misma salida.
+
+---
+
+## ADR-028 — Cron propio (`/api/cron`) porque GitHub Actions no sostiene la cadencia
+
+**Estado:** aceptada · **Fecha:** 2026-11-26
+
+### Contexto
+Después del deploy quedó un problema visible: los jugadores en cola
+(`puuid_sync`) no avanzaban solos. El workflow `worker` declara
+`cron: "*/10 * * * *"` desde el día 1, pero la API de GitHub muestra **6
+corridas programadas en 48 h** (una cada ~8 h) en vez de ~290, y `ranks`
+(cada 30 min) **no se disparó ni una vez** desde que se creó.
+
+La doc oficial de GitHub lo dice explícitamente: *"The `schedule` event can be
+delayed during periods of high loads… if the load is sufficiently high enough,
+**some queued jobs may be dropped**"*; el intervalo mínimo es 5 minutos
+(`docs.github.com/.../events-that-trigger-workflows#schedule`, consultado
+2026-11-26). O sea: no es un scheduler de 10 minutos, es "best effort", y en
+este repo descartó ~98% de los eventos. No hay nada en el YAML que lo arregle.
+
+También se verificó que la ingesta en sí **funcionaba**: las 6 corridas viejas
+fallaron antes de que existieran los secretos chequeados (el run manual de
+`ranks` posterior dio `success`), y un `npm run worker --prod` desde la máquina
+avanzó un jugador sin errores.
+
+### Opciones evaluadas
+| Opción | A favor | En contra |
+| --- | --- | --- |
+| Dejarlo así y correr el worker a mano | cero trabajo | la cola nunca avanza sola; "Actualizar" del perfil es lo único que ingesta |
+| Cron externo → `dispatch` del workflow con un PAT | 0 líneas de código | depende de un token de GitHub y de Actions; el PAT es otra credencial que rotar |
+| **`/api/cron` en la app, disparado por un cron externo gratis** | sin PAT, sin GitHub; el trabajo lo hace Vercel; reusa `syncPuuid` (mismos locks y presupuesto) | una función más (1M invocaciones/mes de Hobby: 5 min = ~8.600, sobra) y un secret nuevo |
+| Vercel Cron | cero código | en Hobby corre **1 vez por día**: no reemplaza nada |
+
+### Decisión
+- **`GET|POST /api/cron`** (`src/app/api/cron/route.ts`) hace **una tanda
+  acotada** del worker: toma `CRON_PLAYERS` jugadores de la cola, les baja
+  partidas con `CRON_BUDGET` requests y `CRON_DEADLINE_MS` de tope (45 s por
+  defecto, por debajo de los 60 s de Hobby), y devuelve un JSON con lo hecho
+  (`requests`, `pendingBefore/After` y una fila por jugador con
+  `detailed/known/phase`).
+- **Auth antes de cualquier consulta**: `Authorization: Bearer <CRON_SECRET>` o
+  `?key=` para los servicios que no mandan headers. Sin `CRON_SECRET`
+  configurado responde **503** y no toca la base (un deploy a medio configurar no
+  queda abierto); con secreto inválido, **401**. La comparación es en tiempo
+  constante (`crypto.timingSafeEqual`).
+- **Lo dispara un cron externo gratuito** (cron-job.org, UptimeRobot o el
+  `crontab` de un VPS) cada 5 minutos. Pasos en `docs/DEPLOY.md` §4.2.
+- **El workflow `worker` queda para backfills largos a mano**
+  (`workflow_dispatch`): 8 minutos de corrida continua siguen siendo mejores que
+  tandas de 45 s cuando hay que bajar 1.000 partidas. `ranks` sigue en Actions.
+- **Un jugador que Riot rechaza siempre** (400 "Exception decrypting": puuid que
+  no descifra en el clúster, típico de transferencias de región viejas) no puede
+  quedar primero de la cola para siempre. La ronda lo manda al final
+  (`last_synced_at = now`) y sigue con el siguiente, así no gasta un request por
+  tanda.
+
+### Consecuencias
+- La cadencia de la ingesta deja de depender de GitHub: 5 min configurables desde
+  el servicio de cron. El costo es 1 invocación de Vercel + ~40 lecturas de Turso
+  y hasta 40 requests de Riot por tanda.
+- `/api/cron` **no** reemplaza al backfill: con dev key (100 req/2 min) una tanda
+  baja ~40 partidas; un jugador de 1.000 partidas necesita ~25 tandas. Con
+  production key se sube `CRON_BUDGET` (300 → ~50 s) y una cuenta nueva queda
+  completa en una hora.
+- El endpoint devuelve `Cache-Control: no-store` y no revalida tags: el perfil se
+  redibuja con su ISR de 120 s, como con el worker de Actions.
+- Tests: `src/lib/cron.test.ts` (auth, presupuestos, slices) y
+  `src/app/api/cron/route.test.ts` (503 sin secreto configurado, 401 sin/con
+  secreto inválido, 503 sin key de Riot, tanda vacía, `GET ?key=`).
