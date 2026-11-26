@@ -413,7 +413,6 @@ export default async function ProfilePage({
           <RoleBreakdown
             stats={roleStatList}
             selected={roleFilter}
-            total={queueRows.length}
             hrefFor={(role) => hrefFor({ role: role ?? null })}
           />
 

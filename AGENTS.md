@@ -249,11 +249,14 @@ scripts/        verify-riot, ingest, worker, db:copy (local→Turso), db:pull (T
 - El perfil tiene un **filtro por rol** (ADR-025): el panel `RoleBreakdown`
   (`src/components/role-breakdown.tsx`) vive en la barra lateral, entre "Forma
   reciente" y "Compañeros frecuentes", con los roles ordenados **del más jugado
-  al menos jugado** (partidas, V-D, WR y una barra de reparto). Cada fila es un
+  al menos jugado** (partidas, V-D, WR y una barra de fondo con el % de partidas
+  del rol sobre el total, estética "Role performance" de dpm: icono de posición
+  y WR entero oro/naranja como el resto del perfil). Cada fila es un
   link: al presionarla el perfil se recorta a ese rol y **se combina con la cola
   y con el campeón** (`?role=TOP|JUNGLE|MIDDLE|BOTTOM|UTILITY|none`); al volver a
   presionarla se quita. `none` son las partidas sin posición (ARAM, Arena,
-  custom). La lógica pura está en `src/lib/riot/roles.ts` (`roleStats`,
+  custom) y **el panel no las muestra** (ni como fila ni en la barra), pero el
+  filtro sigue válido por URL. La lógica pura está en `src/lib/riot/roles.ts` (`roleStats`,
   `matchesRoleFilter`, `isRoleFilter`) y no agrega ni un request: el rol recorta
   las filas que el perfil ya calcula, así que el pool, la tabla "Por campeón",
   los picks y los stats comparten el mismo alcance. El panel se calcula sobre la

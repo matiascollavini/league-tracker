@@ -1379,3 +1379,30 @@ frecuentes", donde cada rol se pueda presionar para filtrar las partidas y
   ("No hay partidas para mostrar con este filtro") en vez de romper.
 - Tests: `src/lib/riot/roles.test.ts` (orden, desempate, `none`, winrate) y
   `src/lib/links.test.ts` (rol en la URL, combinado con campeón/cola/página).
+
+### Revisión 2026-11-26 — estética "Role performance" de dpm.lol
+El operador pidió que el panel se vea como el "Role performance" de dpm.lol. La
+referencia se sacó del markup de su chunk `05n47avffmlv0.js`, no de memoria. Son
+cambios **solo visuales**, sin tocar datos ni requests:
+- **La fila entera es la barra**: un `span` absoluto (`inset-y-0 left-0`,
+  `bg-primary/12`) con ancho = partidas del rol / total del alcance, así la suma
+  de las filas da 100% y los roles se comparan entre sí. Reemplaza la barra fina
+  de 3px. El total se calcula dentro del panel (se eliminó el prop `total`) para
+  que no pueda desincronizarse del agregado.
+- **Iconos oficiales de posición** (`position-top/jungle/middle/bottom/utility.svg`
+  de Community Dragon), inline y monocromos con `currentColor`.
+- **Sin "Sin rol"**: las partidas sin posición (ARAM, Arena, custom) no son
+  relevantes para el reparto, así que el panel lista solo las cinco posiciones y
+  tampoco las cuenta en el denominador de la barra (las filas suman 100%). El
+  filtro `?role=none` sigue existiendo por URL, pero el panel no lo ofrece.
+- Izquierda: rol 13px semibold + "N partidas" 11px muted. Derecha: WR con el
+  **mismo formato del resto del perfil** (`percent`, entero) y el color
+  oro/naranja (≥50% / <50%) + "WR" chico, y debajo `NV - ND`. Se descartó el
+  decimal y la escala 60/47/30 de dpm: el panel tiene que hablar igual que
+  "Compañeros frecuentes" y los picks, a pedido del operador.
+- Fila activa: tinte `primary/10`, borde interno de 2px y texto/icono `primary`.
+  El pie "Ver todos los roles" pasa a botón full-width (`bg-soft/40`).
+
+Consecuencias: el panel se lee como el de dpm pero conserva el orden por
+partidas, los links server-side y los filtros combinados. El único cambio de
+contrato interno es la eliminación del prop `total` de `RoleBreakdown`.
