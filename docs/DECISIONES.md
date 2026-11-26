@@ -1322,3 +1322,60 @@ Pedido del operador: la vara de mal winrate es **45% incluido**.
   "…supera el 45% de winrate" (mejores).
 - Test renombrado a `incluye el winrate exactamente en 45% como mal pick`:
   20/9 (45%) sale en peores y Ahri 40/30 (75%) queda como mejor.
+
+## ADR-025 — Filtro por rol desde la barra lateral del perfil
+
+**Estado:** aceptada · **Fecha:** 2026-11-26
+
+### Contexto
+El perfil mostraba el reparto por rol en `RoleStrip`, una tira de chips al pie de
+la tabla "Por campeón": solo informativa (partidas y WR por línea), fuera de la
+vista y sin forma de filtrar. El operador pidió una lista de roles **del más
+jugado al menos jugado**, debajo de "Forma reciente" y arriba de "Compañeros
+frecuentes", donde cada rol se pueda presionar para filtrar las partidas y
+**combinarse** con los filtros que ya existían (cola y campeón).
+
+### Opciones evaluadas
+| Opción | A favor | En contra |
+|---|---|---|
+| Chips de `RoleStrip` movidos a la barra lateral | reusa lo que hay | sigue sin filtrar; 5 chips en 300px se ven apretados y no muestran "menos jugado" |
+| Filtro por rol solo en la lista de partidas | igual que el filtro de campeón | la tabla "Por campeón", los picks y los stats quedarían del pool completo: "Jungla" mostraría campeones de otras líneas |
+| **Rol como filtro de alcance (recorta el pool antes del agregado)** | todo el perfil queda enfocado en el rol y se combina con campeón | los números de las tarjetas dejan de ser "la cuenta entera" mientras el filtro está activo (se avisa en la UI) |
+
+### Decisión
+- **`role` es un query param más** (`?role=TOP|JUNGLE|MIDDLE|BOTTOM|UTILITY|none`),
+  validado con `isRoleFilter` (`src/lib/riot/roles.ts`). `none` = partidas sin
+  posición fija (ARAM, Arena, custom), porque `""` no se distingue en la URL de
+  "sin filtro".
+- El recorte es **de alcance**, como si el jugador hubiera jugado solo esa línea:
+  - `toMatchSummaries` arma las filas de la cola activa y se filtran por rol
+    (`matchesRoleFilter`);
+  - `summarize` corre sobre las partidas del rol, así el pool, la tabla "Por
+    campeón", mejores/peores picks y la lista de partidas hablan del mismo
+    conjunto;
+  - el campeón se combina como intersección (rol ∩ campeón ∩ cola).
+- **Panel `RoleBreakdown`** (`src/components/role-breakdown.tsx`) en la barra
+  lateral, entre "Forma reciente" y "Compañeros frecuentes": filas ordenadas por
+  partidas desc (desempate por el orden de las líneas, no por WR), con partidas,
+  V-D, winrate y una barra fina de reparto. Click filtra; click en el activo
+  quita el filtro; abajo aparece "Ver todos los roles".
+- El panel se calcula **sobre la cola activa sin el filtro de rol** (es el
+  selector: tiene que seguir mostrando los cinco), y con el **champion sin
+  filtrar** para que los números no se reordenen al elegir un campeón.
+- `RoleStrip` se elimina: el panel nuevo ocupa su lugar y la tira al pie de la
+  tabla mostraba un solo rol cuando el filtro estaba activo.
+- Se agregó un banner de filtros activos (rol y campeón, juntos cuando
+  corresponden) con "quitar filtro", y el pie "Base del cálculo" dice
+  "... en Solo/Duo como Jungla".
+- Las tabs de cola **conservan** el rol (igual que el campeón).
+
+### Consecuencias
+- Cero requests nuevos: todo sale de las filas que el perfil ya calcula.
+- Los links son server-side (`profileHref` gana `role`), así que el filtro
+  funciona sin JS y es compartible.
+- Con el filtro activo, "Partidas analizadas" y su pista de progreso cambian de
+  significado: la pista vuelve a mostrar el rango de fechas (no "de N conocidas").
+- Un rol sin partidas (ej. `ARAM` + `Top`) muestra el estado vacío de la lista
+  ("No hay partidas para mostrar con este filtro") en vez de romper.
+- Tests: `src/lib/riot/roles.test.ts` (orden, desempate, `none`, winrate) y
+  `src/lib/links.test.ts` (rol en la URL, combinado con campeón/cola/página).

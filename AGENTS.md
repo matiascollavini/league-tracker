@@ -246,6 +246,20 @@ scripts/        verify-riot, ingest, worker, db:copy (local→Turso), db:pull (T
     Ojo: el piso relativo de `best` es el que puede tapar un campeón con pocas
     partidas; para `worst` el piso es fijo (5) y no hay pool que recorte.
 
+- El perfil tiene un **filtro por rol** (ADR-025): el panel `RoleBreakdown`
+  (`src/components/role-breakdown.tsx`) vive en la barra lateral, entre "Forma
+  reciente" y "Compañeros frecuentes", con los roles ordenados **del más jugado
+  al menos jugado** (partidas, V-D, WR y una barra de reparto). Cada fila es un
+  link: al presionarla el perfil se recorta a ese rol y **se combina con la cola
+  y con el campeón** (`?role=TOP|JUNGLE|MIDDLE|BOTTOM|UTILITY|none`); al volver a
+  presionarla se quita. `none` son las partidas sin posición (ARAM, Arena,
+  custom). La lógica pura está en `src/lib/riot/roles.ts` (`roleStats`,
+  `matchesRoleFilter`, `isRoleFilter`) y no agrega ni un request: el rol recorta
+  las filas que el perfil ya calcula, así que el pool, la tabla "Por campeón",
+  los picks y los stats comparten el mismo alcance. El panel se calcula sobre la
+  cola activa **sin** el filtro de rol (es el selector, tiene que mostrar los
+  cinco). El viejo `RoleStrip` al pie de la tabla se eliminó.
+
 ---
 
 ## 5. Historial

@@ -1,4 +1,5 @@
 import { isPlatform, type Platform, type QueueFilterId } from "@/lib/riot/config";
+import type { RoleFilterId } from "@/lib/riot/roles";
 
 /** URL canónica de un perfil. Los segmentos se encodifican una sola vez. */
 export function profileHref(
@@ -8,6 +9,8 @@ export function profileHref(
   options: {
     champion?: string;
     queue?: QueueFilterId;
+    /** Rol (posición) del jugador; `none` = partidas sin posición fija. */
+    role?: RoleFilterId;
     all?: boolean;
     /** Página de la lista de partidas; la 1 no se escribe en la URL. */
     page?: number;
@@ -17,6 +20,7 @@ export function profileHref(
   const params = new URLSearchParams();
   if (options.champion) params.set("champion", options.champion);
   if (options.queue && options.queue !== "all") params.set("queue", options.queue);
+  if (options.role) params.set("role", options.role);
   if (options.all) params.set("all", "1");
   if (options.page && options.page > 1) params.set("page", String(options.page));
   const query = params.toString();

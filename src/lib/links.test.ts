@@ -30,6 +30,28 @@ describe("profileHref", () => {
       }),
     ).toBe("/perfil/la2/Carlos/RHLMC?champion=Ahri&queue=solo&page=2");
   });
+
+  it("suma el filtro de rol, incluso el 'sin rol'", () => {
+    expect(profileHref("la2", "Carlos", "RHLMC", { role: "JUNGLE" })).toBe(
+      "/perfil/la2/Carlos/RHLMC?role=JUNGLE",
+    );
+    expect(profileHref("la2", "Carlos", "RHLMC", { role: "none" })).toBe(
+      "/perfil/la2/Carlos/RHLMC?role=none",
+    );
+  });
+
+  it("combina rol, campeón y cola", () => {
+    expect(
+      profileHref("la2", "Carlos", "RHLMC", {
+        queue: "solo",
+        champion: "Ahri",
+        role: "MIDDLE",
+        page: 3,
+      }),
+    ).toBe(
+      "/perfil/la2/Carlos/RHLMC?champion=Ahri&queue=solo&role=MIDDLE&page=3",
+    );
+  });
 });
 
 describe("participantHref", () => {

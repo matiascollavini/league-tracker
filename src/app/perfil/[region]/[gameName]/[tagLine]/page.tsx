@@ -10,7 +10,7 @@ import { LiveBadge } from "@/components/live-badge";
 import { MatchList } from "@/components/match-list";
 import { Pagination } from "@/components/pagination";
 import { ProfileHero, RankSummary } from "@/components/profile-header";
-import { RoleStrip } from "@/components/role-strip";
+import { RoleBreakdown } from "@/components/role-breakdown";
 import { StatCard } from "@/components/stat-card";
 import { RefreshButton } from "@/components/refresh-button";
 import { WinrateBar } from "@/components/winrate-bar";
@@ -37,6 +37,13 @@ import {
 } from "@/lib/riot/config";
 import { championIconUrl, getChampionCatalog } from "@/lib/ddragon/champions";
 import { topTeammatesFromMatches } from "@/lib/riot/teammates";
+import {
+  isRoleFilter,
+  matchesRoleFilter,
+  roleStats,
+  ROLE_LABEL,
+  type RoleFilterId,
+} from "@/lib/riot/roles";
 import { MissingApiKeyError, RiotApiError } from "@/lib/riot/http";
 import { analyzeCount } from "@/lib/riot/matches";
 import { elapsedSeconds, findActiveGame } from "@/lib/riot/spectator";
@@ -94,6 +101,10 @@ export default async function ProfilePage({
     ? queueParam
     : "all";
   const championParam = first(sp.champion);
+  const roleParam = first(sp.role);
+  const roleFilter: RoleFilterId | null = isRoleFilter(roleParam)
+    ? roleParam
+    : null;
   const showAllChampions = first(sp.all) === "1";
   const pageParam = Number(first(sp.page) ?? "1");
   const requestedPage =
@@ -155,10 +166,28 @@ export default async function ProfilePage({
     catalog.all.map((champion) => [champion.id, champion.name]),
   );
 
+  // El rol es del JUGADOR en cada partida: se recorta después de convertir las
+  // partidas en filas. `roleStats` se calcula sobre la cola completa para que el
+  // panel de la barra lateral siga mostrando todos los roles (es el selector).
+  const queueRows = toMatchSummaries(inQueue, playerPuuids);
+  const rows = roleFilter
+    ? queueRows.filter((row) => matchesRoleFilter(row, roleFilter))
+    : queueRows;
+  const scoped =
+    roleFilter === null
+      ? inQueue
+      : (() => {
+          const inRole = new Set(rows.map((row) => row.matchId));
+          return inQueue.filter((match) => inRole.has(match.metadata.matchId));
+        })();
+  const roleStatList = roleStats(queueRows);
+  const selectedRole = roleFilter
+    ? roleStatList.find((stat) => stat.role === roleFilter)
+    : undefined;
+
   // El agregado va sobre TODOS los puuids del jugador: sus partidas viejas y las
   // nuevas están registradas con puuids distintos (Riot los reasigna).
-  const summary = summarize(inQueue, playerPuuids);
-  const rows = toMatchSummaries(inQueue, playerPuuids);
+  const summary = summarize(scoped, playerPuuids);
 
   const selected = championParam
     ? summary.champions.find((c) => c.championName === championParam)
@@ -206,19 +235,25 @@ export default async function ProfilePage({
     queueFilter === "all"
       ? ""
       : ` en ${QUEUE_FILTERS.find((f) => f.id === queueFilter)?.label ?? "esta cola"}`;
-  const baseSuffix = queueLabelText + (demo ? ", cuenta de demostración" : "");
+  const roleLabelText = roleFilter ? ` como ${ROLE_LABEL[roleFilter]}` : "";
+  const baseSuffix =
+    queueLabelText + roleLabelText + (demo ? ", cuenta de demostración" : "");
 
   const hrefFor = (
     options: {
       /** `null` quita el filtro de campeón; `undefined` lo mantiene. */
       champion?: string | null;
       queue?: QueueFilterId;
+      /** `null` quita el filtro de rol; `undefined` lo mantiene. */
+      role?: RoleFilterId | null;
       all?: boolean;
       page?: number;
     } = {},
   ) =>
     profileHref(platform, gameName, tagLine, {
       queue: options.queue ?? queueFilter,
+      role:
+        options.role === null ? undefined : (options.role ?? roleFilter ?? undefined),
       champion:
         options.champion === null ? undefined : (options.champion ?? championParam),
       all: options.all ?? showAllChampions,
@@ -305,6 +340,7 @@ export default async function ProfilePage({
                   href={profileHref(platform, gameName, tagLine, {
                     queue: filter.id,
                     champion: championParam,
+                    role: roleFilter ?? undefined,
                   })}
                   aria-current={active ? "page" : undefined}
                   className={cn(
@@ -324,7 +360,10 @@ export default async function ProfilePage({
 
       <div className="grid gap-4 lg:grid-cols-[300px_minmax(0,1fr)]">
         {/* ---------------- barra lateral ---------------- */}
-        <aside className="space-y-4 lg:sticky lg:top-[76px] lg:self-start">
+        {/* Con cuatro paneles la columna puede pasar el alto de la pantalla: en
+            lg queda pegada arriba y scrollea por dentro para que "Compañeros
+            frecuentes" nunca quede cortado. */}
+        <aside className="space-y-4 lg:sticky lg:top-[76px] lg:max-h-[calc(100dvh-92px)] lg:self-start lg:overflow-y-auto lg:pr-0.5">
           <RankSummary league={league} rankStale={rankStale} />
 
           <div className="panel px-3 py-3">
@@ -371,6 +410,13 @@ export default async function ProfilePage({
             </Link>
           </div>
 
+          <RoleBreakdown
+            stats={roleStatList}
+            selected={roleFilter}
+            total={queueRows.length}
+            hrefFor={(role) => hrefFor({ role: role ?? null })}
+          />
+
           <FrequentTeammates
             teammates={teammates}
             version={catalog.version}
@@ -384,7 +430,7 @@ export default async function ProfilePage({
               label="Partidas analizadas"
               value={String(summary.matches)}
               hint={
-                partial
+                partial && !roleFilter
                   ? `de ${progress.known} conocidas · sigue en curso`
                   : summary.from && summary.to
                     ? `${formatDate(summary.from)} — ${formatDate(summary.to)}`
@@ -485,33 +531,63 @@ export default async function ProfilePage({
             />
           </section>
 
-        {selected ? (
-          <div className="rounded-md border border-primary/25 bg-primary/8 px-3 py-2.5">
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-              <p className="text-[13px] font-bold text-fg">
-                {names[selected.championName] ?? selected.championName}
-              </p>
-              <span className="tabular text-[11px] font-medium text-muted">
-                {selected.games} partidas · {selected.wins}V {selected.losses}D
-              </span>
-              <span
-                className={cn(
-                  "tabular text-[11px] font-bold",
-                  selected.winrate >= 0.5 ? "text-gold-soft" : "text-orange/80",
-                )}
-              >
-                {percent(selected.winrate)} WR
-              </span>
-              <span className="tabular text-[11px] font-medium text-muted">
-                KDA {selected.kda.toFixed(2)}
-              </span>
-              <Link
-                href={hrefFor({ champion: null })}
-                className="ml-auto text-[11px] font-semibold text-primary hover:underline"
-              >
-                quitar filtro
-              </Link>
-            </div>
+        {roleFilter || selected ? (
+          <div className="space-y-1.5 rounded-md border border-primary/25 bg-primary/8 px-3 py-2.5">
+            {roleFilter && selectedRole ? (
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                <p className="text-[13px] font-bold text-fg">
+                  {selectedRole.label}
+                </p>
+                <span className="tabular text-[11px] font-medium text-muted">
+                  {selectedRole.games} partidas · {selectedRole.wins}V{" "}
+                  {selectedRole.losses}D
+                </span>
+                <span
+                  className={cn(
+                    "tabular text-[11px] font-bold",
+                    selectedRole.winrate >= 0.5
+                      ? "text-gold-soft"
+                      : "text-orange/80",
+                  )}
+                >
+                  {percent(selectedRole.winrate)} WR
+                </span>
+                <Link
+                  href={hrefFor({ role: null })}
+                  className="ml-auto text-[11px] font-semibold text-primary hover:underline"
+                >
+                  quitar filtro
+                </Link>
+              </div>
+            ) : null}
+
+            {selected ? (
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                <p className="text-[13px] font-bold text-fg">
+                  {names[selected.championName] ?? selected.championName}
+                </p>
+                <span className="tabular text-[11px] font-medium text-muted">
+                  {selected.games} partidas · {selected.wins}V {selected.losses}D
+                </span>
+                <span
+                  className={cn(
+                    "tabular text-[11px] font-bold",
+                    selected.winrate >= 0.5 ? "text-gold-soft" : "text-orange/80",
+                  )}
+                >
+                  {percent(selected.winrate)} WR
+                </span>
+                <span className="tabular text-[11px] font-medium text-muted">
+                  KDA {selected.kda.toFixed(2)}
+                </span>
+                <Link
+                  href={hrefFor({ champion: null })}
+                  className="ml-auto text-[11px] font-semibold text-primary hover:underline"
+                >
+                  quitar filtro
+                </Link>
+              </div>
+            ) : null}
           </div>
         ) : null}
 
@@ -534,9 +610,6 @@ export default async function ProfilePage({
               lessHref={hrefFor({ all: false })}
             />
           </div>
-          <div className="border-t border-line/70 px-3 py-2">
-            <RoleStrip rows={rows} />
-          </div>
         </section>
 
         <section className="panel overflow-hidden">
@@ -546,6 +619,7 @@ export default async function ProfilePage({
               {selected
                 ? `${filtered.length} con ${names[selected.championName] ?? selected.championName}`
                 : `${filtered.length} de ${summary.matches} analizadas`}
+              {roleFilter ? ` · ${ROLE_LABEL[roleFilter]}` : ""}
               {totalPages > 1
                 ? ` · mostrando ${pageStart + 1}–${pageStart + visible.length}`
                 : ""}
